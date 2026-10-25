@@ -290,7 +290,7 @@ class VFX {
   telegraphCircle(x, z, radius, progress, r = 5, g = 0.4, b = 0.3) {
     const pulse = 0.55 + 0.45 * Math.sin(performance.now() * 0.02);
     this.ringsT.add(x, 0.14, z, 0, 0, 0, radius, 1, radius, r, g, b, 0.45 * pulse + 0.2);
-    this.discs.add(x, 0.12, z, 0, 0, 0, radius * Math.min(1, progress), 1, radius * Math.min(1, progress), r, g, b, 0.08);
+    this.discs.add(x, 0.12, z, 0, 0, 0, radius * Math.min(1, progress), 1, radius * Math.min(1, progress), r, g, b, 0.045);
   }
 
   telegraphLane(x, z, heading, length, width, progress, r = 5, g = 0.4, b = 0.3) {

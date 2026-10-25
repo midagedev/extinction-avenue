@@ -100,7 +100,7 @@ class WeaponSystem {
       st.nitroRegen = 1 + P('turbo') * 0.25;
       st.magnet = 1 + P('magnet') * 0.35;
       st.ram = 1 + P('ram') * 0.35;
-      st.regen = 0.8 + P('chassis') * 0.3 + (this.evolved.has('dragon') ? 1.5 : 0);
+      st.regen = 1.1 + P('chassis') * 0.3 + (this.evolved.has('dragon') ? 1.5 : 0);
       player.setBuild(new Set([...this.weapons.keys(), ...this.evolved, ...this.passives.keys()]));
     }
     this.burnDps = (8 + this.level('flamer') * 3) * this.dmgMult * (this.evolved.has('inferno') ? 2.5 : 1);

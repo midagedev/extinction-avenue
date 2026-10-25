@@ -187,7 +187,7 @@ class EnemyManager {
     if (e.sp.armor && !opts.explosive) a *= 1 - e.sp.armor;
     e.hp -= a;
     // Flash scales with how much the hit hurt, so swarms under constant fire keep their colours
-    e.flash = Math.max(e.flash, Math.min(0.8, (e.boss ? 0.05 : 0.1) + (a / e.maxHp) * 2.5));
+    e.flash = Math.max(e.flash, Math.min(0.8, (a / e.maxHp) * 2.5));
     const game = this.game;
     game.stats.damageDealt += a;
     // Numbers for hits that matter: crits, big hits, elites and bosses (a swarm of 15s is just noise)

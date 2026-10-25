@@ -85,10 +85,10 @@ Template:
 |---|---|---|---|
 | **three.js** (dev branch builds: `three.webgpu.js`, `three.tsl.js`, `examples/jsm` addons: `GLTFLoader`, `BufferGeometryUtils`, `BloomNode`, `ClusteredLighting`, …) | Loaded at runtime via the import map in `index.html` | jsDelivr CDN: `https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/` | MIT |
 | **slop-newyork** (the base project) | Forked codebase: city, controllers, cameras, audio sim | https://github.com/mrdoob/slop-newyork | MIT (© 2026 Mr.doob, see `LICENSE`) |
-| **Inter** (UI) | Google Fonts stylesheet in `index.html` | https://fonts.google.com/specimen/Inter | SIL Open Font License 1.1 |
-| **Overpass** (street-name signs) | Google Fonts stylesheet in `index.html` | https://fonts.google.com/specimen/Overpass | SIL Open Font License 1.1 |
-| **Bebas Neue** (display, damage numbers; planned) | Google Fonts (to be added to `index.html`; already requested by `vfx.js`) | https://fonts.google.com/specimen/Bebas+Neue | SIL Open Font License 1.1 |
-| **Chakra Petch** (HUD labels; planned) | Google Fonts (to be added) | https://fonts.google.com/specimen/Chakra+Petch | SIL Open Font License 1.1 |
+| **Inter** (UI fallback, taxi decals) | Google Fonts stylesheet in `index.html` (game) and `sim.html` | https://fonts.google.com/specimen/Inter | SIL Open Font License 1.1 |
+| **Overpass** (street-name signs, free-roam sim) | Google Fonts stylesheet in `sim.html` | https://fonts.google.com/specimen/Overpass | SIL Open Font License 1.1 |
+| **Bebas Neue** (display type, damage numbers) | Google Fonts stylesheet in `index.html` | https://fonts.google.com/specimen/Bebas+Neue | SIL Open Font License 1.1 |
+| **Chakra Petch** (HUD / menu type) | Google Fonts stylesheet in `index.html` | https://fonts.google.com/specimen/Chakra+Petch | SIL Open Font License 1.1 |
 | **Anton** (fallback named in `vfx.js`, not loaded) | Only used if installed locally | https://fonts.google.com/specimen/Anton | SIL Open Font License 1.1 |
 
 Fonts are served by Google Fonts and not redistributed in this repo. If fonts are ever self-hosted, ship the OFL text

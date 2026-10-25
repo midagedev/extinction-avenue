@@ -1039,10 +1039,10 @@ These are observations only; this document doesn't change code.
 
 1. **`playerCar` GLB isn't used yet:** `assets.js` loads `kind: 'car'` files, but `player.js` always calls
    `createTaxiModel()`. Car replacement needs a consumer that reads the GLB (and ideally the mount empties in 5.2).
-2. **`poses.js` has no `trex` branch:** GRIDLOCK's pose must be written by the boss logic (`setJoint` is exported).
-   The boss clips in 5.3 are the spec for it.
-3. **Gait speed is frame-rate dependent:** `poses.js` advances the gait phase with a fixed `1/60` instead of the frame
-   `dt`, so legs cycle faster on 120 Hz displays. Fix it before tuning authored run cycles against it.
+2. **GRIDLOCK's pose lives in `boss.js`** (`TRexBoss.pose`, using `setJoint` from `poses.js`), not in `poses.js`.
+   The boss clips in 5.3 are the spec for authored replacements of that procedural pose.
+3. **Gait timing:** fixed. `poses.js` and `boss.js` now advance the gait phase by the game time elapsed since the
+   creature was last posed, so it's frame-rate independent, which matters when tuning authored run cycles.
 4. **Sockets and hit radii come from the placeholder,** not the GLB. Replacements must match placeholder proportions,
    or the loader should read `socket_*` empties from the file (recommended future change).
 5. **Textures, roughness and metalness in GLBs are ignored** by design (vertex-color pipeline).

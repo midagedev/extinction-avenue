@@ -96,7 +96,7 @@ class Director {
     const en = g.enemies;
     const t = this.time;
     en.hpMult = 1 + (t / 60) * 0.2 + (this.endless ? (this.endlessT / 60) * 0.5 : 0);
-    en.dmgMult = 1 + t / 900 + (this.endless ? this.endlessT / 200 : 0);
+    en.dmgMult = 1 + t / 1200 + (this.endless ? this.endlessT / 200 : 0);
     en.speedMult = 1 + Math.min(0.15, t / 3000);
 
     // Events

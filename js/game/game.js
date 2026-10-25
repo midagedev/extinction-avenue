@@ -439,13 +439,13 @@ class Game {
     if (p.boosting) this.vfx.speedLines = Math.min(1, this.vfx.speedLines + dt * 4); else this.vfx.speedLines = Math.max(0, this.vfx.speedLines - dt * 3);
     if (p.edgeScrape > 4) { this.vfx.sparks(p.x + (p.d > 0 ? -1 : 1) * -1, 0.4, p.z, 3, 6); }
     // Aim + weapons
-    if (playing && p.alive) {
+    if (st === 'playing' && p.alive) {
       this._updateAim();
       this.weapons.update(dt, { fire: this.input.fire && st === 'playing', autoFire: (this.settings.autoFire || this.input.touchMode) && st === 'playing' });
     } else if (st === 'title') {
       this.weapons.sawBatch.begin(); this.weapons.sawBatch.end();
     }
-    if (!playing && st !== 'title') this.weapons._updateProjectiles(dt);
+    if (st !== 'playing' && st !== 'title') this.weapons._updateProjectiles(dt);
     this.enemies.update(dt);
     this.boss.update(dt);
     this.pickups.update(dt);

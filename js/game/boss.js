@@ -111,7 +111,6 @@ class TRexBoss {
     this.e = e;
     this.active = true;
     // Bursting out: dust + shake
-    g.vfx.shockwave(r.x, r.z, 20, 4, 2, 1, 0.8);
     for (let k = 0; k < 6; k++) g.vfx.dust(r.x + (Math.random() - 0.5) * 10, r.z + (Math.random() - 0.5) * 10, 3, 4);
     g.cam.addTrauma(0.8);
     g.audio.play('shatter_big', { volume: 1, pitch: 0.5 });

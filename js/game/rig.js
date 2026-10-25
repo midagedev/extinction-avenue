@@ -73,10 +73,10 @@ class InstancedRig {
     mat.colorNode = mix(vColor.mul(this.uTint), vec3(this.uStone), stone).add(vec3(flash.mul(0.15)));
     // Rim light keeps silhouettes readable against dark streets (stylized, cheap)
     const viewDir = normalize(cameraPosition.sub(positionWorld));
-    const rim = pow(float(1).sub(max(dot(normalWorld, viewDir), 0)), 3.0);
+    const rim = pow(float(1).sub(max(dot(normalWorld, viewDir), 0)), 4.0);
     const glow = vEmissive.mul(this.uGlow).mul(float(1).sub(stone));
     const eliteRim = vec3(this.uEliteGlow).mul(elite).mul(rim.mul(2.2).add(0.15));
-    mat.emissiveNode = glow.add(vec3(1.0, 0.85, 0.7).mul(flash.mul(0.9))).add(eliteRim).add(vec3(0.5, 0.65, 0.9).mul(rim.mul(0.35)).mul(float(1).sub(stone)));
+    mat.emissiveNode = glow.add(vec3(1.0, 0.85, 0.7).mul(flash.mul(0.9))).add(eliteRim).add(vec3(0.25, 0.35, 0.5).mul(rim.mul(0.12)).mul(float(1).sub(stone)));
     mat.roughnessNode = mix(float(opts.roughness ?? 0.72), float(0.95), stone);
     this.material = mat;
 
