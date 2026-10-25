@@ -306,7 +306,8 @@ body.s-loading #s-loading, body.s-title #s-title { display: flex; }
 .r-score span { font: 700 12px var(--ui); letter-spacing: 0.4em; color: var(--orange-2); }
 .r-score b { font: 400 clamp(56px, 9vw, 96px)/0.9 var(--display); letter-spacing: 0.03em; }
 .r-score em { font: 700 12px var(--ui); letter-spacing: 0.24em; color: var(--green); font-style: normal; min-height: 1em; }
-.r-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin: 14px 0; }
+.r-stats { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin: 14px 0; }
+@media (max-width: 760px) { .r-stats { grid-template-columns: repeat(3, 1fr); } }
 .r-stats div { background: rgba(255,255,255,.05); border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
 .r-stats b { display: block; font: 400 34px/1 var(--display); letter-spacing: 0.03em; }
 .r-stats span { font: 700 10px var(--ui); letter-spacing: 0.2em; color: var(--text-3); text-transform: uppercase; }
