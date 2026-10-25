@@ -28,7 +28,7 @@ import { iconSVG } from './icons.js';
 
 const params = new URLSearchParams(location.search);
 const START_S = 120; // 5th Ave, a few blocks south of 57th St, heading downtown
-const GAME_URL = location.protocol.startsWith('http') ? `${location.origin}${location.pathname}` : 'https://github.com/mrdoob/slop-newyork';
+const GAME_URL = location.protocol.startsWith('http') ? `${location.origin}${location.pathname}` : 'https://midagedev.github.io/extinction-avenue/';
 const TIPS = [
   'Hit GRIDLOCK\'s glowing containment collar for weak-point crits.',
   'Ram small dinosaurs at speed — they fly. Nitro makes rams hit harder.',
