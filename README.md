@@ -89,6 +89,7 @@ js/game/              the game
 js/*.js               Slop New York city modules (mrdoob)
 sim.html              the original free-roam simulation
 docs/ART_PIPELINE.md  art bible, full asset list + specs, production routes
+docs/ROADMAP.md       stage 1 beat sheet, stage 2/3 boss sketches (Hudson Leviathan, Skyline), elites & mini-bosses
 ASSETS.md             asset & license register
 tools/                headless test drivers (Playwright) and data tools
 ```
