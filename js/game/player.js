@@ -17,10 +17,10 @@ function createPropMaterial() {
 }
 
 class Player {
-  constructor(scene, assets, route) {
+  constructor(scene, assets, route, livery = null) {
     this.scene = scene;
     this.route = route;
-    const car = createTaxiModel(scene);
+    const car = createTaxiModel(scene, livery);
     this.car = car;
     this.mesh = car.mesh;
     this.mesh.name = 'Unit77';
@@ -92,6 +92,7 @@ class Player {
     this.vx = 0;
     this.vz = 0;
     this.heading = 0;
+    this.fx = 0; this.fz = 1; this.rx = -1; this.rz = 0;
     this.edgeScrape = 0;
     this.autoDrive = false;
     this.mesh.visible = true;
@@ -162,6 +163,8 @@ class Player {
     this.heading = r.heading - Math.atan2(this.vd, Math.max(this.speed, 5)) * 0.85;
     this.fx = Math.sin(this.heading);
     this.fz = Math.cos(this.heading);
+    this.rx = -this.fz;
+    this.rz = this.fx;
 
     // Health
     if (this.alive && st.regen > 0) this.hp = Math.min(this.maxHp, this.hp + st.regen * dt);
@@ -233,7 +236,7 @@ class Player {
     if (!this.alive || this.invuln > 0) return 0;
     const dealt = Math.max(1, amount - this.stats.armor);
     this.hp -= dealt;
-    this.invuln = 0.45;
+    this.invuln = 0.6;
     this.hurtFlash = 1;
     if (this.hp <= 0) {
       this.hp = 0;

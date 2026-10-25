@@ -64,7 +64,7 @@ function buildLandmarks(scene) {
   mlCtx.font = '900 76px Inter, Arial, sans-serif';
   mlCtx.textAlign = 'center';
   mlCtx.textBaseline = 'middle';
-  mlCtx.fillText('METLIFE', 256, 68);
+  mlCtx.fillText('CRETAGEN', 256, 68);
   const metlifeSignTex = new THREE.CanvasTexture(metlifeSignCanvas);
   metlifeSignTex.colorSpace = THREE.SRGBColorSpace;
   const metlifeSignMat = new THREE.MeshBasicNodeMaterial({ map: metlifeSignTex });

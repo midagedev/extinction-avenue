@@ -1977,11 +1977,11 @@ function createBillboardCanvasTexture(themeKey) {
 
     ctx.fillStyle = '#fff3c4';
     ctx.font = '800 20px Inter, Arial, sans-serif';
-    ctx.fillText('★★★★★  "UNFORGETTABLE!" — NY TIMES', 256, 185);
+    ctx.fillText('★★★★★  "UNFORGETTABLE!" — MIDTOWN HERALD', 256, 185);
 
     ctx.fillStyle = '#ffae42';
     ctx.font = '700 16px JetBrains Mono, monospace';
-    ctx.fillText('MAJESTIC THEATRE · 44TH ST WEST · TONIGHT 8 PM', 256, 226);
+    ctx.fillText('PALISADE THEATRE · 44TH ST WEST · TONIGHT 8 PM', 256, 226);
   } else if (themeKey === 1) {
     // Theme 1: NASDAQ / Wall St MarketSite Financial Display
     const grad = ctx.createLinearGradient(0, 0, 0, 256);
@@ -2006,11 +2006,11 @@ function createBillboardCanvasTexture(themeKey) {
     ctx.fillStyle = '#ffffff';
     ctx.font = '900 24px Inter, Arial, sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText('NASDAQ · TIMES SQ MARKETSITE', 18, 31);
+    ctx.fillText('CRETAGEN (CRTG) · LIVE', 18, 31);
     ctx.fillStyle = '#00f5a0';
     ctx.textAlign = 'right';
     ctx.font = '800 20px JetBrains Mono, monospace';
-    ctx.fillText('LIVE ▲ +2.84%', 494, 31);
+    ctx.fillText('▼ -38.40%', 494, 31);
 
     // Bullish emerald chart area & line
     const pts = [
@@ -2043,7 +2043,7 @@ function createBillboardCanvasTexture(themeKey) {
     ctx.fillStyle = '#38d8ff';
     ctx.font = '800 20px JetBrains Mono, monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('NDX 21,490 ▲   SPX 6,145 ▲   DOW 44,880 ▲   NYC 100 ▲', 256, 238);
+    ctx.fillText('CRTG ▼ 38.4%   AMBR ▼ 12.1%   FOSL ▲ 9.6%   NYC 100 ▼', 256, 238);
   } else if (themeKey === 2) {
     // Theme 2: Gotham Cola / Iconic Red & White Wave Billboard
     const grad = ctx.createLinearGradient(0, 0, 512, 256);
@@ -2152,7 +2152,7 @@ function createBillboardCanvasTexture(themeKey) {
     ctx.fillStyle = '#38b6ff';
     ctx.font = '900 26px Inter, Arial, sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText('NY1 NEWS · LIVE MANHATTAN', 18, 33);
+    ctx.fillText('METRO 7 NEWS · LIVE MANHATTAN', 18, 33);
 
     ctx.fillStyle = '#ffd15c';
     ctx.textAlign = 'right';
@@ -2226,7 +2226,7 @@ function createBillboardCanvasTexture(themeKey) {
     ctx.fillRect(0, 198, 512, 58);
     ctx.fillStyle = '#ff4081';
     ctx.font = '900 24px JetBrains Mono, monospace';
-    ctx.fillText('TKTS · 50% OFF BROADWAY SHOWS TONIGHT', 256, 234);
+    ctx.fillText('HALF-PRICE SHOW TICKETS · TONIGHT', 256, 234);
   }
 
   const tex = new THREE.CanvasTexture(c);

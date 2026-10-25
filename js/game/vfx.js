@@ -32,6 +32,7 @@ class ParticlePool {
     this.rot = f(); this.spin = f();
     this.stretch = f();
     this.bounce = f();
+    this.puff = !!opts.puff; // grow in, shrink out (dust & smoke)
     this.alive = 0;
     this.cursor = 0;
     this.active = new Uint8Array(capacity);
@@ -78,7 +79,8 @@ class ParticlePool {
       }
       this.rot[i] += this.spin[i] * dt;
       const t = 1 - this.life[i] / this.max[i];
-      const s = this.s0[i] + (this.s1[i] - this.s0[i]) * t;
+      let s = this.s0[i] + (this.s1[i] - this.s0[i]) * t;
+      if (this.puff) s *= Math.min(1, t / 0.1) * (1 - t * t);
       const cr = this.r[i] + (this.r1[i] - this.r[i]) * t;
       const cg = this.g[i] + (this.g1[i] - this.g[i]) * t;
       const cb = this.b[i] + (this.b1[i] - this.b[i]) * t;
@@ -112,7 +114,7 @@ class VFX {
     this.streak = new ParticlePool(attrGeo(new THREE.BoxGeometry(1, 1, 1)), 900, { additive: true, name: 'vfx.streak' });
     // Lit solids: fossil shards & debris (stone colored), smoke & dust puffs
     this.shards = new ParticlePool(assets.get('shard').geometry, 1400, { roughness: 0.95, metalness: 0, name: 'vfx.shards' });
-    this.smoke = new ParticlePool(attrGeo(new THREE.IcosahedronGeometry(0.5, 1)), 500, { roughness: 1, metalness: 0, name: 'vfx.smoke' });
+    this.smoke = new ParticlePool(attrGeo(new THREE.IcosahedronGeometry(0.5, 1)), 500, { roughness: 1, metalness: 0, name: 'vfx.smoke', puff: true });
     // Shockwave rings (flat, additive)
     const ring = new THREE.RingGeometry(0.82, 1, 40, 1);
     ring.rotateX(-Math.PI / 2);
@@ -210,7 +212,7 @@ class VFX {
     for (let i = 0; i < 3 + 3 * size; i++) {
       const a = Math.random() * Math.PI * 2;
       this.smoke.spawn(x + Math.cos(a) * size, y + 0.8, z + Math.sin(a) * size, Math.cos(a) * 1.5, 1.6 + Math.random() * 1.5, Math.sin(a) * 1.5,
-        1.2 + Math.random() * 0.9, 0.9 * size, 3.0 * size, 0.09, 0.085, 0.08, { drag: 1.2, r1: 0.05, g1: 0.05, b1: 0.05 });
+        1.0 + Math.random() * 0.8, 0.9 * size, 2.4 * size, 0.07, 0.065, 0.06, { drag: 1.2, r1: 0.04, g1: 0.04, b1: 0.04 });
     }
     // Debris
     for (let i = 0; i < 3 + 3 * size; i++) {
@@ -235,11 +237,11 @@ class VFX {
         0.9 + Math.random() * 1.1, (0.2 + Math.random() * 0.35) * Math.min(3, 0.6 + radius * 0.5), 0.05,
         0.44 * tone, 0.41 * tone, 0.37 * tone, { grav: 20, spin: 10, bounce: 0.4 });
     }
-    const nd = Math.min(10, 2 + Math.round(radius * 2));
+    const nd = radius < 1 ? (Math.random() < 0.5 ? 1 : 0) : Math.min(6, 1 + Math.round(radius * 1.5));
     for (let i = 0; i < nd; i++) {
       const a = Math.random() * Math.PI * 2;
       this.smoke.spawn(x + Math.cos(a) * radius * 0.6, y + 0.4, z + Math.sin(a) * radius * 0.6, Math.cos(a) * 2, 0.8 + Math.random(), Math.sin(a) * 2,
-        0.7 + Math.random() * 0.6, 0.6 * radius, 1.8 * radius, 0.36, 0.33, 0.29, { drag: 2.5, r1: 0.2, g1: 0.19, b1: 0.17 });
+        0.6 + Math.random() * 0.5, 0.5 * radius, 1.3 * radius, 0.24, 0.22, 0.2, { drag: 2.5, r1: 0.14, g1: 0.13, b1: 0.12 });
     }
     // Escaping gene energy
     for (let i = 0; i < 3 + radius * 2; i++) {
@@ -256,7 +258,7 @@ class VFX {
     for (let i = 0; i < count; i++) {
       const a = Math.random() * Math.PI * 2;
       this.smoke.spawn(x + Math.cos(a) * size * 0.5, 0.3, z + Math.sin(a) * size * 0.5, Math.cos(a) * 3 * size, 0.6 + Math.random(), Math.sin(a) * 3 * size,
-        0.6 + Math.random() * 0.5, 0.5 * size, 1.6 * size, 0.32, 0.3, 0.27, { drag: 3, r1: 0.18, g1: 0.17, b1: 0.16 });
+        0.5 + Math.random() * 0.4, 0.5 * size, 1.3 * size, 0.22, 0.2, 0.18, { drag: 3, r1: 0.12, g1: 0.11, b1: 0.1 });
     }
   }
 
@@ -287,8 +289,8 @@ class VFX {
   // Immediate-mode telegraphs: call every frame while the threat is pending
   telegraphCircle(x, z, radius, progress, r = 5, g = 0.4, b = 0.3) {
     const pulse = 0.55 + 0.45 * Math.sin(performance.now() * 0.02);
-    this.ringsT.add(x, 0.14, z, 0, 0, 0, radius, 1, radius, r, g, b, 0.6 * pulse + 0.2);
-    this.discs.add(x, 0.12, z, 0, 0, 0, radius * Math.min(1, progress), 1, radius * Math.min(1, progress), r, g, b, 0.18);
+    this.ringsT.add(x, 0.14, z, 0, 0, 0, radius, 1, radius, r, g, b, 0.45 * pulse + 0.2);
+    this.discs.add(x, 0.12, z, 0, 0, 0, radius * Math.min(1, progress), 1, radius * Math.min(1, progress), r, g, b, 0.08);
   }
 
   telegraphLane(x, z, heading, length, width, progress, r = 5, g = 0.4, b = 0.3) {

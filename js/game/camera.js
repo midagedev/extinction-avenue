@@ -80,8 +80,8 @@ class GameCamera {
       const chasePos = [cx - fx * back, up, cz - fz * back];
       const chaseLook = [player.x + fx * 16, 0.6, player.z + fz * 16];
       // Reverse: ahead of the car, low, looking back down the avenue at the car and whatever chases it
-      const revPos = [cx + fx * 10.5, 4.6, cz + fz * 10.5];
-      const revLook = [player.x - fx * 16, 2.6, player.z - fz * 16];
+      const revPos = [cx + fx * 10.5, 4.2, cz + fz * 10.5];
+      const revLook = [player.x - fx * 16, 4.2, player.z - fz * 16];
       desiredPos.set(
         chasePos[0] + (revPos[0] - chasePos[0]) * rev,
         chasePos[1] + (revPos[1] - chasePos[1]) * rev + Math.sin(rev * Math.PI) * 4,

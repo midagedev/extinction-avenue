@@ -18,7 +18,10 @@ function poseCreature(type, e, pose, idx, time) {
   if (e.stone >= 1) return e.frozenLift || 0; // fossilized: keep the last pose
   const moving = Math.min(1, (e.moveSpeed || 0) / Math.max(1, e.speed * 0.5));
   // Gait phase advances with distance (no foot sliding at any speed)
-  e.gait = (e.gait || 0) + (e.moveSpeed || 0) * (1 / 60) * (e.sp?.stride || 1) * 1.6 / Math.max(0.6, e.scale);
+  // Advance by the (game) time since this individual was last posed, so the cycle is frame-rate independent
+  const pdt = Math.min(0.1, Math.max(0, time - (e.poseT ?? time)));
+  e.poseT = time;
+  e.gait = (e.gait || 0) + (e.moveSpeed || 0) * pdt * (e.sp?.stride || 1) * 1.6 / Math.max(0.6, e.scale);
   let lift = 0;
   switch (type) {
     case 'compy':

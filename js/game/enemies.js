@@ -8,12 +8,14 @@ import { poseCreature } from './poses.js';
 // and instanced rendering through one InstancedRig per species.
 
 const SPECIES = {
-  compy: { name: 'Scuttler', hp: 7, speed: 16.5, dmg: 3, radius: 0.55, height: 0.7, xp: 1, score: 10, mass: 0.3, ramKill: true, stride: 2.6, sound: 'compy_chirp' },
-  raptor: { name: 'Sicklejaw', hp: 26, speed: 20.5, dmg: 7, radius: 0.95, height: 1.7, xp: 3, score: 40, mass: 1, ramKill: true, stride: 1.6, pounce: true, sound: 'raptor_screech' },
-  brute: { name: 'Brute Raptor', hp: 120, speed: 17.5, dmg: 13, radius: 1.5, height: 2.8, xp: 9, score: 150, mass: 4, stride: 1.15, pounce: true, sound: 'brute_growl' },
+  compy: { name: 'Scuttler', size: 1.45, hp: 7, speed: 16.5, dmg: 2, radius: 0.55, height: 0.7, xp: 1, score: 10, mass: 0.3, ramKill: true, stride: 2.6, sound: 'compy_chirp' },
+  raptor: { name: 'Sicklejaw', size: 1.15, hp: 26, speed: 20.5, dmg: 6, radius: 0.95, height: 1.7, xp: 3, score: 40, mass: 1, ramKill: true, stride: 1.6, pounce: true, sound: 'raptor_screech' },
+  brute: { name: 'Brute Raptor', hp: 120, speed: 17.5, dmg: 10, radius: 1.5, height: 2.8, xp: 9, score: 150, mass: 4, stride: 1.15, pounce: true, sound: 'brute_growl' },
   trike: { name: 'Hornwall', hp: 340, speed: 7, dmg: 22, radius: 2.4, height: 3, xp: 22, score: 400, mass: 12, stride: 0.75, charger: true, sound: 'trike_bellow' },
   ankylo: { name: 'Clubtail', hp: 520, speed: 4.5, dmg: 18, radius: 2.2, height: 2, xp: 26, score: 500, mass: 14, stride: 0.7, armor: 0.45, swipe: true, sound: 'ankylo_grunt' },
-  ptero: { name: 'Skyreaver', hp: 18, speed: 24, dmg: 9, radius: 1.3, height: 1, xp: 4, score: 60, mass: 0.5, flyer: true, stride: 1, sound: 'ptero_cry' }
+  ptero: { name: 'Skyreaver', hp: 18, speed: 24, dmg: 9, radius: 1.3, height: 1, xp: 4, score: 60, mass: 0.5, flyer: true, stride: 1, sound: 'ptero_cry' },
+  // The boss: driven entirely by its controller (boss.js)
+  trex: { name: 'GRIDLOCK', hp: 11000, speed: 20, dmg: 25, radius: 3.2, height: 6.4, xp: 0, score: 50000, mass: 80, stride: 0.5, sound: 'trex_roar', custom: true }
 };
 const SPECIES_IDS = Object.keys(SPECIES);
 const CAR_RADIUS = 1.5;
@@ -67,26 +69,19 @@ class EnemyManager {
     this.rigs = {};
     this.poses = {};
     this.models = {};
-    const glow = {
-      compy: new THREE.Color(1, 1, 1),
-      raptor: new THREE.Color(1, 1, 1),
-      brute: new THREE.Color(1, 1, 1),
-      trike: new THREE.Color(1, 1, 1),
-      ankylo: new THREE.Color(1, 1, 1),
-      ptero: new THREE.Color(1, 1, 1)
-    };
+    const glow = { trex: new THREE.Color(1.4, 1.4, 1.4) };
     for (const id of SPECIES_IDS) {
       const entry = assets.get(id);
       const model = entry.model;
       this.models[id] = model;
-      const rig = new InstancedRig(model, entry.def.capacity, { glow: glow[id] });
+      const rig = new InstancedRig(model, entry.def.capacity, { glow: glow[id] || new THREE.Color(1, 1, 1) });
       this.rigs[id] = rig;
       this.poses[id] = createPose(model);
       this.group.add(rig.group);
       const sp = SPECIES[id];
       // Gameplay radius follows the model when a replacement asset changes the size
-      if (model.radius) sp.radius = Math.max(sp.radius * 0.7, Math.min(sp.radius * 1.4, model.radius));
-      if (model.height) sp.height = model.height;
+      if (model.radius && !sp.custom) sp.radius = Math.max(sp.radius * 0.7, Math.min(sp.radius * 1.4, model.radius));
+      if (model.height && !sp.custom) sp.height = model.height;
     }
     this.pool = [];
     this.list = []; // alive enemies
@@ -108,8 +103,8 @@ class EnemyManager {
     const sp = SPECIES[type];
     if (!sp) return null;
     const rig = this.rigs[type];
-    if (this.countByType[type] >= rig.capacity - (opts.elite ? 0 : 1)) return null;
-    if (this.list.length >= this.capacity) return null;
+    if (this.countByType[type] >= rig.capacity - (opts.elite || opts.boss ? 0 : 1)) return null;
+    if (this.list.length >= this.capacity && !opts.boss) return null;
     const e = this.pool.pop() || new Enemy(this.list.length);
     e.alive = true;
     e.type = type;
@@ -122,7 +117,7 @@ class EnemyManager {
     e.vy = 0;
     e.elite = opts.elite ? 1 : 0;
     e.boss = !!opts.boss;
-    e.scale = (opts.scale ?? (e.elite ? 1.3 : 1)) * (0.92 + Math.random() * 0.16);
+    e.scale = (opts.scale ?? (e.elite ? 1.3 : 1)) * (sp.size || 1) * (0.92 + Math.random() * 0.16);
     e.maxHp = sp.hp * this.hpMult * (opts.hpMult ?? (e.elite ? 7 : 1));
     e.hp = e.maxHp;
     e.speed = sp.speed * this.speedMult * (opts.speedMult ?? 1) * (0.9 + Math.random() * 0.2);
@@ -155,6 +150,15 @@ class EnemyManager {
     e.stuck = 0;
     e.spawnT = 0;
     e.name = opts.name || null;
+    e.numAcc = 0; e.numT = -1; e.numCrit = false;
+    e.ctrl = opts.ctrl || null;
+    e.ghost = false;
+    e.miniboss = false;
+    e.rx = x; e.rz = z;
+    e.moveSpeed = 0;
+    e.gait = 0;
+    e.frozenLift = 0;
+    e.mode = null;
     this.list.push(e);
     this.countByType[type]++;
     return e;
@@ -178,14 +182,27 @@ class EnemyManager {
    * Returns true if the hit killed it.
    */
   damage(e, amount, opts = {}) {
-    if (!e.alive || e.state === 'dying' || e.state === 'launched' && e.hp <= 0) return false;
+    if (!e.alive || e.ghost || e.state === 'dying' || e.state === 'launched' && e.hp <= 0) return false;
     let a = amount;
     if (e.sp.armor && !opts.explosive) a *= 1 - e.sp.armor;
     e.hp -= a;
-    e.flash = 1;
+    // Flash scales with how much the hit hurt, so swarms under constant fire keep their colours
+    e.flash = Math.max(e.flash, Math.min(1, (e.boss ? 0.06 : 0.2) + (a / e.maxHp) * 4));
     const game = this.game;
     game.stats.damageDealt += a;
-    if (!opts.noNumber) game.vfx.number(e.x, e.y + e.sp.height * e.scale * 0.8 + 0.4, e.z, a, opts.crit ? 1 : 0);
+    if (!opts.noNumber) {
+      // One number per individual per short window (sums rapid hits instead of stacking dozens of labels)
+      e.numAcc = (e.numAcc || 0) + a;
+      e.numCrit = e.numCrit || !!opts.crit;
+      const now = game.elapsed;
+      if (e.hp <= 0 || now - (e.numT ?? -1) > (e.boss ? 0.14 : 0.22)) {
+        const top = e.ctrl ? 8 * e.scale : e.sp.height * e.scale * 0.8 + 0.4;
+        game.vfx.number(e.x, e.y + top, e.z, e.numAcc, e.numCrit ? 1 : 0);
+        e.numAcc = 0;
+        e.numCrit = false;
+        e.numT = now;
+      }
+    }
     if (opts.kx || opts.kz) {
       const m = 1 / Math.max(0.3, e.sp.mass * e.scale);
       e.vx += opts.kx * m;
@@ -236,7 +253,7 @@ class EnemyManager {
     const list = this.list;
     const hash = this.hash;
     hash.clear();
-    for (let i = 0; i < list.length; i++) if (list[i].state !== 'dying') hash.insert(list[i]);
+    for (let i = 0; i < list.length; i++) if (list[i].state !== 'dying' && !list[i].ghost) hash.insert(list[i]);
     const route = g.route;
     const walk = g.walk;
     const tmp = this._tmp;
@@ -245,10 +262,14 @@ class EnemyManager {
     for (let i = list.length - 1; i >= 0; i--) {
       const e = list[i];
       const sp = e.sp;
+      if (e.ctrl) {
+        if (e.ctrl.updateEntity(e, dt) === 'remove') this._remove(i);
+        continue;
+      }
       e.animT += dt;
       e.stateT += dt;
       e.spawnT += dt;
-      e.flash = Math.max(0, e.flash - dt * 7);
+      e.flash = Math.max(0, e.flash - dt * 10);
       e.knock = Math.max(0, e.knock - dt);
       e.attackCd -= dt;
       e.abilityCd -= dt;
@@ -379,7 +400,7 @@ class EnemyManager {
         e.heading = Math.atan2(e.vx, e.vz);
         e.jaw = 0.8;
         if (dist < e.radius + CAR_RADIUS + 0.4 && e.attackCd <= 0) {
-          g.hurtPlayer(sp.dmg * this.dmgMult * 1.4 * (e.elite ? 1.6 : 1), e.x, e.z, 'pounce');
+          g.hurtPlayer(sp.dmg * this.dmgMult * 1.3 * (e.elite ? 1.3 : 1), e.x, e.z, 'pounce');
           e.attackCd = 0.9;
           g.audio.play('bite', { x: e.x, z: e.z, volume: 0.5, pitch: 1.5 });
         }
@@ -589,7 +610,7 @@ class EnemyManager {
     let best = null;
     let bd = range * range;
     for (const e of this.list) {
-      if (e.state === 'dying' || e.state === 'launched') continue;
+      if (e.state === 'dying' || e.state === 'launched' || e.ghost) continue;
       if (filter && !filter(e)) continue;
       const d2 = (e.x - x) ** 2 + (e.z - z) ** 2;
       if (d2 < bd) { bd = d2; best = e; }
@@ -612,6 +633,12 @@ class EnemyManager {
     for (const e of this.list) {
       const rig = this.rigs[e.type];
       const pose = this.poses[e.type];
+      if (e.ctrl) {
+        const lift = e.ctrl.pose(e, pose, rig.partIndex, time);
+        rig.add(e.rx, lift * e.scale, e.rz, e.heading, e.scale, pose, e.flash, e.stone, 0, e.pitch, e.roll);
+        e.ctrl.afterAdd(rig);
+        continue;
+      }
       const lift = poseCreature(e.type, e, pose, rig.partIndex, time);
       rig.add(e.x, e.y + lift * e.scale, e.z, e.heading, e.scale, pose, e.flash, e.stone, e.elite ? 1 : 0, e.pitch, e.roll);
     }

@@ -487,7 +487,7 @@ class ThirdPersonControllerManager {
     chassisPivot.add(carBodyMesh);
 
     // 2. Authentic NYC Taxi Side Door T&LC Medallion & Fare Tariff Emblem Decals, hugging the curved front doors
-    const doorDecalTex = createTaxiDoorDecalTexture();
+    const doorDecalTex = liveryOverride?.door ? liveryOverride.door() : createTaxiDoorDecalTexture();
     const doorDecalMat = new THREE.MeshStandardNodeMaterial({
       map: doorDecalTex,
       roughness: 0.24,
@@ -503,7 +503,7 @@ class ThirdPersonControllerManager {
     }
 
     // 3. High-Detail NY Empire Gold License Plates on the bumpers
-    const nyPlateTex = createNYLicensePlateTexture();
+    const nyPlateTex = liveryOverride?.plate ? liveryOverride.plate() : createNYLicensePlateTexture();
     const nyPlateMat = new THREE.MeshStandardNodeMaterial({ map: nyPlateTex, roughness: 0.28 });
     const rearPlate = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.14, 0.02), nyPlateMat);
     rearPlate.position.set(0, spec.plates[1], spec.zRear - 0.006);
@@ -1240,9 +1240,18 @@ class ThirdPersonControllerManager {
   }
 }
 
-/** The lofted yellow taxi on its own (body, decals, plates, wheels, headlights), for the game's player vehicle */
-function createTaxiModel(scene) {
-  return ThirdPersonControllerManager.prototype.createCarEntity.call({ scene });
+/**
+ * The lofted yellow taxi on its own (body, decals, plates, wheels, headlights), for the game's player vehicle.
+ * livery: optional { door(), plate() } returning CanvasTextures that replace the door decal and number plates.
+ */
+let liveryOverride = null;
+function createTaxiModel(scene, livery = null) {
+  liveryOverride = livery;
+  try {
+    return ThirdPersonControllerManager.prototype.createCarEntity.call({ scene });
+  } finally {
+    liveryOverride = null;
+  }
 }
 
 export { ThirdPersonControllerManager, createTaxiModel };
