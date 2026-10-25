@@ -1240,4 +1240,9 @@ class ThirdPersonControllerManager {
   }
 }
 
-export { ThirdPersonControllerManager };
+/** The lofted yellow taxi on its own (body, decals, plates, wheels, headlights), for the game's player vehicle */
+function createTaxiModel(scene) {
+  return ThirdPersonControllerManager.prototype.createCarEntity.call({ scene });
+}
+
+export { ThirdPersonControllerManager, createTaxiModel };
