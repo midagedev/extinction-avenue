@@ -61,7 +61,7 @@ class InstancedRig {
 
     this.uGlow = uniform(opts.glow ? opts.glow.clone() : new THREE.Color(1, 1, 1));
     this.uEliteGlow = uniform(opts.eliteGlow ? opts.eliteGlow.clone() : new THREE.Color(4, 0.6, 2.4));
-    this.uStone = uniform(opts.stone ? opts.stone.clone() : new THREE.Color(0.42, 0.40, 0.37));
+    this.uStone = uniform(opts.stone ? opts.stone.clone() : new THREE.Color(0.2, 0.19, 0.175));
     this.uTint = uniform(opts.tint ? opts.tint.clone() : new THREE.Color(1, 1, 1));
 
     const mat = createRigMaterial(opts);
@@ -70,13 +70,13 @@ class InstancedRig {
     const flash = fxNode.x;
     const stone = fxNode.y;
     const elite = fxNode.z;
-    mat.colorNode = mix(vColor.mul(this.uTint), vec3(this.uStone), stone).add(vec3(flash.mul(0.3)));
+    mat.colorNode = mix(vColor.mul(this.uTint), vec3(this.uStone), stone).add(vec3(flash.mul(0.15)));
     // Rim light keeps silhouettes readable against dark streets (stylized, cheap)
     const viewDir = normalize(cameraPosition.sub(positionWorld));
     const rim = pow(float(1).sub(max(dot(normalWorld, viewDir), 0)), 3.0);
     const glow = vEmissive.mul(this.uGlow).mul(float(1).sub(stone));
     const eliteRim = vec3(this.uEliteGlow).mul(elite).mul(rim.mul(2.2).add(0.15));
-    mat.emissiveNode = glow.add(vec3(1.0, 0.85, 0.7).mul(flash.mul(1.3))).add(eliteRim).add(vec3(0.5, 0.65, 0.9).mul(rim.mul(0.35)).mul(float(1).sub(stone)));
+    mat.emissiveNode = glow.add(vec3(1.0, 0.85, 0.7).mul(flash.mul(0.9))).add(eliteRim).add(vec3(0.5, 0.65, 0.9).mul(rim.mul(0.35)).mul(float(1).sub(stone)));
     mat.roughnessNode = mix(float(opts.roughness ?? 0.72), float(0.95), stone);
     this.material = mat;
 

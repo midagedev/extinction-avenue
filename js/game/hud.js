@@ -45,7 +45,8 @@ class HUD {
   _style(key, el, prop, value) {
     if (this.cache[key] === value) return;
     this.cache[key] = value;
-    el.style[prop] = value;
+    if (prop.startsWith('--')) el.style.setProperty(prop, value);
+    else el.style[prop] = value;
   }
 
   update(dt) {
@@ -76,6 +77,10 @@ class HUD {
     const ch = g.weapons.special.charge;
     this._style('special', el.specialFill, 'strokeDashoffset', String((213.6 * (1 - ch)).toFixed(1)));
     el.special.classList.toggle('ready', ch >= 1);
+    if (this.tSpecial || (this.tSpecial = document.getElementById('t-special'))) {
+      this._style('tSpecial', this.tSpecial, '--charge', ch.toFixed(2));
+      this.tSpecial.classList.toggle('ready', ch >= 1);
+    }
     this._set('loc', el.loc, g.route.legName(p.s));
     // Build slots
     const list = g.weapons.buildList();

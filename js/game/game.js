@@ -119,6 +119,15 @@ class Game {
       onStatus: (t) => { stage = Math.min(0.45, stage + 0.08); setStatus(t, stage); }
     });
     const scene = this.world.scene;
+    // A lost WebGPU device (driver reset, broken adapter) restarts the game on the WebGL2 backend
+    this.world.renderer.backend.device?.lost?.then((info) => {
+      console.warn('[webgpu] device lost:', info?.reason, info?.message);
+      if (info?.reason !== 'destroyed' && !params.has('webgl')) {
+        const q = new URLSearchParams(location.search);
+        q.set('webgl', '');
+        location.search = q.toString();
+      }
+    });
     setStatus('Thawing specimens…', 0.5);
     this.assets = await loadAssets(ASSET_MANIFEST);
     this.route = new Route();

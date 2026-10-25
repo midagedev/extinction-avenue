@@ -323,9 +323,10 @@ body.touch.s-playing #touch-ui { display: block; }
 #t-stick span { position: fixed; left: calc(var(--x0) + var(--dx) - 26px); top: calc(var(--y0) - 26px); width: 52px; height: 52px; border-radius: 50%; background: rgba(255, 194, 26, 0.85); box-shadow: 0 0 16px rgba(255,194,26,.6); }
 .t-btn { pointer-events: auto; position: fixed; width: 86px; height: 86px; border-radius: 50%; border: 2px solid rgba(255,255,255,.4); background: rgba(10,14,24,.7); color: #fff; font: 700 13px var(--ui); letter-spacing: 0.08em; }
 #t-boost { right: calc(18px + 100px); bottom: calc(26px + var(--safe-b)); border-color: var(--cyan); }
-#t-special { right: 18px; bottom: calc(120px + var(--safe-b)); border-color: var(--red); font-size: 11px; }
-#t-pause { right: 18px; top: calc(110px + var(--safe-t)); width: 48px; height: 48px; font-size: 16px; }
-body.touch .hud-br { bottom: auto; top: calc(130px + var(--safe-t)); transform: scale(0.75); transform-origin: top right; }
+#t-special { right: 18px; bottom: calc(120px + var(--safe-b)); border-color: rgba(255,59,47,.5); font-size: 11px; background: conic-gradient(rgba(255,59,47,.55) calc(var(--charge, 0) * 1turn), rgba(10,14,24,.7) 0); }
+#t-special.ready { border-color: var(--orange-2); box-shadow: 0 0 18px rgba(255,176,46,.7); animation: bump 0.8s infinite; }
+#t-pause { left: 12px; top: calc(150px + var(--safe-t)); width: 44px; height: 44px; font-size: 15px; }
+body.touch .hud-br { display: none; }
 body.touch .special-label kbd, body.touch .bar-label kbd { display: none; }
 
 @media (max-width: 760px) {

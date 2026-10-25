@@ -187,10 +187,11 @@ class EnemyManager {
     if (e.sp.armor && !opts.explosive) a *= 1 - e.sp.armor;
     e.hp -= a;
     // Flash scales with how much the hit hurt, so swarms under constant fire keep their colours
-    e.flash = Math.max(e.flash, Math.min(1, (e.boss ? 0.06 : 0.2) + (a / e.maxHp) * 4));
+    e.flash = Math.max(e.flash, Math.min(0.8, (e.boss ? 0.05 : 0.1) + (a / e.maxHp) * 2.5));
     const game = this.game;
     game.stats.damageDealt += a;
-    if (!opts.noNumber) {
+    // Numbers for hits that matter: crits, big hits, elites and bosses (a swarm of 15s is just noise)
+    if (!opts.noNumber && (opts.crit || a >= 20 || e.elite || e.boss || e.miniboss)) {
       // One number per individual per short window (sums rapid hits instead of stacking dozens of labels)
       e.numAcc = (e.numAcc || 0) + a;
       e.numCrit = e.numCrit || !!opts.crit;
@@ -491,9 +492,11 @@ class EnemyManager {
             const out = 8 + ramSpeed * 0.5;
             if (this.damage(e, ramDmg, { source: 'ram', noNumber: false })) {
               e.state = 'launched';
-              e.vy = 7 + ramSpeed * 0.35;
-              e.vx = p.fx * ramSpeed * 1.1 + nx * out * 0.6;
-              e.vz = p.fz * ramSpeed * 1.1 + nz * out * 0.6;
+              // Thrown ahead and off to the side (not up into the chase camera)
+              e.vy = 4.5 + ramSpeed * 0.18;
+              const side = (nx * -p.fz + nz * p.fx) >= 0 ? 1 : -1;
+              e.vx = p.fx * ramSpeed * 1.15 - p.fz * side * out;
+              e.vz = p.fz * ramSpeed * 1.15 + p.fx * side * out;
               e.spin = (Math.random() - 0.5) * 18;
             }
           } else {

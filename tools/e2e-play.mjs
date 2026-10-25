@@ -70,6 +70,26 @@ let s = await step(3);
 log('after 3s', s);
 if (mode === 'quick') { await shot('02-start'); await browser.close(); process.exit(errors.length ? 1 : 0); }
 
+if (mode === 'swarm') {
+  // Open with ?t=360&god: the MEGA SWARM event at 6:15 pours hundreds of Scuttlers onto the avenue
+  s = await play(12, { aim: [640, 280] });
+  const perf = await page.evaluate(() => { const t = performance.now(); window.__game.step(5, 1 / 60); return { ms: (performance.now() - t) / 300, enemies: window.__game.game.enemies.count }; });
+  log('sim cost per 1/60 s tick (ms):', perf.ms.toFixed(2), 'with', perf.enemies, 'dinosaurs');
+  for (let i = 0; i < 8; i++) {
+    s = await step(1);
+    if (s.state === 'levelup') await autoPick();
+    if (s.enemies > 380) break;
+  }
+  log('swarm', s.enemies, 'enemies', s.time);
+  await shot('04-big-swarm');
+  await page.evaluate(() => { window.__game.game.pendingLevels = 1; });
+  s = await step(0.1);
+  await page.evaluate(() => new Promise((r) => setTimeout(r, 700)));
+  await shot('03-levelup');
+  console.log('errors:', errors.length);
+  await browser.close();
+  process.exit(0);
+}
 if (mode === 'balance') {
   // A simple bot (holds fire at screen centre, weaves, takes weapons) plays until the boss or death
   for (let t = 0; t < 520; t += 30) {

@@ -209,10 +209,10 @@ class VFX {
     }
     this.sparks(x, y + 0.5, z, Math.round(10 + 14 * size), 14 * Math.sqrt(size), pal[0], pal[1] * 0.9, pal[2]);
     // Smoke
-    for (let i = 0; i < 3 + 3 * size; i++) {
+    for (let i = 0; i < Math.min(8, 3 + 3 * size); i++) {
       const a = Math.random() * Math.PI * 2;
       this.smoke.spawn(x + Math.cos(a) * size, y + 0.8, z + Math.sin(a) * size, Math.cos(a) * 1.5, 1.6 + Math.random() * 1.5, Math.sin(a) * 1.5,
-        1.0 + Math.random() * 0.8, 0.9 * size, 2.4 * size, 0.07, 0.065, 0.06, { drag: 1.2, r1: 0.04, g1: 0.04, b1: 0.04 });
+        1.0 + Math.random() * 0.8, Math.min(2, 0.9 * size), Math.min(3.2, 2.4 * size), 0.07, 0.065, 0.06, { drag: 1.2, r1: 0.04, g1: 0.04, b1: 0.04 });
     }
     // Debris
     for (let i = 0; i < 3 + 3 * size; i++) {
@@ -235,7 +235,7 @@ class VFX {
       this.shards.spawn(x + Math.cos(a) * radius * 0.5, y + Math.random() * radius, z + Math.sin(a) * radius * 0.5,
         Math.cos(a) * sp, 3 + Math.random() * 6 * (big ? 1.6 : 1), Math.sin(a) * sp,
         0.9 + Math.random() * 1.1, (0.2 + Math.random() * 0.35) * Math.min(3, 0.6 + radius * 0.5), 0.05,
-        0.44 * tone, 0.41 * tone, 0.37 * tone, { grav: 20, spin: 10, bounce: 0.4 });
+        0.26 * tone, 0.245 * tone, 0.22 * tone, { grav: 20, spin: 10, bounce: 0.4 });
     }
     const nd = radius < 1 ? (Math.random() < 0.5 ? 1 : 0) : Math.min(6, 1 + Math.round(radius * 1.5));
     for (let i = 0; i < nd; i++) {
