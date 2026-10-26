@@ -1,0 +1,15 @@
+Asset id: trike  (assets/models/triceratops.glb)
+
+Source model : "Triceratops" from the Animated Dinosaur Pack by Quaternius
+Source pages : https://poly.pizza/m/IGvrUqGrRM  (mirror with GLB download)
+               https://quaternius.com/packs/animateddinosaurs.html  (pack page)
+Download     : https://static.poly.pizza/6aa1f3ff-b9b3-4bb5-9d85-b2ffa514f0cc.glb
+License      : CC0 1.0 Universal (Public Domain Dedication)
+Evidence     : Poly Pizza page data "Licence":"CC0 1.0", creator "Quaternius", page text "Public Domain (CC0)";
+               the pack page states "License CC0"; the pack's own License.txt (copied next to this file as
+               quaternius-animated-dinosaur-pack-License.txt) reads "License: CC0 1.0 Universal (CC0 1.0) Public Domain
+               Dedication". Retrieved 2026-10-26.
+
+Modifications by this project (CC0 1.0): crease-aware Loop subdivision x2 (1.3k -> 21k triangles, LOD1 5.3k) with
+interpolated skin weights and recoloured materials (tools/lab/refine-quaternius.js). Skeleton and the six animation
+clips are unchanged.

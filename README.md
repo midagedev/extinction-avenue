@@ -36,8 +36,8 @@ To host it, push the folder to GitHub Pages or any static host. Nothing needs co
 
 | | Desktop | Touch |
 |---|---|---|
-| Aim the tail gun | Mouse (the crosshair turns red over a dinosaur, gold over a weak point) | Your finger is the crosshair |
-| Fire | Hold **left click** | Touch and hold |
+| Aim the tail gun | Mouse (the crosshair turns red over a dinosaur, gold over a weak point) | **Drag anywhere** — the crosshair moves by your finger's movement like a trackpad, so your finger never covers it (mild aim assist). Settings → *Touch aim* switches to a crosshair floating 96 px above the finger |
+| Fire | Hold **left click** | Keep the finger down: it fires while the crosshair is on a dinosaur, a thrown car or a supply drop (offset mode: fires while held) |
 | Reload | Automatic when the belt runs dry; **R** or **right click** reloads early | RELOAD button |
 | Skyhammer air strike (charged by kills) | **Space** (lands where the crosshair meets the street) | SKYHAMMER button |
 | Level-up choice | Click a card or **1 / 2 / 3 / 4**, **R** rerolls | Tap |
@@ -51,8 +51,14 @@ To host it, push the folder to GitHub Pages or any static host. Nothing needs co
   the gunner's eye: looking back down the road at the pursuers, swinging to the side for ambushes and forward when the
   T. rex comes at you head-on.
 - **Readable fights, not swarms.** Usually 5 to 20 dinosaurs are in play, with short peaks around 30 to 40 in the
-  stampede. Each one is worth shooting: Scuttlers (2 hits), Sicklejaw raptors, Brutes, Hornwall chargers, Clubtail
+  stampede. Each one is worth shooting: Scuttlers (2 hits), Sicklejaw raptors, Brutes, Hornwall chargers, Spiketail
   tanks and Skyreaver pterosaurs, plus elites and two mini-bosses.
+- **Real creatures (v3).** Rigged, animated models with physically based skin: a 22k-triangle sculpted theropod
+  (colour + normal maps) rigged in this repo becomes the Scuttler, the Sicklejaw, the Brute and — with a big head, tiny
+  arms and a heavier body — GRIDLOCK; refined Quaternius rigs for the Hornwall (triceratops) and the Spiketail
+  (stegosaurus); a high-detail procedural Skyreaver. Run cycles with planted feet, crouch / pounce / bite / roar / hit
+  clips, flinches, heads that track the gunner, cross-fades, per-animal size and colour variation. All CC0 —
+  see [ASSETS.md](ASSETS.md).
 - **Fair, telegraphed attacks.** Nothing hurts you by touching the cab. A dinosaur that's about to jump you crouches,
   glows red and gets a shrinking red ring on screen (DANGER!). Shoot it before the ring closes and it STAGGERs out of
   the attack. Only a few may attack at once, and only after they've been on screen long enough to be shot.
@@ -86,6 +92,7 @@ To host it, push the folder to GitHub Pages or any static host. Nothing needs co
 | `?nointro` / `?autostart` | Skip the intro camera / start immediately |
 | `?god` | Invulnerable (testing / filming) |
 | `?test` | No animation loop: drive the game from `window.__game.step()` / `.render()` (headless tests) |
+| `?procedural` | Draw the v2 procedural low-poly creatures instead of the rigged models (comparison / very old devices) |
 
 ## Project layout
 
@@ -95,8 +102,12 @@ css/game.css          game UI
 js/game/              the game
   game.js             entry point, state machine (title → intro → play → continue → results), scoring, aim ray, share
   world.js            renderer + city + post-processing (bloom, grade, CA, hurt/danger edges)
-  assets.js           THE ASSET MANIFEST (swap placeholders for GLB files here)
-  dino-models.js      procedural low-poly creature rigs   rig.js / poses.js   instanced rigid-part animation
+  assets.js           THE ASSET MANIFEST (GLB files, species skins: morphs, clips, looks)
+  skin-model.js       GLB → skinned model; bakes GLB clips / procedural keyframes (FK + bone-scale morphs) to matrices
+  skin-rig.js         GPU-instanced skinning (one draw call per species & LOD), PBR creature material
+  creature-clips.js   procedural keyframes (theropod gait with leg IK, pounce, bite, roar…; pterosaur flight)
+  creature-anim.js    gameplay state → clips, cross-fades, speed-matched gait, flinch, head-look
+  dino-models.js      v2 procedural rigs (fallback) + the T. rex collar   rig.js / poses.js   v2 rigid-part animation
   enemies.js          species, route-space pursuer AI, telegraphs + attack tokens, hit spheres
   director.js         the beat script: chases, combat zones, ambushes, set pieces, mini-bosses
   camera.js / gunner.js  first-person gunner camera (scripted swings) + tail-gun view model
@@ -107,8 +118,9 @@ js/*.js               Slop New York city modules (mrdoob)
 sim.html              the original free-roam simulation
 docs/ART_PIPELINE.md  art bible, full asset list + specs, production routes
 docs/ROADMAP.md       stage 1 beat sheet, stage 2/3 boss sketches (Hudson Leviathan, Skyline), elites & mini-bosses
-ASSETS.md             asset & license register
+ASSETS.md             asset & license register        assets/models, assets/licenses   CC0 models + evidence
 tools/                headless test drivers (Playwright) and data tools
+tools/lab/            asset lab: rig the sculpt, refine Quaternius rigs, build the pterosaur (node tools/model-lab.mjs)
 ```
 
 ## Testing
@@ -122,6 +134,10 @@ node tools/e2e-v2.mjs smoke  ./shots          # title → start → 20 s of bot 
 node tools/e2e-v2.mjs idle   ./shots          # a player who never touches anything: how long does the cab last?
 node tools/e2e-v2.mjs bot    ./shots '' 3     # a human-like bot (reaction delay, capped mouse speed, aim noise) plays a whole run, seed 3
 node tools/e2e-v2.mjs shots  ./shots          # screenshot set (title, first person, combat zone, level-up, pterosaur, T. rex, continue, results)
+node tools/e2e-touch.mjs ./shots all          # phone emulation (portrait + landscape) with CDP touch events: 24 touch-aim / HUD checks
+node tools/e2e-gallery.mjs ./shots after-     # fixed creature framings; add '' '&procedural' (prefix before-) for the v2 rigs
+python3 -I tools/lab/compare.py ./shots ./cmp # BEFORE / AFTER side-by-sides
+node tools/perf-creatures.mjs                 # 40 animated dinosaurs: draw calls, triangles, CPU pose cost
 ```
 
 All drivers open the page with `?test&webgl` (no animation loop; the sim is stepped through `window.__game.step()`)

@@ -1,0 +1,19 @@
+Asset ids: compy, raptor, brute, trex  (assets/models/theropod.glb, theropod_albedo.jpg, theropod_normal.jpg)
+
+Source model : "dinosaur" by damik
+Source page  : https://opengameart.org/content/dinosaur-1
+Download     : https://opengameart.org/sites/default/files/model_1.zip
+               (dinosaur.dae, textures/creature_color_bake.png, textures/creature_normal.png)
+License      : CC0 1.0 Universal (Public Domain Dedication)
+               https://creativecommons.org/publicdomain/zero/1.0/
+Evidence     : the OpenGameArt page's license block reads "License(s): CC0"; author block "Author: damik,
+               Friday, September 18, 2015"; listed in the collections "3d Animals under CC0", "3D Assets (CC0)" and
+               "3d Creatures under CC0". Page retrieved 2026-10-26.
+
+Modifications by this project (released under CC0 1.0 as well):
+  - Rigged: 27-bone skeleton placed by hand, skin weights computed by tools/lab/rig-theropod.js (nearest-segment,
+    neighbour-limited blending, geodesic jaw/skull split); 6.7k-triangle LOD1 generated with three.js
+    SimplifyModifier. The source mesh shipped with no rig and no animation.
+  - Animation: procedural keyframes generated at runtime (js/game/creature-clips.js).
+  - Textures: the original 2048² colour bake and normal map re-encoded as JPEG (q86 / q90), no other change.
+  - Species variants (Scuttler, Sicklejaw, Brute, GRIDLOCK) are runtime bone-scale morphs + shader recolours.

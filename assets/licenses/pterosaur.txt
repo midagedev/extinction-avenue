@@ -1,0 +1,8 @@
+Asset id: ptero — the "Skyreaver"  (assets/models/pterosaur.glb)
+
+Original work of this project, generated in code by tools/lab/build-ptero.js (mesh, skeleton, skin weights) with
+procedural animation in js/game/creature-clips.js. Released under CC0 1.0 Universal.
+
+Why procedural: no CC0 rigged pterosaur in glTF exists in the sources searched (Quaternius, Poly Pizza, OpenGameArt,
+Kenney, GitHub). The CC0 "Low Spec Pterosaur" (pistachio, OpenGameArt) is a 592-triangle .blend that can't be
+converted without Blender; the CC0 Quaternius dragons/bat read as cartoon dragons, not pterosaurs.

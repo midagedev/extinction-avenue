@@ -120,7 +120,7 @@ body.touch .ammo { position: fixed; right: auto; left: calc(12px + env(safe-area
 body.touch .ammo-head b { font-size: 32px; }
 body.touch .ammo-key { display: none; }
 body.touch .hud-bl { left: calc(12px + env(safe-area-inset-left, 0px)); bottom: calc(100px + var(--safe-b)); }
-body.touch #hint { bottom: calc(152px + var(--safe-b)); max-width: calc(100vw - 24px); white-space: normal; text-align: center; justify-content: center; font-size: 12px; letter-spacing: 0.08em; }
+body.touch #hint { bottom: calc(222px + var(--safe-b)); width: max-content; max-width: calc(100vw - 24px); white-space: normal; text-align: center; justify-content: center; font-size: 12px; letter-spacing: 0.08em; }
 /* Portrait phones: the timer tucks under the hull bar, pause below it */
 @media (max-aspect-ratio: 4/5) {
   body.touch .hud-tl { width: 46vw; }

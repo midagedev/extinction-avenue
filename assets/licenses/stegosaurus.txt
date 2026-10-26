@@ -1,0 +1,15 @@
+Asset id: ankylo — displayed in game as the "Spiketail"  (assets/models/stegosaurus.glb)
+
+Source model : "Stegosaurus" from the Animated Dinosaur Pack by Quaternius
+Source pages : https://poly.pizza/m/eFcNbOlpvl  (mirror with GLB download)
+               https://quaternius.com/packs/animateddinosaurs.html  (pack page)
+Download     : https://static.poly.pizza/6f8f4ac6-f9e8-488d-97a8-220b9b2fd02a.glb
+License      : CC0 1.0 Universal (Public Domain Dedication)
+Evidence     : Poly Pizza page data "Licence":"CC0 1.0", creator "Quaternius"; pack License.txt (see
+               quaternius-animated-dinosaur-pack-License.txt). Retrieved 2026-10-26.
+
+Why a stegosaurus: no CC0 rigged/animated ankylosaur could be found (the only CC0 ankylosaur on OpenGameArt is an
+unrigged 1.8k-triangle FBX/.blend). The armoured slot reuses the closest good CC0 model.
+
+Modifications by this project (CC0 1.0): crease-aware Loop subdivision x2 (2.3k -> 36k triangles, LOD1 9k) with
+interpolated skin weights and recoloured materials (tools/lab/refine-quaternius.js). Skeleton and clips unchanged.

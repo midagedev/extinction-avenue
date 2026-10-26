@@ -132,8 +132,8 @@ async function run(orient) {
   await page.evaluate(() => { const g = window.__game.game; g.settings.touchAim = 'drag'; g._applyTouchSettings(); });
   // HUD fits: touch buttons and HUD panels inside the viewport and not overlapping each other
   const boxes = await page.evaluate(() => {
-    const r = (sel) => { const e = document.querySelector(sel); if (!e || !e.offsetParent && getComputedStyle(e).position !== 'fixed') return null; const b = e.getBoundingClientRect(); return b.width ? { l: b.left, t: b.top, r: b.right, b: b.bottom, sel } : null; };
-    return ['#t-reload', '#t-special', '#t-pause', '#ammo', '.hud-tl', '.hud-tr', '.hud-tc', '.build', '#reticle'].map(r).filter(Boolean);
+    const r = (sel) => { const e = document.querySelector(sel); if (!e || !e.offsetParent && getComputedStyle(e).position !== 'fixed' || getComputedStyle(e).opacity === '0') return null; const b = e.getBoundingClientRect(); return b.width ? { l: b.left, t: b.top, r: b.right, b: b.bottom, sel } : null; };
+    return ['#t-reload', '#t-special', '#t-pause', '#ammo', '.hud-tl', '.hud-tr', '.hud-tc', '.build', '#hint', '#reticle'].map(r).filter(Boolean);
   });
   const inside = boxes.filter((b) => b.sel !== '#reticle').every((b) => b.l >= -1 && b.t >= -1 && b.r <= W + 1 && b.b <= H + 1);
   const hit = (a, b) => a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b;
