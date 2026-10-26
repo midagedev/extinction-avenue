@@ -1,5 +1,5 @@
 // js/game/upgrades.js
-// Every upgrade the level-up screen can offer: 8 weapons (the Roof Cannon is the aimed main gun the run starts with),
+// Every upgrade the level-up screen can offer: 8 weapons (the Tail Gun is the aimed main gun the run starts with),
 // 8 passives, and 8 evolutions (a weapon at max level + its paired passive → an evolved weapon that replaces it).
 // Rules (Vampire Survivors-style): 6 weapon slots, 6 passive slots, 3 choices per level-up (4 with luck), evolutions
 // are offered with priority once unlocked, rerolls are limited.
@@ -9,19 +9,19 @@ const MAX_PASSIVES = 6;
 
 const WEAPONS = {
   cannon: {
-    name: 'Roof Cannon', icon: 'cannon', color: '#2cf6ff', max: 5, evo: 'railgun', evoNeeds: 'hollow',
-    blurb: 'Mouse-aimed turret. Hold to fire.',
-    levels: ['Mouse-aimed heavy turret.', '+30% damage.', 'Rounds pierce +1 dinosaur.', '+30% fire rate.', 'Explosive rounds (small blast).']
+    name: 'Tail Gun', icon: 'cannon', color: '#2cf6ff', max: 5, evo: 'railgun', evoNeeds: 'hollow',
+    blurb: 'Your aimed heavy machine gun. Hold to fire.',
+    levels: ['Aimed heavy machine gun. Headshots deal 1.6x.', '+30% damage.', '45-round belt, rounds pierce +1 dinosaur.', '+30% fire rate.', 'Explosive rounds (small blast on every hit).']
   },
   gatling: {
-    name: 'Hood Gatlings', icon: 'gatling', color: '#ffd23a', max: 5, evo: 'storm_gatling', evoNeeds: 'loader',
-    blurb: 'Twin hood guns auto-target the nearest threat.',
-    levels: ['Twin hood guns lock onto the nearest dinosaur.', '+35% damage.', '+40% fire rate.', '+35% damage, +10 m range.', '+40% fire rate, rounds pierce.']
+    name: 'Sentry Guns', icon: 'gatling', color: '#ffd23a', max: 5, evo: 'storm_gatling', evoNeeds: 'loader',
+    blurb: 'Twin roof sentries auto-target the nearest pursuer.',
+    levels: ['Twin roof sentries lock onto the nearest dinosaur.', '+35% damage.', '+40% fire rate.', '+35% damage, +10 m range.', '+40% fire rate, rounds pierce.']
   },
   saws: {
     name: 'Hubcap Saws', icon: 'saws', color: '#ff9a2c', max: 5, evo: 'buzzsaw', evoNeeds: 'ram',
-    blurb: 'Spinning blades orbit the cab.',
-    levels: ['2 saw blades orbit the cab.', '+1 blade.', '+40% damage.', '+1 blade, wider orbit.', '+1 blade, faster spin.']
+    blurb: 'Spinning blades whirl behind the cab.',
+    levels: ['2 saw blades whirl through the road behind you.', '+1 blade.', '+40% damage.', '+1 blade, wider orbit.', '+1 blade, faster spin.']
   },
   missiles: {
     name: 'Swarm Missiles', icon: 'missiles', color: '#ff5a3c', max: 5, evo: 'cluster', evoNeeds: 'boom',
@@ -44,29 +44,29 @@ const WEAPONS = {
     levels: ['Drops a proximity mine behind the cab.', '+40% damage.', 'Drops mines faster.', '+30% blast radius.', 'Drops 2 mines at a time.']
   },
   shotgun: {
-    name: 'Bumper Buckshot', icon: 'shotgun', color: '#ffe066', max: 5, evo: 'dragon', evoNeeds: 'chassis',
-    blurb: 'Point-blank cone blast that knocks dinosaurs back.',
-    levels: ['Forward buckshot blast with heavy knockback.', '+3 pellets.', '+35% damage.', 'Fires faster.', '+4 pellets, +35% damage.']
+    name: 'Tailgate Buckshot', icon: 'shotgun', color: '#ffe066', max: 5, evo: 'dragon', evoNeeds: 'chassis',
+    blurb: 'Point-blank blast at anything on your bumper.',
+    levels: ['Rear buckshot blast at close pursuers, heavy knockback.', '+3 pellets.', '+35% damage.', 'Fires faster.', '+4 pellets, +35% damage.']
   }
 };
 
 const EVOLUTIONS = {
-  railgun: { from: 'cannon', name: 'Rail Lance', icon: 'railgun', color: '#7dfcff', desc: 'Hypersonic slugs pierce every dinosaur in a line. Weak-point crits deal 4x.' },
+  railgun: { from: 'cannon', name: 'Rail Lance', icon: 'railgun', color: '#7dfcff', desc: 'Your gun becomes a rail lance: 70-damage slugs pierce every dinosaur in a line.' },
   storm_gatling: { from: 'gatling', name: 'Storm Gatlings', icon: 'storm_gatling', color: '#ffe14d', desc: 'A wall of lead in every direction. Rounds pierce 3.' },
   buzzsaw: { from: 'saws', name: 'Buzzsaw Halo', icon: 'buzzsaw', color: '#ffb347', desc: '8 molten blades on a wide orbit that hurl dinosaurs aside.' },
   cluster: { from: 'missiles', name: 'Cluster Barrage', icon: 'cluster', color: '#ff7a5c', desc: '8 missiles per salvo, each splitting into 4 bomblets.' },
   thunder: { from: 'tesla', name: 'Thunderhead', icon: 'thunder', color: '#9fe2ff', desc: 'Chains forever-ish and calls lightning strikes from the sky.' },
   inferno: { from: 'flamer', name: 'Inferno Wake', icon: 'inferno', color: '#ff5a1a', desc: 'Leaves a burning trail that roasts the whole stampede.' },
   nova: { from: 'mines', name: 'Nova Mines', icon: 'nova', color: '#7c5cff', desc: 'Plasma novas that vaporize everything in a huge radius.' },
-  dragon: { from: 'shotgun', name: "Dragon's Breath", icon: 'dragon', color: '#ff8a3c', desc: 'Incendiary buckshot: 16 burning pellets that explode on hit.' }
+  dragon: { from: 'shotgun', name: "Dragon's Breath", icon: 'dragon', color: '#ff8a3c', desc: 'Incendiary buckshot: 16 burning pellets that explode on hit. +1 hull/s repair.' }
 };
 
 const PASSIVES = {
-  armor: { name: 'Armor Plating', icon: 'armor', color: '#a6b4c8', max: 5, desc: (l) => `Reduce damage taken by ${l * 1.5} per hit.` },
-  chassis: { name: 'Reinforced Chassis', icon: 'chassis', color: '#5ee08f', max: 5, desc: () => '+30 max hull, +0.3 hull/s self-repair.' },
-  turbo: { name: 'Turbo Kit', icon: 'turbo', color: '#ffb02e', max: 5, desc: () => '+7% cruise speed, +25% nitro recharge.' },
-  magnet: { name: 'Gene Magnet', icon: 'magnet', color: '#2cf6ff', max: 5, desc: () => '+35% gene core pickup radius.' },
-  ram: { name: 'Ram Plow', icon: 'ram', color: '#ffd23a', max: 5, desc: () => '+35% ram damage, take less damage from rams.' },
+  armor: { name: 'Armor Plating', icon: 'armor', color: '#a6b4c8', max: 5, desc: (l) => `Reduce damage taken by ${l} per hit.` },
+  chassis: { name: 'Reinforced Chassis', icon: 'chassis', color: '#5ee08f', max: 5, desc: () => '+20 max hull, +0.35 hull/s self-repair.' },
+  turbo: { name: 'Extended Mag', icon: 'turbo', color: '#ffb02e', max: 5, desc: () => '+20% Tail Gun magazine, 10% faster reload.' },
+  magnet: { name: 'Gene Magnet', icon: 'magnet', color: '#2cf6ff', max: 5, desc: () => '+12% gene energy (XP) from every core.' },
+  ram: { name: 'Stopping Power', icon: 'ram', color: '#ffd23a', max: 5, desc: () => '+25% stagger: your shots knock attackers out of their lunge sooner.' },
   loader: { name: 'Autoloader', icon: 'loader', color: '#ff7ad9', max: 5, desc: () => 'Weapons fire and recharge 8% faster.' },
   hollow: { name: 'Hollow Points', icon: 'hollow', color: '#ff5a5a', max: 5, desc: () => '+12% damage, +3% crit chance.' },
   boom: { name: 'Blast Radius', icon: 'boom', color: '#ff9a2c', max: 5, desc: () => '+12% area for blasts, saws and flames.' }

@@ -1,25 +1,30 @@
 import * as THREE from 'three/webgpu';
 import { PropBatch } from './batches.js';
 import { setJoint } from './poses.js';
+import { raySphere } from './enemies.js';
 
 // js/game/boss.js
 // GRIDLOCK — Cretagen Apex Specimen T-01, a Tyrannosaurus rex in a cracked containment collar.
 //
-// The boss lives on the route like the cab: its position is (arc length bs, lateral offset bd), so it can chase the
-// car down the avenue through every corner. Three phases (100-66-33 %):
-//   1  CHASE      — tails the cab; lunge bites down a telegraphed lane, stomp shockwaves (outrun them with nitro),
-//                   hurls wrecked cars at where you'll be.
-//   2  ENRAGED    — adds overtake + head-on charges (camera swings back to the chase view), roars up raptor packs.
-//   3  DESPERATE  — faster, double lunges, the collar overloads (weak point ×3.5), more wrecks.
-// Weak points: the glowing containment collar (×2.5, crits) and the thighs (×1.25). Phase changes stagger it.
-// Death: hit-stop, slow motion, orbit camera; it topples, turns to stone, and shatters into a gene-core fountain.
-// Also: cameo() — an invulnerable teaser walk-across in the first minute.
+// A first-person chase. The boss lives on the route like the cab, at (arc length bs, lateral offset bd), and runs down
+// the avenue behind it — straight into the rear gunner's view. Three phases (100-66-33 %):
+//   1  CHASE      — lunges at the tailgate (telegraphed: crouch, jaws, a red danger ring around its collar) and hurls
+//                   wrecked cars in high arcs. Shoot the wrecks out of the air.
+//   2  ENRAGED    — adds FLANK runs: it pulls up alongside the cab and the gunner's view swings to face it before it
+//                   head-butts the door; it roars up raptor packs.
+//   3  DESPERATE  — adds the HEAD-ON charge: it overtakes, turns around ahead of the cab and charges; the view swings
+//                   forward over the hood. Faster telegraphs, the collar overloads (×3.5).
+// Every attack can be STOPPED: land enough damage during the telegraph (the collar counts ×2.5/×3.5) and it staggers,
+// the attack is cancelled and it takes +50% damage for a moment. Weak points: the collar (×2.5), the head (×1.3), the
+// thighs (×1.2). Death: hit-stop, slow motion, orbit camera; it topples, turns to stone and shatters.
+// Also: cameo() — an invulnerable teaser where it crosses the street behind the cab in the first minute.
 
 const SCALE = 1.55;
 const _s = {};
 const _v = new THREE.Vector3();
 const COLLAR_LOCAL = new THREE.Vector3(0, 0.27, 0.42); // neck-local collar centre (model units, see dino-models.js)
 const THIGH_LOCAL = new THREE.Vector3(0, -0.6, 0.2);
+const WRECK_HP = 70;
 
 class TRexBoss {
   constructor(game, assets) {
@@ -31,6 +36,8 @@ class TRexBoss {
     this.collar = new THREE.Vector3();
     this.thighs = [new THREE.Vector3(), new THREE.Vector3()];
     this.headPos = new THREE.Vector3();
+    this.bodyPos = new THREE.Vector3();
+    this.chestPos = new THREE.Vector3();
     this.active = false;
     this.cameoPending = false;
   }
@@ -47,25 +54,27 @@ class TRexBoss {
   }
 
   // ------------------------------------------------------------------------------------------------------------------
-  /** Finds a cross street ahead of the car: arc length where both sides are open ground */
+  /** Finds a cross street (searching from `from` toward `to`): arc length where both sides are open ground */
   _findIntersection(from, to) {
     const g = this.game;
-    for (let s = from; s < to; s += 3) {
+    const step = to > from ? 3 : -3;
+    for (let s = from; step > 0 ? s < to : s > to; s += step) {
       const r = g.route.sample(s, _s);
       let ok = true;
       for (const lat of [-34, -24, -16, 16, 24, 34]) {
         if (g.walk.isBlocked(r.x + r.rx * lat, r.z + r.rz * lat)) { ok = false; break; }
       }
-      if (ok) return s + 4;
+      if (ok) return s;
     }
     return null;
   }
 
+  /** Teaser: it crosses the street behind the cab, roars at you, and walks off */
   cameo() {
     const g = this.game;
     if (this.e) return;
     const p = g.player;
-    const s = this._findIntersection(p.s + 75, p.s + 150);
+    const s = this._findIntersection(p.s - 40, p.s - 110);
     if (s === null) { this.cameoPending = 4; return; }
     const r = g.route.sample(s, _s);
     const side = Math.random() < 0.5 ? 1 : -1;
@@ -86,31 +95,30 @@ class TRexBoss {
     const old = this.e ? g.enemies.list.indexOf(this.e) : -1;
     if (old >= 0) g.enemies._remove(old);
     this.e = null;
-    // Clear the street so the reveal reads: the small fry scatter (despawn), cores fly to the cab
+    // Clear the street so the reveal reads; cores fly to the cab
     for (let i = g.enemies.list.length - 1; i >= 0; i--) {
-      const o = g.enemies.list[i];
-      if (o.boss || o.miniboss) continue;
-      if (Math.hypot(o.x - p.x, o.z - p.z) < 90) g.enemies._remove(i);
+      if (!g.enemies.list[i].boss) g.enemies._remove(i);
     }
     g.pickups.collectAll();
-    const bs = p.s - 34;
+    const bs = p.s - 42;
     const r = g.route.sample(bs, _s);
     const e = g.enemies.spawn('trex', r.x, r.z, { boss: true, scale: SCALE, ctrl: this, heading: r.heading, hpMult: 1 });
     if (!e) return;
     e.scale = SCALE;
-    e.maxHp = e.hp = 30000 * (1 + Math.max(0, g.director.time - 450) / 600);
+    e.maxHp = e.hp = 15000 * (1 + Math.max(0, g.director.time - g.director.bossTime) / 900);
     e.mode = 'intro';
     e.bs = bs;
     e.bd = 0;
     e.phase = 1;
     e.v = 0;
     e.atkCd = 2.5;
-    e.legDmg = 0;
     e.combo = 0;
+    e.teleDmg = 0;
+    e.vuln = 0;
     e.name = 'GRIDLOCK';
+    e.flankSide = 1;
     this.e = e;
     this.active = true;
-    // Bursting out: dust + shake
     for (let k = 0; k < 6; k++) g.vfx.dust(r.x + (Math.random() - 0.5) * 10, r.z + (Math.random() - 0.5) * 10, 3, 4);
     g.cam.addTrauma(0.8);
     g.audio.play('shatter_big', { volume: 1, pitch: 0.5 });
@@ -119,21 +127,75 @@ class TRexBoss {
     g.bossIntro(e);
   }
 
-  /** Called by the weapons on every hit: damage multiplier for weak points (1 = none) */
+  /** Damage filter for every hit on the boss: the stagger window adds +50 %, telegraph damage builds toward a stagger */
+  damageTaken(e, a) {
+    if (e !== this.e) return a;
+    if (e.vuln > 0) a *= 1.5;
+    if (this._telegraphing(e)) {
+      e.teleDmg += a;
+      if (e.teleDmg >= this._staggerNeed(e)) this._stagger(e);
+    }
+    return a;
+  }
+
+  _telegraphing(e) {
+    return e.mode === 'lunge_tele' || e.mode === 'flank_tele' || e.mode === 'charge_tele' || e.mode === 'charge';
+  }
+
+  _staggerNeed(e) {
+    return e.maxHp * (e.phase === 3 ? 0.03 : 0.026);
+  }
+
+  /** Ray test against the weak points and the body. Returns { t, weak } or null */
+  raycast(e, ray, maxT) {
+    if (e.mode === 'cameo' || e.state === 'dying') return null;
+    const P = e.phase || 1;
+    let bt = maxT, weak = 0;
+    const test = (c, r, w, bias = 0) => {
+      const t = raySphere(ray, c.x, c.y, c.z, r);
+      if (t - bias < bt) { bt = Math.max(0.01, t - bias); weak = w; }
+    };
+    test(this.bodyPos, 2.3 * SCALE * 0.75, 1);
+    test(this.chestPos, 1.7 * SCALE * 0.75, 1);
+    for (const th of this.thighs) test(th, 1.05 * SCALE, 1.2);
+    test(this.headPos, 1.1 * SCALE * 0.75, 1.3, 0.4);
+    test(this.collar, 1.2 * SCALE * 0.75, P >= 3 ? 3.5 : 2.5, 0.8);
+    if (!weak) return null;
+    if (weak >= 2.5) this.collarHits = (this.collarHits || 0) + 1;
+    return { t: bt, weak };
+  }
+
+  /** Point test for projectiles from the support weapons */
   weakHit(e, x, y, z) {
     if (e !== this.e || e.mode === 'cameo') return 1;
-    const r = 1.9 * SCALE * 0.75;
-    if ((x - this.collar.x) ** 2 + (y - this.collar.y) ** 2 + (z - this.collar.z) ** 2 < r * r) {
-      this.collarHits = (this.collarHits || 0) + 1;
-      return e.phase >= 3 ? 3.5 : 2.5;
-    }
-    for (const t of this.thighs) {
-      if ((x - t.x) ** 2 + (y - t.y) ** 2 + (z - t.z) ** 2 < (1.4 * SCALE) ** 2) {
-        e.legDmg += 1;
-        return 1.25;
-      }
-    }
+    const r = 1.2 * SCALE * 0.75;
+    if ((x - this.collar.x) ** 2 + (y - this.collar.y) ** 2 + (z - this.collar.z) ** 2 < r * r) return e.phase >= 3 ? 3.5 : 2.5;
     return 1;
+  }
+
+  raycastWrecks(ray, maxT) {
+    let best = null, bt = maxT;
+    for (const w of this.wrecks) {
+      if (w.dead) continue;
+      const t = raySphere(ray, w.x, w.y, w.z, 2.4);
+      if (t < bt) { bt = t; best = w; }
+    }
+    return best ? { w: best, t: bt } : null;
+  }
+
+  shootWreck(w, dmg) {
+    const g = this.game;
+    w.hp -= dmg;
+    g.vfx.hitSpark(w.x, w.y, w.z, 7, 3.5, 1);
+    if (w.hp <= 0 && !w.dead) {
+      w.dead = true;
+      g.vfx.explosion(w.x, w.y, w.z, 2.2, 0);
+      g.audio.play('explosion', { x: w.x, z: w.z, volume: 1, big: true });
+      g.cam.addTrauma(0.25);
+      g.addScore(1500 * g.comboMult());
+      g.vfx.number(w.x, w.y + 1.5, w.z, 'SHOT DOWN!', 4);
+      g.hud.callout('SHOT DOWN!', 'good');
+    }
   }
 
   // ------------------------------------------------------------------------------------------------------------------
@@ -149,204 +211,221 @@ class TRexBoss {
     const p = g.player;
     const route = g.route;
     const gap = route.delta(p.s, e.bs);
+    e.gap = gap;
     const hp = e.hp / e.maxHp;
+    e.vuln = Math.max(0, e.vuln - dt);
     // Phase changes
     if (e.phase === 1 && hp < 0.66) this._phase(e, 2);
     else if (e.phase === 2 && hp < 0.33) this._phase(e, 3);
     const P = e.phase;
     const fast = P === 3 ? 1.25 : P === 2 ? 1.1 : 1;
-    let desiredGap = P === 1 ? -17 : -14;
-    let lateralTarget = p.d * 0.7;
-    let reverseHeading = false;
+    let desiredGap = P === 1 ? -21 : P === 2 ? -18 : -16;
+    let lateralTarget = Math.sin(e.animT * 0.35) * 2.5;
     let speedOverride = null;
+    let turn = 0;
     e.atkCd -= dt;
+    e.teleK = 0;
+    const tele = (T) => { e.teleK = Math.min(1, e.stateT / T); };
 
     switch (e.mode) {
       case 'intro':
-        // Stand and roar behind the car, then give chase
-        // (runs in slow motion under the reveal cinematic: ~1 s of game time ≈ 3.5 s on screen)
         speedOverride = e.stateT < 1.0 ? 0 : null;
         e.roar = e.stateT < 1.15 ? Math.min(1, e.stateT * 4) : 0;
-        if (e.stateT > 1.4) { this._set(e, 'chase'); e.atkCd = 2.2; }
+        if (e.stateT > 1.4) { this._set(e, 'chase'); e.atkCd = 2.5; }
         break;
       case 'chase':
-        if (e.atkCd <= 0 && gap < -8 && gap > -40) this._chooseAttack(e, gap);
+        if (e.atkCd <= 0 && gap < -12 && gap > -40 && g.enemies.attackGrace <= 0) this._chooseAttack(e);
         break;
       case 'lunge_tele': {
-        // Lane locked at the car's lateral position; head low, jaws opening
-        const T = (P === 3 ? 0.6 : 0.85);
-        desiredGap = -13;
-        lateralTarget = e.laneD;
-        this._lane(e, e.laneD, e.stateT / T, -1);
+        const T = P === 3 ? 1.15 : P === 2 ? 1.35 : 1.6;
+        desiredGap = -12;
+        lateralTarget = p.d;
         e.crouch = Math.min(1, e.stateT / T);
         e.jaw = 0.5;
-        if (e.stateT > T) { this._set(e, 'lunge'); g.audio.play('trex_roar', { x: e.x, z: e.z, volume: 0.7, pitch: 1.3, dur: 0.8 }); }
+        tele(T);
+        if (e.stateT > T) { this._set(e, 'lunge'); g.audio.play('trex_roar', { x: e.x, z: e.z, volume: 0.8, pitch: 1.3, dur: 0.8 }); }
         break;
       }
       case 'lunge': {
-        // Snap forward: the head reaches past the car's lane position
-        desiredGap = 1;
-        lateralTarget = e.laneD;
-        speedOverride = p.speed + 38;
+        desiredGap = -5;
+        lateralTarget = p.d;
+        speedOverride = p.speed + 26;
         e.crouch = 0;
         e.lungeAmt = Math.min(1, e.stateT / 0.25);
-        e.jaw = e.stateT < 0.2 ? 1 : 0;
-        if (!e.bit && e.stateT > 0.22) {
+        e.jaw = e.stateT < 0.25 ? 1 : 0;
+        if (!e.bit && (gap > -7.5 || e.stateT > 0.45)) {
           e.bit = true;
           g.audio.play('bite', { x: e.x, z: e.z, volume: 1, pitch: 0.55 });
-          g.cam.addTrauma(0.25);
-          if (Math.abs(p.d - e.laneD) < 2.6 && gap > -12) g.hurtPlayer(24 * g.enemies.dmgMult, e.x, e.z, 'bite');
+          g.cam.addTrauma(0.5);
+          g.hurtPlayer(16 * g.enemies.dmgMult, e.x, e.z, 'bite', e);
         }
-        if (e.stateT > 0.55) {
+        if (e.stateT > 0.7) {
           e.lungeAmt = 0;
-          if (P === 3 && e.combo < 1) { e.combo++; e.laneD = p.d; this._set(e, 'lunge_tele'); e.stateT = 0.3; }
-          else { e.combo = 0; this._set(e, 'chase'); e.atkCd = 1.6 / fast; }
-        }
-        break;
-      }
-      case 'stomp_tele': {
-        const T = 1.15;
-        desiredGap = -16;
-        e.rear = Math.min(1, e.stateT / T);
-        const R = 26;
-        g.vfx.telegraphCircle(e.x, e.z, R, e.stateT / T, 6, 0.5, 0.15);
-        if (e.stateT > 0.3) g.hud.prompt('BOOST!', 'nitro');
-        if (e.stateT > T) {
-          e.rear = 0;
-          g.audio.play('stomp', { volume: 1.3, pitch: 0.5 });
-          g.audio.play('explosion', { x: e.x, z: e.z, volume: 0.8, pitch: 0.5, big: true });
-          g.vfx.shockwave(e.x, e.z, R, 6, 3, 1, 0.7);
-          g.vfx.shockwave(e.x, e.z, R * 0.6, 4, 2, 0.6, 0.5);
-          for (let k = 0; k < 10; k++) g.vfx.dust(e.x + (Math.random() - 0.5) * R, e.z + (Math.random() - 0.5) * R, 2.5, 2);
-          g.cam.addTrauma(0.7);
-          if (Math.hypot(p.x - e.x, p.z - e.z) < R + 1) g.hurtPlayer(20 * g.enemies.dmgMult, e.x, e.z, 'stomp');
-          // Shockwave tramples small dinosaurs too
-          g.weapons.blast(e.x, e.z, R, 80, 0, 'boss', false);
-          this._set(e, 'chase');
-          e.atkCd = 1.8 / fast;
+          if (P === 3 && e.combo < 1) { e.combo++; this._set(e, 'lunge_tele'); e.stateT = 0.45; }
+          else { e.combo = 0; this._set(e, 'chase'); e.atkCd = 2.2 / fast; }
         }
         break;
       }
       case 'throw': {
-        desiredGap = -24;
-        e.holding = e.stateT < 0.7;
-        e.throwAmt = Math.min(1, e.stateT / 0.7);
-        if (!e.thrown && e.stateT > 0.7) {
+        desiredGap = -26;
+        e.holding = e.stateT < 0.9;
+        e.throwAmt = Math.min(1, e.stateT / 0.9);
+        if (!e.thrown && e.stateT > 0.9) {
           e.thrown = true;
           const n = P === 3 ? 3 : P === 2 ? 2 : 1;
           for (let k = 0; k < n; k++) this._throwWreck(e, k);
           g.audio.play('tail_swipe', { x: e.x, z: e.z, volume: 1, pitch: 0.6 });
+          g.hud.callout(n > 1 ? 'INCOMING CARS!' : 'INCOMING CAR!', 'danger');
         }
-        if (e.stateT > 1.2) { this._set(e, 'chase'); e.atkCd = 1.4 / fast; e.throwAmt = 0; }
+        if (e.stateT > 1.4) { this._set(e, 'chase'); e.atkCd = 2.0 / fast; e.throwAmt = 0; }
         break;
       }
       case 'roar':
-        speedOverride = p.speed * 0.8;
+        speedOverride = p.speed * 0.85;
         e.roar = Math.min(1, e.stateT * 3);
         if (!e.summoned && e.stateT > 0.4) {
           e.summoned = true;
           g.audio.play('trex_roar', { volume: 1.1, pitch: 0.95, dur: 2.2 });
           g.vfx.shockwave(e.x, e.z, 18, 3, 1.2, 0.4, 0.8);
           g.cam.addTrauma(0.45);
-          const n = P === 3 ? 9 : 6;
-          for (let k = 0; k < n; k++) g.director.spawnGroup(k % 3 === 0 && P === 3 ? 'brute' : 'raptor', 1, k % 2 ? 'side' : 'ahead');
+          const n = P === 3 ? 5 : 3;
+          for (let k = 0; k < n; k++) g.director.spawnChaser(k === 0 && P === 3 ? 'brute' : 'raptor', k % 2 ? 'left' : 'behind');
         }
-        if (e.stateT > 2.0) { e.roar = 0; this._set(e, 'chase'); e.atkCd = 1.2; }
+        if (e.stateT > 2.0) { e.roar = 0; this._set(e, 'chase'); e.atkCd = 1.5; }
+        break;
+      case 'flank':
+        // Pull up alongside the cab; the gunner turns to face it
+        desiredGap = 1.5;
+        lateralTarget = e.flankSide * 7.5;
+        p.laneTarget = -e.flankSide * 2.5;
+        speedOverride = gap < -2 ? p.speed + 14 : p.speed;
+        g.cam.swing(g.cam.yawToward(e.x, e.z, p), 0.12, 3.5, 0);
+        if (gap > -1 && e.stateT > 0.6) { this._set(e, 'flank_tele'); g.hud.callout('LOOK OUT — SIDE!', 'danger'); }
+        else if (e.stateT > 4) { this._set(e, 'chase'); this._clearView(); }
+        break;
+      case 'flank_tele': {
+        const T = P === 3 ? 1.1 : 1.35;
+        desiredGap = 1.5;
+        lateralTarget = e.flankSide * 7.5;
+        speedOverride = p.speed + (desiredGap - gap) * 2;
+        e.crouch = Math.min(1, e.stateT / T) * 0.7;
+        e.jaw = 0.6;
+        tele(T);
+        g.cam.swing(g.cam.yawToward(e.x, e.z, p), 0.12, 4, 0);
+        if (e.stateT > T) this._set(e, 'flank_hit');
+        break;
+      }
+      case 'flank_hit':
+        desiredGap = 1.5;
+        lateralTarget = e.flankSide * 3.2;
+        speedOverride = p.speed;
+        e.lungeAmt = Math.min(1, e.stateT / 0.2);
+        if (!e.bit && e.stateT > 0.2) {
+          e.bit = true;
+          g.hurtPlayer(14 * g.enemies.dmgMult, e.x, e.z, 'charge', e);
+          p.vd += -e.flankSide * 6;
+          g.cam.addTrauma(0.6);
+          g.audio.play('stomp', { volume: 1, pitch: 0.6 });
+        }
+        if (e.stateT > 0.6) { e.lungeAmt = 0; this._set(e, 'fallback'); this._clearView(); }
+        break;
+      case 'fallback':
+        desiredGap = -20;
+        speedOverride = p.speed - 9;
+        if (gap < -12) { this._set(e, 'chase'); e.atkCd = 1.8 / fast; }
         break;
       case 'overtake':
-        // Sprint past the car on one side, get well ahead
-        desiredGap = 50;
-        lateralTarget = e.passSide * 6;
-        speedOverride = p.speed + 22;
-        if (gap > 42) { this._set(e, 'turn'); }
+        // Sprint past the cab (the gunner's view tracks it over the shoulder)
+        desiredGap = 55;
+        lateralTarget = e.flankSide * 7;
+        p.laneTarget = -e.flankSide * 2.5;
+        speedOverride = p.speed + 20;
+        g.cam.swing(g.cam.yawToward(e.x, e.z, p), 0.05, 4, 0);
+        if (gap > 45) this._set(e, 'turn');
         break;
       case 'turn':
         speedOverride = p.speed;
         desiredGap = 48;
-        e.turnAmt = Math.min(1, e.stateT / 0.6);
-        reverseHeading = e.turnAmt > 0.5;
-        if (e.stateT > 0.6) { e.laneD = p.d; this._set(e, 'charge_tele'); g.audio.play('trike_bellow', { x: e.x, z: e.z, volume: 1, pitch: 0.55 }); }
+        e.turnAmt = Math.min(1, e.stateT / 0.7);
+        g.cam.swing(Math.PI, 0.02, 3, 0);
+        if (e.stateT > 0.7) { e.laneD = p.d; this._set(e, 'charge_tele'); g.audio.play('trike_bellow', { x: e.x, z: e.z, volume: 1, pitch: 0.55 }); g.hud.callout('HEAD-ON!', 'danger'); }
         break;
       case 'charge_tele': {
-        reverseHeading = true;
+        turn = 1;
         speedOverride = p.speed;
-        lateralTarget = e.laneD;
-        const T = P === 3 ? 0.9 : 1.15;
-        this._lane(e, e.laneD, e.stateT / T, 1);
+        lateralTarget = p.d;
+        const T = 1.3;
         e.crouch = Math.min(1, e.stateT / T) * 0.6;
-        if (e.stateT > 0.3) g.hud.prompt('DODGE!', 'dodge');
-        if (e.stateT > T) { this._set(e, 'charge'); e.crouch = 0; }
+        tele(T);
+        g.cam.swing(Math.PI, 0.02, 3, 0);
+        this._lane(e, p.d, e.stateT / T);
+        if (e.stateT > T) { this._set(e, 'charge'); e.crouch = 0; e.laneD = p.d; }
         break;
       }
       case 'charge':
-        reverseHeading = true;
-        lateralTarget = e.laneD;
-        speedOverride = p.speed - 30; // closes at 30 m/s relative
+        turn = 1;
+        lateralTarget = e.laneD ?? p.d;
+        speedOverride = p.speed - 26;
         e.jaw = 0.8;
-        if (!e.bit && Math.abs(gap) < 4) {
+        tele(1);
+        g.cam.swing(Math.PI, 0.02, 3, 0);
+        if (!e.bit && gap < 4.5) {
           e.bit = true;
-          if (Math.abs(p.d - e.bd) < 3.4) {
-            g.hurtPlayer(30 * g.enemies.dmgMult, e.x, e.z, 'charge');
-            p.vd += (p.d > e.bd ? 1 : -1) * 14;
-            p.speed *= 0.5;
-          } else {
-            g.hud.prompt('CLOSE CALL!', 'good');
-            g.addScore(1500, 'Near miss');
-          }
-          g.cam.addTrauma(0.6);
-          g.audio.play('stomp', { volume: 1, pitch: 0.6 });
+          g.hurtPlayer(20 * g.enemies.dmgMult, e.x, e.z, 'charge', e);
+          g.cam.addTrauma(0.9);
+          g.audio.play('stomp', { volume: 1.2, pitch: 0.5 });
+          p.speed *= 0.4;
         }
-        if (gap < -30) { this._set(e, 'turnback'); }
+        if (gap < -6) { this._set(e, 'turnback'); e.turnAmt = 1; this._clearView(); }
         break;
       case 'turnback':
-        speedOverride = p.speed + 4;
-        e.turnAmt = 1 - Math.min(1, e.stateT / 0.6);
-        reverseHeading = e.turnAmt > 0.5;
-        if (e.stateT > 0.6) { this._set(e, 'chase'); e.atkCd = 1.2; e.turnAmt = 0; }
+        speedOverride = p.speed + 2;
+        e.turnAmt = 1 - Math.min(1, e.stateT / 0.7);
+        if (e.stateT > 0.7) { this._set(e, 'chase'); e.atkCd = 1.8; e.turnAmt = 0; }
         break;
       case 'stagger':
-        speedOverride = p.speed * 0.4;
-        e.staggerAmt = Math.sin(Math.min(1, e.stateT / 1.6) * Math.PI);
-        if (e.stateT > 1.6) {
+        speedOverride = e.staggerAhead ? p.speed - 14 : p.speed - 7;
+        e.staggerAmt = Math.sin(Math.min(1, e.stateT / 1.8) * Math.PI);
+        if (e.staggerAhead) turn = 1;
+        if (e.stateT > 1.8 || (e.staggerAhead && gap < -6)) {
           e.staggerAmt = 0;
-          this._set(e, 'roar');
+          this._clearView();
+          if (e.staggerAhead) { e.staggerAhead = false; this._set(e, 'turnback'); e.turnAmt = 1; break; }
+          const roar = e.phaseRoar;
+          e.phaseRoar = false;
+          this._set(e, roar ? 'roar' : 'chase');
           e.summoned = false;
+          e.atkCd = 1.6;
         }
         break;
     }
+    if (turn) e.turnAmt = 1;
+    else if (e.mode !== 'turn' && e.mode !== 'turnback') e.turnAmt = 0;
 
     // Movement along the route: close the gap to the desired one
     const err = desiredGap - gap;
-    const target = speedOverride ?? p.speed + THREE.MathUtils.clamp(err * 1.6, -10, 14) * fast;
+    const target = speedOverride ?? p.speed + THREE.MathUtils.clamp(err * 1.4, -9, 12) * fast;
     e.v += (target - e.v) * Math.min(1, dt * (e.mode === 'lunge' || e.mode === 'charge' ? 10 : 3));
     e.bs = route.wrap(e.bs + e.v * dt);
-    e.bd += (lateralTarget - e.bd) * Math.min(1, dt * (e.mode === 'charge' || e.mode === 'lunge' ? 4 : 1.6));
+    e.bd += (lateralTarget - e.bd) * Math.min(1, dt * (e.mode === 'charge' || e.mode === 'lunge' || e.mode === 'flank_hit' ? 4 : 1.6));
     const r = route.sample(e.bs, _s);
-    e.bd = THREE.MathUtils.clamp(e.bd, -r.halfWidth + 2, r.halfWidth - 2);
-    const turn = e.turnAmt || 0;
-    e.heading = r.heading + Math.PI * turn;
+    e.bd = THREE.MathUtils.clamp(e.bd, -r.halfWidth - 1, r.halfWidth + 1);
+    e.heading = r.heading + Math.PI * (e.turnAmt || 0);
     e.rx = r.x + r.rx * e.bd;
     e.rz = r.z + r.rz * e.bd;
-    // Collision center sits forward of the hips (between body and neck)
     const fx = Math.sin(e.heading), fz = Math.cos(e.heading);
     e.x = e.rx + fx * 2.2 * SCALE;
     e.z = e.rz + fz * 2.2 * SCALE;
     e.radius = 3.6 * SCALE;
     e.moveSpeed = Math.abs(e.v);
     e.dirx = fx; e.dirz = fz;
-    // Footfalls
+    // Hit spheres for numbers / the bot
+    e.hx = this.collar.x; e.hy = this.collar.y; e.hz = this.collar.z;
+    e.bx = this.bodyPos.x; e.by = this.bodyPos.y; e.bz = this.bodyPos.z;
     this._footsteps(e, dt);
-    // Body contact (outside scripted attacks): a shove + damage
-    if (e.mode === 'chase' && gap > -9 && Math.abs(p.d - e.bd) < 3 && (e.attackCd -= dt) <= 0) {
-      e.attackCd = 1.2;
-      e.jaw = 1;
-      g.hurtPlayer(14 * g.enemies.dmgMult, e.x, e.z, 'bite');
-      g.audio.play('bite', { x: e.x, z: e.z, pitch: 0.6 });
-    }
-    // Threat arrow when off screen
+    // Danger ring around its collar while an attack winds up (with a stagger meter)
+    if (e.teleK > 0) g.enemies.dangers.push({ x: this.collar.x, y: this.collar.y, z: this.collar.z, k: e.teleK, r: 2.4, e, boss: true, meter: Math.min(1, e.teleDmg / this._staggerNeed(e)) });
     g.vfx.threats.push({ x: e.x, z: e.z, color: '#ff3b2f' });
-    // Camera: reverse (getaway) view while it's behind, chase view when it's ahead
-    if (g.state === 'playing') g.cam.setMode(gap < 4 ? 'reverse' : 'chase');
     return null;
   }
 
@@ -355,32 +434,55 @@ class TRexBoss {
     e.stateT = 0;
     e.bit = false;
     e.thrown = false;
+    e.teleDmg = 0;
   }
 
-  _chooseAttack(e, gap) {
+  _clearView() {
+    const g = this.game;
+    g.cam.swing(0, 0, 2.5, 0);
+    g.player.laneTarget = 0;
+  }
+
+  _stagger(e) {
+    const g = this.game;
+    e.staggerAhead = e.mode === 'charge' || e.mode === 'charge_tele';
+    this._set(e, 'stagger');
+    e.crouch = 0;
+    e.lungeAmt = 0;
+    e.vuln = 2.2;
+    g.hitStop(0.1);
+    g.cam.addTrauma(0.45);
+    g.vfx.sparks(this.collar.x, this.collar.y, this.collar.z, 30, 14, 1.5, 5, 7);
+    g.audio.play('trex_roar', { volume: 1, pitch: 1.35, dur: 1.0 });
+    g.onStagger(e);
+    g.player.laneTarget = 0;
+  }
+
+  _chooseAttack(e) {
     const g = this.game;
     const P = e.phase;
     const r = Math.random();
-    const p = g.player;
-    if (P >= 2 && r < 0.22) {
-      e.passSide = p.d > 0 ? -1 : 1;
-      this._set(e, 'overtake');
-      g.audio.play('trex_roar', { x: e.x, z: e.z, volume: 0.8, pitch: 1.15, dur: 1.2 });
-    } else if (r < (P >= 2 ? 0.55 : 0.5)) {
-      e.laneD = p.d;
-      this._set(e, 'lunge_tele');
-    } else if (r < (P >= 2 ? 0.75 : 0.75)) {
-      this._set(e, 'stomp_tele');
-    } else {
-      this._set(e, 'throw');
-    }
-    void gap;
+    e.flankSide = Math.random() < 0.5 ? 1 : -1;
+    const table = P === 1 ? [['lunge', 0.6], ['throw', 1]]
+      : P === 2 ? [['lunge', 0.35], ['throw', 0.6], ['flank', 0.85], ['roar', 1]]
+        : [['lunge', 0.3], ['throw', 0.48], ['flank', 0.66], ['charge', 0.9], ['roar', 1]];
+    let m = table.find(([, w]) => r <= w)[0];
+    if (m === e.lastAttack && m !== 'lunge' && Math.random() < 0.6) m = 'lunge';
+    e.lastAttack = m;
+    if (m === 'lunge') { this._set(e, 'lunge_tele'); g.hud.callout('DANGER!', 'danger'); g.audio.play('brute_growl', { x: e.x, z: e.z, pitch: 0.5, volume: 1 }); }
+    else if (m === 'throw') this._set(e, 'throw');
+    else if (m === 'flank') { this._set(e, 'flank'); g.audio.play('trex_roar', { x: e.x, z: e.z, volume: 0.8, pitch: 1.15, dur: 1.2 }); }
+    else if (m === 'charge') { this._set(e, 'overtake'); g.audio.play('trex_roar', { x: e.x, z: e.z, volume: 0.9, pitch: 1.1, dur: 1.2 }); }
+    else { this._set(e, 'roar'); e.summoned = false; }
   }
 
   _phase(e, n) {
     const g = this.game;
     e.phase = n;
     this._set(e, 'stagger');
+    e.phaseRoar = n === 2;
+    e.staggerAhead = false;
+    this._clearView();
     g.hitStop(0.12);
     g.cam.addTrauma(0.6);
     g.vfx.explosion(this.collar.x, this.collar.y, this.collar.z, 1.2, 1);
@@ -392,29 +494,27 @@ class TRexBoss {
     g.vfx.number(this.collar.x, this.collar.y + 2, this.collar.z, n === 2 ? 'PHASE 2' : 'PHASE 3', 4);
   }
 
-  /** Red lane telegraph from the boss toward the car (dir -1: lunge forward along travel... both run along the route) */
-  _lane(e, d, progress, dir) {
+  /** Red lane on the asphalt for the head-on charge */
+  _lane(e, d, progress) {
     const g = this.game;
     const p = g.player;
-    // Lane from the boss's head toward and past the car at lateral d
-    const r = g.route.sample(e.bs + (dir < 0 ? 0 : 0), _s);
+    const r = g.route.sample(e.bs, _s);
     const x = r.x + r.rx * d, z = r.z + r.rz * d;
-    const heading = dir < 0 ? r.heading : r.heading + Math.PI;
-    const len = Math.abs(g.route.delta(e.bs, p.s)) + 14;
-    g.vfx.telegraphLane(x, z, heading, len, 5.2, progress, 6, 0.35, 0.15);
+    const len = Math.abs(g.route.delta(e.bs, p.s)) + 6;
+    g.vfx.telegraphLane(x, z, r.heading + Math.PI, len, 5.2, progress, 6, 0.35, 0.15);
   }
 
   _throwWreck(e, k) {
     const g = this.game;
     const p = g.player;
-    const T = 1.25;
-    const ahead = p.speed * T + (k - 0.5) * 9;
-    const r = g.route.sample(p.s + ahead, _s);
-    const lat = k === 0 ? p.d : p.d + (Math.random() - 0.5) * 9;
+    const T = 1.9 + k * 0.35;
+    // Aimed at where the cab's tail will be (the first dead on, the others bracket it)
+    const r = g.route.sample(p.s + p.speed * T - 3, _s);
+    const lat = p.d + (k === 0 ? 0 : (k % 2 ? 1 : -1) * (2 + Math.random() * 2));
     const tx = r.x + r.rx * lat, tz = r.z + r.rz * lat;
     const sx = this.headPos.x, sy = this.headPos.y, sz = this.headPos.z;
-    const G = 30;
-    this.wrecks.push({ x: sx, y: sy, z: sz, vx: (tx - sx) / T, vz: (tz - sz) / T, vy: (0.6 - sy) / T + 0.5 * G * T, G, tx, tz, t: 0, T, spin: (Math.random() - 0.5) * 6, yaw: Math.random() * 6 });
+    const G = 18;
+    this.wrecks.push({ x: sx, y: sy, z: sz, vx: (tx - sx) / T, vz: (tz - sz) / T, vy: (1.0 - sy) / T + 0.5 * G * T, G, tx, tz, t: 0, T, spin: (Math.random() - 0.5) * 4, yaw: Math.random() * 6, hp: WRECK_HP * (1 + (e.phase - 1) * 0.3), dead: false });
   }
 
   _footsteps(e, dt) {
@@ -460,7 +560,7 @@ class TRexBoss {
     e.moveSpeed = v;
     this._footsteps(e, dt);
     void midT;
-    if (e.stateT > 14 || Math.abs(e.cd) > 45 || g.route.delta(g.player.s, e.cs) < -30) {
+    if (e.stateT > 16 || Math.abs(e.cd) > 45 || g.route.delta(g.player.s, e.cs) < -160) {
       this.e = null;
       return 'remove';
     }
@@ -520,20 +620,22 @@ class TRexBoss {
       this.cameoPending -= dt;
       if (this.cameoPending <= 0) { this.cameoPending = false; this.cameo(); }
     }
-    // Wrecks in flight
+    // Wrecks in flight (shootable)
     this.wreckBatch.begin();
     for (let i = this.wrecks.length - 1; i >= 0; i--) {
       const w = this.wrecks[i];
+      if (w.dead) { this.wrecks.splice(i, 1); continue; }
       w.t += dt;
       w.vy -= w.G * dt;
       w.x += w.vx * dt; w.y += w.vy * dt; w.z += w.vz * dt;
       w.yaw += w.spin * dt;
-      g.vfx.telegraphCircle(w.tx, w.tz, 5, Math.min(1, w.t / w.T), 6, 0.6, 0.15);
+      g.vfx.telegraphCircle(w.tx, w.tz, 4.5, Math.min(1, w.t / w.T), 6, 0.6, 0.15);
       if (Math.random() < dt * 20) g.vfx.glow.spawn(w.x, w.y, w.z, 0, 1, 0, 0.3, 0.6, 1.2, 6, 2, 0.4, { r1: 0.3, g1: 0.05, b1: 0 });
+      g.enemies.dangers.push({ x: w.x, y: w.y, z: w.z, k: Math.min(1, w.t / w.T), r: 2.2, wreck: true });
       if (w.y <= 0.6 && w.vy < 0) {
         g.weapons.blast(w.x, w.z, 6, 120, 0, 'boss');
         g.vfx.explosion(w.x, 0.5, w.z, 2, 0);
-        if (Math.hypot(g.player.x - w.x, g.player.z - w.z) < 5.2) g.hurtPlayer(18 * g.enemies.dmgMult, w.x, w.z, 'wreck');
+        if (Math.hypot(g.player.x - w.x, g.player.z - w.z) < 5.5) g.hurtPlayer(11 * g.enemies.dmgMult, w.x, w.z, 'wreck');
         this.wrecks.splice(i, 1);
         continue;
       }
@@ -599,6 +701,8 @@ class TRexBoss {
     rig.partWorldPosition('thighL', this.thighs[0], THIGH_LOCAL);
     rig.partWorldPosition('thighR', this.thighs[1], THIGH_LOCAL);
     rig.partWorldPosition('head', this.headPos, _v.set(0, -0.3, 1.4));
+    rig.partWorldPosition('body', this.bodyPos, _v.set(0, 0.3, 0));
+    rig.partWorldPosition('neck', this.chestPos, _v.set(0, -0.4, -0.3));
   }
 }
 

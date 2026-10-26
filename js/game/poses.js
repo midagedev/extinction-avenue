@@ -101,11 +101,12 @@ function poseQuad(e, pose, idx, time, moving) {
 }
 
 function posePtero(e, pose, idx, time) {
-  const diving = e.state === 'windup' ? 1 : 0;
-  const climbing = e.state === 'recover' ? 1 : 0;
-  const rate = climbing ? 9 : 4.2;
+  const diving = e.state === 'dive' ? 1 : 0;
+  const rearing = e.state === 'windup' ? 1 : 0;
+  const climbing = e.state === 'recover' || e.state === 'stagger' ? 1 : 0;
+  const rate = climbing ? 9 : rearing ? 7 : 4.2;
   const f = Math.sin(time * rate + e.offA);
-  const flap = diving ? 0 : f * (climbing ? 0.7 : 0.45);
+  const flap = diving ? 0 : f * (climbing ? 0.7 : rearing ? 0.8 : 0.45);
   const fold = diving ? 0.9 : 0;
   set(pose, idx, 'wingL', 0, fold * 0.9, flap + fold * 0.25);
   set(pose, idx, 'wingR', 0, -fold * 0.9, -flap - fold * 0.25);

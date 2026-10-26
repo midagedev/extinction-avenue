@@ -385,7 +385,7 @@ class VFX {
     this.overlayScale = dpr;
   }
 
-  drawOverlay(camera) {
+  drawOverlay(camera, dangers = null) {
     const ctx = this.ctx;
     if (!ctx) return;
     if (!this.overlayScale || this.overlay.width !== Math.round(window.innerWidth * this.overlayScale)) this.resizeOverlay();
@@ -436,6 +436,61 @@ class VFX {
       ctx.fillText(n.text, sx, sy);
     }
     ctx.globalAlpha = 1;
+    // Danger rings: a red ring around every dinosaur winding up an attack, shrinking onto it as the attack comes
+    // (shoot it before the ring closes to stagger it). The boss ring carries a stagger meter; wrecks get a target.
+    if (dangers) {
+      const now = performance.now();
+      const fy = Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5));
+      for (const d of dangers) {
+        v.set(d.x, d.y, d.z);
+        const dist = v.distanceTo(camera.position);
+        v.project(camera);
+        if (v.z > 1 || v.z < -1) continue;
+        const sx = (v.x * 0.5 + 0.5) * W, sy = (-v.y * 0.5 + 0.5) * H;
+        const base = Math.max(18 * k, (d.r / Math.max(1, dist * fy)) * H * 0.5);
+        const kk = Math.min(1, d.k);
+        const rad = base * (1 + (1 - kk) * 1.6);
+        const pulse = 0.7 + 0.3 * Math.sin(now * 0.03);
+        ctx.save();
+        ctx.translate(sx, sy);
+        if (d.wreck) {
+          ctx.strokeStyle = `rgba(255, 150, 40, ${0.6 + 0.4 * pulse})`;
+          ctx.lineWidth = 3 * k;
+          ctx.setLineDash([10 * k, 6 * k]);
+          ctx.rotate(now * 0.004);
+          ctx.beginPath(); ctx.arc(0, 0, base * 1.3, 0, Math.PI * 2); ctx.stroke();
+          ctx.restore();
+          continue;
+        }
+        ctx.lineWidth = (3 + kk * 3) * k;
+        ctx.strokeStyle = `rgba(255, ${Math.round(60 - kk * 50)}, 30, ${0.55 + 0.45 * pulse})`;
+        ctx.shadowColor = '#ff2010';
+        ctx.shadowBlur = 12 * k;
+        ctx.beginPath(); ctx.arc(0, 0, rad, 0, Math.PI * 2); ctx.stroke();
+        // corner ticks
+        for (let i = 0; i < 4; i++) {
+          const a = i * Math.PI / 2 + Math.PI / 4;
+          ctx.beginPath();
+          ctx.moveTo(Math.cos(a) * rad * 1.08, Math.sin(a) * rad * 1.08);
+          ctx.lineTo(Math.cos(a) * (rad * 1.08 + 10 * k), Math.sin(a) * (rad * 1.08 + 10 * k));
+          ctx.stroke();
+        }
+        if (d.boss && d.meter !== undefined) {
+          ctx.strokeStyle = '#ffd23a';
+          ctx.lineWidth = 6 * k;
+          ctx.shadowColor = '#ffb02e';
+          ctx.beginPath(); ctx.arc(0, 0, rad + 12 * k, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * d.meter); ctx.stroke();
+        }
+        ctx.shadowBlur = 0;
+        ctx.font = `900 ${Math.round(22 * k)}px 'Bebas Neue', Impact, sans-serif`;
+        ctx.fillStyle = '#ff3b2f';
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 4 * k;
+        ctx.strokeText('!', 0, -rad - 14 * k);
+        ctx.fillText('!', 0, -rad - 14 * k);
+        ctx.restore();
+      }
+    }
     // Off-screen threat arrows (e.g. a charging triceratops behind, the boss)
     for (const th of this.threats) {
       v.set(th.x, 1.5, th.z).project(camera);

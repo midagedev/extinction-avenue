@@ -4,15 +4,15 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
   <title>EXTINCTION AVENUE — Rush hour just went Cretaceous</title>
-  <meta name="description" content="Dinosaurs have escaped into Manhattan. Arm your cab, mow down the swarm, evolve your weapons and survive the T. rex. A free browser arcade shooter built with three.js WebGPU." />
+  <meta name="description" content="Dinosaurs have escaped into Manhattan and they are chasing your cab. Ride the tail gun, shoot them off your bumper, evolve your arsenal and stop the T. rex. A free first-person arcade gun game built with three.js WebGPU." />
   <meta name="theme-color" content="#07090f" />
   <meta property="og:title" content="EXTINCTION AVENUE" />
-  <meta property="og:description" content="Rush hour just went Cretaceous. Arm your cab, mow down the dinosaur swarm, survive the T. rex." />
+  <meta property="og:description" content="Rush hour just went Cretaceous. Ride the tail gun of an armored cab and shoot down the dinosaurs chasing you — then the T. rex." />
   <meta property="og:type" content="website" />
   <meta property="og:image" content="docs/og-image.png" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="EXTINCTION AVENUE" />
-  <meta name="twitter:description" content="Rush hour just went Cretaceous. A free browser dinosaur-swarm car shooter." />
+  <meta name="twitter:description" content="Rush hour just went Cretaceous. A free first-person arcade dinosaur gun game in your browser." />
   <meta name="twitter:image" content="docs/og-image.png" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='10' fill='%2307090f'/%3E%3Cpath d='M12 36 22 10h4l10 26h-5l-2.2-6H19.2L17 36Zm8.7-10h6.6L24 16.6Z' fill='%23ff6a1a'/%3E%3C/svg%3E" />
   <script type="importmap">
@@ -49,11 +49,19 @@
   <div id="flash" aria-hidden="true"></div>
   <div id="letterbox" aria-hidden="true"><i></i><i></i></div>
 
-  <!-- Reticle (follows the mouse; brackets snap to the locked target) -->
+  <!-- Cracked glass + damage pops, red damage flash -->
+  <div id="cracks" aria-hidden="true"></div>
+  <div id="redflash" aria-hidden="true"></div>
+  <!-- Crosshair (follows the mouse / finger): red over a dinosaur, gold over a weak point, brackets open with heat -->
   <div id="reticle" aria-hidden="true">
-    <svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="13" /><path d="M32 6v12M32 46v12M6 32h12M46 32h12" /><circle class="dot" cx="32" cy="32" r="2.2" /></svg>
+    <svg viewBox="0 0 100 100">
+      <circle class="ring" cx="50" cy="50" r="19" />
+      <g class="brk"><path d="M50 8v18M50 74v18M8 50h18M74 50h18" /></g>
+      <path class="hm" d="M36 36l8 8M64 36l-8 8M36 64l8-8M64 64l-8-8" />
+      <circle class="dot" cx="50" cy="50" r="2.6" />
+    </svg>
+    <b class="weak-tag">WEAK POINT</b>
   </div>
-  <div id="lock" aria-hidden="true"><i></i><i></i><i></i><i></i><b>WEAK POINT</b></div>
 
   <!-- ===================================================== HUD -->
   <div id="hud" aria-live="off">
@@ -61,7 +69,6 @@
     <div class="hud-tl">
       <div class="unit"><span class="unit-tag">UNIT 77</span><span class="unit-loc" id="h-loc">5th Ave</span></div>
       <div class="bar hull"><div class="bar-label"><span>HULL</span><b id="h-hp">100</b></div><div class="bar-track"><div class="bar-ghost"></div><div class="bar-fill"></div></div></div>
-      <div class="bar nitro"><div class="bar-label"><span>NITRO</span><kbd>SHIFT</kbd></div><div class="bar-track"><div class="bar-fill"></div></div></div>
     </div>
     <div class="hud-tc">
       <div class="timer" id="h-time">0:00</div>
@@ -74,6 +81,12 @@
     </div>
     <div class="hud-bl"><div class="build" id="h-build"></div></div>
     <div class="hud-br">
+      <div class="ammo" id="ammo">
+        <div class="ammo-head"><span>TAIL GUN</span><b id="ammo-n">30</b><em id="ammo-max">/30</em></div>
+        <div class="ammo-belt" id="ammo-belt"></div>
+        <div class="reload-track"><i id="reload-bar"></i></div>
+        <div class="ammo-key"><kbd>R</kbd> RELOAD</div>
+      </div>
       <div class="special" id="h-special">
         <svg viewBox="0 0 80 80"><circle class="track" cx="40" cy="40" r="34" /><circle class="fill" cx="40" cy="40" r="34" /></svg>
         <span class="ico-slot" data-icon="airstrike"></span>
@@ -87,6 +100,7 @@
     </div>
     <div id="banner"><div class="b-title"></div><div class="b-sub"></div></div>
     <div id="prompt"></div>
+    <div id="callout"></div>
     <div id="warning"><div class="w-stripes"></div><div class="w-text">WARNING</div><div class="w-sub"></div><div class="w-stripes"></div></div>
     <div id="hint"></div>
   </div>
@@ -99,8 +113,7 @@
 
   <!-- Touch controls -->
   <div id="touch-ui" aria-hidden="true">
-    <div id="t-stick"><span></span></div>
-    <button id="t-boost" class="t-btn" type="button">NITRO</button>
+    <button id="t-reload" class="t-btn" type="button">RELOAD</button>
     <button id="t-special" class="t-btn" type="button">SKY<br />HAMMER</button>
     <button id="t-pause" class="t-btn small" type="button">II</button>
   </div>
@@ -125,13 +138,14 @@
         <div class="logo-kicker">A CRETAGEN INCIDENT · MANHATTAN</div>
         <div class="logo-main">EXTINCTION</div>
         <div class="logo-sign"><span>AVENUE</span></div>
-        <div class="logo-tag">Rush hour just went Cretaceous.</div>
+        <div class="logo-tag">Rush hour just went Cretaceous. You're on the tail gun.</div>
       </div>
       <div class="menu">
-        <button class="btn primary" id="btn-play" type="button"><span class="ico-slot" data-icon="play"></span>START SHIFT</button>
+        <button class="btn primary press-start" id="btn-play" type="button"><span class="ico-slot" data-icon="play"></span>PRESS START</button>
         <button class="btn" id="btn-howto" type="button"><span class="ico-slot" data-icon="help"></span>HOW TO PLAY</button>
         <button class="btn" id="btn-settings" type="button"><span class="ico-slot" data-icon="settings"></span>SETTINGS</button>
       </div>
+      <div class="coin"><span class="blink">INSERT COIN</span> · FREE PLAY · CREDITS ∞</div>
       <div class="best" id="best"></div>
     </div>
     <footer class="credits">
@@ -143,14 +157,14 @@
   <section id="s-howto" class="screen modal">
     <div class="panel">
       <h2>HOW TO PLAY</h2>
-      <p class="lead">Cretagen's specimens are loose in Midtown. Your armored cab rides the avenues — keep it alive, fossilize everything, survive until the Apex shows up… then put it down.</p>
+      <p class="lead">Cretagen's specimens are loose in Midtown and they're chasing your cab. Unit 77 drives itself — you ride the TAIL GUN, facing back down the avenue. Shoot them off your bumper, survive the combat zones, and put down the Apex when it comes for you.</p>
       <div class="howto-grid">
-        <div><span class="ico-slot" data-icon="mouse"></span><b>AIM + HOLD LEFT CLICK</b><span>Fire the Roof Cannon. The reticle snaps to targets; hit the T. rex's glowing collar for weak-point crits.</span></div>
-        <div><kbd>A</kbd><kbd>D</kbd><b>STEER</b><span>Slide across the avenue to dodge red lanes and ram small dinosaurs (they fly).</span></div>
-        <div><kbd>SHIFT</kbd><b>NITRO</b><span>Boost out of stomp rings and plow through swarms. <kbd>S</kbd> brakes.</span></div>
-        <div><kbd>SPACE</kbd><b>SKYHAMMER</b><span>Kills charge an air strike. Call it onto the reticle. (Right click works too.)</span></div>
-        <div><span class="ico-slot" data-icon="gem"></span><b>GENE CORES</b><span>Fossilized dinosaurs drop cores. Level up, pick 1 of 3 upgrades. Max a weapon + own its partner passive to <b class="evo">EVOLVE</b> it.</span></div>
-        <div><span class="ico-slot" data-icon="touch"></span><b>TOUCH</b><span>Left thumb steers, the cannon auto-fires; tap the street to aim. NITRO and SKYHAMMER buttons on the right.</span></div>
+        <div><span class="ico-slot" data-icon="mouse"></span><b>AIM + HOLD LEFT CLICK</b><span>Fire the tail gun at whatever is under the crosshair. Headshots deal 1.6x; GRIDLOCK's glowing collar deals 2.5x.</span></div>
+        <div><span class="ico-slot" data-icon="skull"></span><b>RED RING = INCOMING</b><span>A dinosaur about to jump you glows red with a shrinking ring. Shoot it before the ring closes to STAGGER it out of the attack.</span></div>
+        <div><kbd>R</kbd><b>RELOAD</b><span>The belt reloads by itself when empty. R or right click reloads early.</span></div>
+        <div><kbd>SPACE</kbd><b>SKYHAMMER</b><span>Kills charge an air strike. It lands where the crosshair meets the street.</span></div>
+        <div><span class="ico-slot" data-icon="gem"></span><b>LEVEL UP</b><span>Fossilized dinosaurs drop gene cores. Pick 1 of 3 upgrades: support guns, passives, and EVOLUTIONS. Shoot floating supply drops to grab them.</span></div>
+        <div><span class="ico-slot" data-icon="touch"></span><b>TOUCH</b><span>Your finger is the light gun: touch and hold where you want to shoot. RELOAD and SKYHAMMER buttons on the right.</span></div>
       </div>
       <button class="btn primary" data-close type="button">GOT IT</button>
     </div>
@@ -165,7 +179,7 @@
         <label>Effects volume <input type="range" id="set-sfx" min="0" max="1" step="0.05" /></label>
         <label>Screen shake <select id="set-shake"><option value="1">Full</option><option value="0.5">Reduced</option><option value="0">Off</option></select></label>
         <label>Damage numbers <input type="checkbox" id="set-numbers" /></label>
-        <label>Auto-fire main gun <input type="checkbox" id="set-autofire" /></label>
+        <label>Auto-fire when the crosshair is on a dinosaur <input type="checkbox" id="set-autofire" /></label>
         <label>Graphics <select id="set-quality"><option value="high">High (reflections)</option><option value="medium">Medium</option><option value="low">Low (fast)</option></select></label>
       </div>
       <p class="note" id="set-note"></p>
@@ -193,10 +207,22 @@
     </div>
   </section>
 
+  <section id="s-continue" class="screen modal">
+    <div class="continue">
+      <div class="c-kicker">UNIT 77 IS DOWN</div>
+      <div class="c-title">CONTINUE?</div>
+      <div class="c-count" id="c-count">10</div>
+      <div class="c-score">SCORE <b id="c-score">0</b></div>
+      <button class="btn primary press-start" id="btn-continue" type="button"><span class="ico-slot" data-icon="play"></span>PRESS START</button>
+      <div class="c-note" id="c-note">FREE PLAY · continuing resets your combo multiplier</div>
+      <button class="btn ghost small" id="btn-giveup" type="button">GIVE UP</button>
+    </div>
+  </section>
+
   <section id="s-results" class="screen modal">
     <div class="results">
       <div class="r-kicker" id="r-kicker">SHIFT REPORT · UNIT 77</div>
-      <div class="r-title" id="r-title">FOSSILIZED</div>
+      <div class="r-title" id="r-title">GAME OVER</div>
       <div class="r-sub" id="r-sub"></div>
       <div class="r-score"><span>SCORE</span><b id="r-score">0</b><em id="r-best"></em></div>
       <div class="r-stats" id="r-stats"></div>

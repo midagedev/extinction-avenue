@@ -3,14 +3,18 @@ import { PropBatch } from './batches.js';
 import { WEAPONS, PASSIVES, EVOLUTIONS } from './upgrades.js';
 
 // js/game/weapons.js
-// The cab's arsenal at runtime: the aimed Roof Cannon (the player's light-gun element) plus auto-firing weapons in the
-// Vampire Survivors mould, their evolutions, and the Skyhammer air strike special. Projectiles are struct-of-arrays
-// pools drawn through instanced batches; hits go through the enemy spatial hash.
+// The cab's arsenal at runtime. The star is the aimed TAIL GUN: the rear gunner's heavy machine gun, hitscan along the
+// crosshair ray (headshots, stagger, magazine + reload, spread that blooms under sustained fire), evolving into the
+// piercing Rail Lance. Around it, support weapons in the Vampire Survivors mould fire on their own at the pursuers,
+// plus their evolutions and the Skyhammer air strike special. Projectiles are struct-of-arrays pools drawn through
+// instanced batches; hits go through the enemy spatial hash.
 
 const _pos = new THREE.Vector3();
 const _dir = new THREE.Vector3();
 const _tmp = [];
 const _tmp2 = [];
+const _ray = new THREE.Ray();
+const _hit = {};
 const BULLET_MAX = 900;
 const MISSILE_MAX = 96;
 const MINE_MAX = 48;
@@ -45,6 +49,12 @@ class WeaponSystem {
     this.firing = false;
     this.burnDps = 10;
     this.shotsFired = 0;
+    this.ammo = 30;
+    this.reloadT = 0;
+    this.heat = 0;
+    this.overdrive = 0;
+    this.staggerMult = 1;
+    this.xpMult = 1;
     this.recomputeStats();
   }
 
@@ -58,7 +68,11 @@ class WeaponSystem {
     this.mines.length = 0;
     this.fires.length = 0;
     this.special = { charge: 0.35, active: null };
+    this.reloadT = 0;
+    this.heat = 0;
+    this.overdrive = 0;
     this.recomputeStats();
+    this.ammo = this.magSize;
   }
 
   has(id) {
@@ -80,7 +94,10 @@ class WeaponSystem {
       this.weapons.delete(evo.from);
       this.evolved.add(choice.id);
     }
+    const mag = this.magSize;
     this.recomputeStats();
+    if (this.magSize > mag) this.ammo += this.magSize - mag;
+    if (choice.kind === 'evolution' && choice.id === 'railgun') { this.ammo = this.magSize; this.reloadT = 0; }
   }
 
   recomputeStats() {
@@ -92,17 +109,16 @@ class WeaponSystem {
     const player = this.game.player;
     if (player) {
       const st = player.stats;
-      st.armor = P('armor') * 1.5;
-      const maxHp = 150 + P('chassis') * 30;
+      st.armor = P('armor') * 1;
+      const maxHp = 100 + P('chassis') * 20;
       if (maxHp > player.maxHp) player.hp += maxHp - player.maxHp;
       player.maxHp = maxHp;
-      st.speedMult = 1 + P('turbo') * 0.07;
-      st.nitroRegen = 1 + P('turbo') * 0.25;
-      st.magnet = 1 + P('magnet') * 0.35;
-      st.ram = 1 + P('ram') * 0.35;
-      st.regen = 1.1 + P('chassis') * 0.3 + (this.evolved.has('dragon') ? 1.5 : 0);
+      st.regen = P('chassis') * 0.35 + (this.evolved.has('dragon') ? 1 : 0);
       player.setBuild(new Set([...this.weapons.keys(), ...this.evolved, ...this.passives.keys()]));
     }
+    this.staggerMult = 1 + P('ram') * 0.25;
+    this.xpMult = 1 + P('magnet') * 0.12;
+    this.game.gunner?.setRail(this.evolved.has('railgun'));
     this.burnDps = (8 + this.level('flamer') * 3) * this.dmgMult * (this.evolved.has('inferno') ? 2.5 : 1);
   }
 
@@ -128,7 +144,7 @@ class WeaponSystem {
     return Math.random() < this.crit ? 2 * base : base;
   }
 
-  /** Spawns a bullet. kind: 0 plain, 1 cannon, 2 rail (unused; hitscan), 3 pellet */
+  /** Spawns a bullet. kind: 0 plain, 1 cannon, 2 rail (unused; hitscan), 3 pellet, 4 visual-only tracer */
   bullet(x, y, z, dx, dy, dz, speed, dmg, opts = {}) {
     const B = this.b;
     if (B.n >= BULLET_MAX) return;
@@ -140,12 +156,31 @@ class WeaponSystem {
     B.pierce[i] = opts.pierce ?? 0;
     B.r[i] = opts.radius ?? 0.5;
     B.boom[i] = opts.boom ?? 0;
-    B.kind[i] = opts.kind ?? 0;
+    B.kind[i] = opts.visual ? 4 : opts.kind ?? 0;
     B.cr[i] = opts.color?.[0] ?? 6; B.cg[i] = opts.color?.[1] ?? 3.5; B.cb[i] = opts.color?.[2] ?? 1;
     B.w[i] = opts.width ?? 0.09;
     B.len[i] = opts.len ?? 2.2;
     B.last[i] = null;
     B.burn[i] = opts.burn ?? 0;
+  }
+
+  /** Magazine size / reload time of the tail gun (from its level and the Extended Mag passive) */
+  get magSize() {
+    if (this.evolved.has('railgun')) return Math.round(10 * (1 + (this.passives.get('turbo') || 0) * 0.2));
+    const lvl = this.level('cannon');
+    return Math.round((lvl >= 3 ? 45 : 30) * (1 + (this.passives.get('turbo') || 0) * 0.2));
+  }
+
+  get reloadDur() {
+    return (this.evolved.has('railgun') ? 1.5 : 1.25) * Math.pow(0.9, this.passives.get('turbo') || 0);
+  }
+
+  /** Manual reload (R / right click / touch button) */
+  reload() {
+    if (this.reloadT > 0 || this.ammo >= this.magSize || this.overdrive > 0) return false;
+    this.reloadT = this.reloadDur;
+    this.game.audio.play('ui', { pitch: 0.6, volume: 0.6 });
+    return true;
   }
 
   update(dt, input) {
@@ -156,33 +191,35 @@ class WeaponSystem {
     const L = (id) => this.weapons.get(id) || 0;
     const E = (id) => this.evolved.has(id);
 
-    // --- Roof Cannon / Rail Lance (aimed) ---------------------------------------------------------------------------
-    p.aimAt(this.aim.x, this.aim.y, this.aim.z, dt);
-    const wantFire = input.fire || (input.autoFire && this.aim.target);
-    if (wantFire && (L('cannon') || E('railgun'))) {
-      if (E('railgun')) {
-        if (this._ready('railgun', 0.26)) this._fireRail();
-      } else {
-        const lvl = L('cannon');
-        const rate = 5.5 * (lvl >= 4 ? 1.3 : 1);
-        if (this._ready('cannon', 1 / rate)) {
-          p.muzzle(_pos, _dir);
-          // Aim straight at the aim point from the muzzle
-          _dir.set(this.aim.x - _pos.x, this.aim.y - _pos.y, this.aim.z - _pos.z).normalize();
-          const dmg = 16 * (lvl >= 2 ? 1.3 : 1) * this.dmgMult;
-          this.bullet(_pos.x, _pos.y, _pos.z, _dir.x, _dir.y, _dir.z, 150, dmg, {
-            kind: 1, pierce: lvl >= 3 ? 1 : 0, radius: 0.75, boom: lvl >= 5 ? 2.8 * this.areaMult : 0,
-            color: [1.2, 5, 7], width: 0.16, len: 3.6, life: 0.9
-          });
-          g.vfx.muzzle(_pos.x, _pos.y, _pos.z, _dir.x, _dir.y, _dir.z, 1.3, 1.2, 5, 7);
-          g.vfx.light(_pos.x, _pos.y, _pos.z, 0x55eeff, 40, 10, 0.06);
-          p.recoil = 1;
-          g.audio.play('gun', { volume: 0.55, pitch: 0.95 + Math.random() * 0.1 });
-          g.cam.addTrauma(0.025);
-          this.shotsFired++;
-        }
-      }
+    // --- Tail Gun / Rail Lance (aimed, hitscan along the crosshair ray) ---------------------------------------------
+    if (this.overdrive > 0) { this.overdrive -= dt; this.ammo = this.magSize; this.reloadT = 0; }
+    if (this.reloadT > 0) {
+      this.reloadT -= dt;
+      if (this.reloadT <= 0) { this.reloadT = 0; this.ammo = this.magSize; g.audio.play('ui', { pitch: 1.4, volume: 0.7 }); g.onReloaded?.(); }
     }
+    this.cd.main = (this.cd.main || 0) - dt;
+    const wantFire = input.fire || (input.autoFire && this.aim.target);
+    this.firing = false;
+    if (wantFire && this.reloadT <= 0) {
+      if (this.ammo <= 0) {
+        this.reload();
+      } else if (this.cd.main <= 0) {
+        if (E('railgun')) {
+          this.cd.main = 0.3 * this.cdMult;
+          this._fireRail();
+        } else {
+          const lvl = L('cannon');
+          const rate = 9 * (lvl >= 4 ? 1.3 : 1) * (this.overdrive > 0 ? 1.5 : 1) / this.cdMult;
+          this.cd.main = Math.max(this.cd.main + 1 / rate, 0);
+          this._fireGun(lvl);
+        }
+        this.firing = true;
+        if (this.overdrive <= 0) this.ammo--;
+        if (this.ammo <= 0) { this.ammo = 0; g.onEmpty?.(); this.reload(); }
+      }
+      this.heat = Math.min(1, this.heat + dt * 1.2);
+    } else this.heat = Math.max(0, this.heat - dt * 2.5);
+    if (this.cd.main < -0.1) this.cd.main = -0.1;
 
     // --- Hood Gatlings / Storm Gatlings ----------------------------------------------------------------------------
     const gl = L('gatling');
@@ -193,7 +230,7 @@ class WeaponSystem {
       if (this._ready('gatling', 1 / rate)) {
         const side = (this.gatSide = 1 - (this.gatSide || 0));
         p.toWorld(p.gatlingMuzzles[side], _pos);
-        const t = g.enemies.nearest(p.x, p.z, range, storm ? null : (e) => (e.x - p.x) * p.fx + (e.z - p.z) * p.fz > -4);
+        const t = g.enemies.nearest(p.x - p.fx * 10, p.z - p.fz * 10, range);
         if (t) {
           const ty = t.y + t.sp.height * t.scale * 0.5;
           const lead = Math.hypot(t.x - _pos.x, t.z - _pos.z) / 110;
@@ -212,11 +249,11 @@ class WeaponSystem {
     if (sl || E('dragon')) {
       const dragon = E('dragon');
       const period = dragon ? 0.75 : sl >= 4 ? 0.85 : 1.15;
-      const t = g.enemies.nearest(p.x + p.fx * 10, p.z + p.fz * 10, 18, (e) => (e.x - p.x) * p.fx + (e.z - p.z) * p.fz > 0);
+      const t = g.enemies.nearest(p.x - p.fx * 9, p.z - p.fz * 9, 14, (e) => (e.x - p.x) * p.fx + (e.z - p.z) * p.fz < 0);
       if (t && this._ready('shotgun', period)) {
         const pellets = dragon ? 16 : 8 + (sl >= 2 ? 3 : 0) + (sl >= 5 ? 4 : 0);
         const dmg = (dragon ? 16 : 9 * (sl >= 3 ? 1.35 : 1) * (sl >= 5 ? 1.35 : 1)) * this.dmgMult;
-        p.toWorld(_pos.set(0, 0.45, 2.5), _pos);
+        p.toWorld(_pos.set(0, 0.6, -2.5), _pos);
         const base = Math.atan2(t.x - _pos.x, t.z - _pos.z);
         for (let k = 0; k < pellets; k++) {
           const a = base + (Math.random() - 0.5) * 0.55;
@@ -226,7 +263,7 @@ class WeaponSystem {
             boom: dragon ? 1.6 * this.areaMult : 0, burn: dragon ? 2 : 0
           });
         }
-        g.vfx.muzzle(_pos.x, _pos.y, _pos.z, p.fx, 0, p.fz, 2.4, 8, dragon ? 2.5 : 4, dragon ? 0.4 : 1);
+        g.vfx.muzzle(_pos.x, _pos.y, _pos.z, -p.fx, 0, -p.fz, 2.4, 8, dragon ? 2.5 : 4, dragon ? 0.4 : 1);
         g.vfx.light(_pos.x, _pos.y, _pos.z, 0xffaa44, 80, 14, 0.08);
         g.audio.play('shotgun', { volume: 0.6 });
         g.cam.addTrauma(0.06);
@@ -265,10 +302,10 @@ class WeaponSystem {
       const thunder = E('thunder');
       const period = thunder ? 0.7 : tl >= 4 ? 1.0 : 1.3;
       if (this._ready('tesla', period)) {
-        p.toWorld(_pos.set(0.55, 1.85, -1.75), _pos);
+        p.toWorld(_pos.set(0.52, 1.88, -1.75), _pos);
         const chains = thunder ? 14 : 2 + (tl >= 2) + (tl >= 4) * 2 + (tl >= 5) * 2;
         const dmg = (thunder ? 34 : 20 * (tl >= 3 ? 1.35 : 1) * (tl >= 5 ? 1.4 : 1)) * this.dmgMult;
-        let cur = g.enemies.nearest(p.x, p.z, 26);
+        let cur = g.enemies.nearest(p.x - p.fx * 10, p.z - p.fz * 10, 22);
         let fx = _pos.x, fy = _pos.y, fz = _pos.z;
         const hit = new Set();
         for (let k = 0; k <= chains && cur; k++) {
@@ -293,7 +330,7 @@ class WeaponSystem {
         }
         if (thunder) {
           // Sky strikes on 3 random enemies
-          g.enemies.within(p.x + p.fx * 15, p.z + p.fz * 15, 40, _tmp);
+          g.enemies.within(p.x - p.fx * 18, p.z - p.fz * 18, 40, _tmp);
           for (let k = 0; k < 3 && _tmp.length; k++) {
             const e = _tmp[(Math.random() * _tmp.length) | 0];
             g.vfx.lightning(e.x + (Math.random() - 0.5) * 4, 40, e.z + (Math.random() - 0.5) * 4, e.x, 0.3, e.z, 2, 4.5, 8, 0.2, 0.22);
@@ -362,7 +399,8 @@ class WeaponSystem {
       const size = (buzz ? 1.5 : 1.0) * Math.sqrt(this.areaMult);
       for (let k = 0; k < count; k++) {
         const a = this.sawAngle + (k / count) * Math.PI * 2;
-        const sx = p.x + Math.sin(a) * radius, sz = p.z + Math.cos(a) * radius;
+        const cx = p.x - p.fx * (radius + 4), cz = p.z - p.fz * (radius + 4);
+        const sx = cx + Math.sin(a) * radius, sz = cz + Math.cos(a) * radius;
         this.sawBatch.add(sx, 0.75, sz, this.sawAngle * 9, 0, 0, size, size, size, 1, 1, 1, buzz ? 2.5 : 1);
         g.enemies.within(sx, sz, 0.8 * size, _tmp);
         for (const e of _tmp) {
@@ -381,44 +419,107 @@ class WeaponSystem {
     this._updateSpecial(dt);
   }
 
-  /** Hitscan rail: pierces everything along the line to the aim point and beyond */
+  /** The crosshair ray with spread applied (copied into _ray) */
+  _shotRay(spread) {
+    const src = this.game.aimRay;
+    _ray.origin.copy(src.origin);
+    _ray.direction.copy(src.direction);
+    if (spread > 0) {
+      _ray.direction.x += (Math.random() - 0.5) * 2 * spread;
+      _ray.direction.y += (Math.random() - 0.5) * 2 * spread;
+      _ray.direction.z += (Math.random() - 0.5) * 2 * spread;
+      _ray.direction.normalize();
+    }
+    return _ray;
+  }
+
+  /** Where a ray meets the street (or a far point), for misses */
+  _groundT(ray, max = 160) {
+    return ray.direction.y < -0.004 ? Math.min(max, (ray.origin.y - 0.05) / -ray.direction.y) : max;
+  }
+
+  /** One round of the tail gun: hitscan along the crosshair, first thing hit takes it */
+  _fireGun(lvl) {
+    const g = this.game;
+    const ray = this._shotRay(0.0035 + this.heat * 0.011);
+    const dmgBase = 12 * (lvl >= 2 ? 1.3 : 1) * this.dmgMult;
+    const pierce = lvl >= 3 ? 1 : 0;
+    g.gunner.muzzleWorld(_pos);
+    let endT = this._groundT(ray);
+    let hitSomething = false;
+    // Shootable things that aren't dinosaurs: floating supply drops and the T. rex's thrown wrecks
+    const ph = g.pickups.raycast(ray, endT);
+    const wh = g.boss.raycastWrecks(ray, endT);
+    let skip = null;
+    for (let k = 0; k <= pierce; k++) {
+      const h = g.enemies.raycast(ray, endT, _hit, skip);
+      const tOther = Math.min(ph ? ph.t : Infinity, wh ? wh.t : Infinity);
+      if (k === 0 && tOther < (h ? h.t : Infinity)) {
+        endT = tOther;
+        if (ph && ph.t <= tOther) g.pickups.shoot(ph.item);
+        else g.boss.shootWreck(wh.w, dmgBase);
+        hitSomething = true;
+        break;
+      }
+      if (!h) break;
+      const e = h.e;
+      const x = ray.origin.x + ray.direction.x * h.t, y = ray.origin.y + ray.direction.y * h.t, z = ray.origin.z + ray.direction.z * h.t;
+      const crit = this._rollCrit(h.weak);
+      const killed = g.enemies.damage(e, dmgBase * crit, { source: 'gun', crit: crit > 1, head: h.head, stagger: 1, kx: ray.direction.x * 6, kz: ray.direction.z * 6 });
+      g.vfx.hitSpark(x, y, z, h.head ? 7 : 5, h.head ? 6 : 3.2, h.head ? 2 : 1);
+      if (lvl >= 5) this.blast(x, z, 2.6 * this.areaMult, dmgBase * 0.55, 1, 'blast', false, y);
+      g.onGunHit(e, h, killed, x, y, z);
+      endT = h.t;
+      hitSomething = true;
+      skip = e;
+    }
+    const ex = ray.origin.x + ray.direction.x * endT, ey = ray.origin.y + ray.direction.y * endT, ez = ray.origin.z + ray.direction.z * endT;
+    if (!hitSomething && endT < 159) { g.vfx.hitSpark(ex, Math.max(0.1, ey), ez, 3, 2.6, 1.6); g.vfx.dust(ex, ez, 0.25, 1); }
+    // Tracer from the muzzle to the impact, flash at the muzzle
+    g.vfx.beam(_pos.x, _pos.y, _pos.z, ex, ey, ez, 0.035, 9, 5.5, 1.6, 0.045);
+    this.bullet(_pos.x, _pos.y, _pos.z, ex - _pos.x, ey - _pos.y, ez - _pos.z, 1 / 0.07, 0, { visual: true, life: 0.07, color: [9, 6, 2], width: 0.06, len: 3.5 });
+    g.gunner.fire(1);
+    g.audio.play('gun', { volume: 0.5, pitch: 0.9 + Math.random() * 0.12 });
+    g.cam.kick += 0.0045;
+    g.cam.addTrauma(0.012);
+    this.shotsFired++;
+  }
+
+  /** Rail Lance: hitscan that pierces every dinosaur along the crosshair ray */
   _fireRail() {
     const g = this.game;
-    const p = g.player;
-    p.muzzle(_pos, _dir);
-    _dir.set(this.aim.x - _pos.x, this.aim.y - _pos.y, this.aim.z - _pos.z).normalize();
-    const len = 130;
-    const ex = _pos.x + _dir.x * len, ey = _pos.y + _dir.y * len, ez = _pos.z + _dir.z * len;
+    const ray = this._shotRay(0.001);
+    g.gunner.muzzleWorld(_pos);
+    const endT = this._groundT(ray, 200);
     const dmg = 70 * this.dmgMult;
-    // Walk the line in 3 m steps querying the hash
-    const hit = new Set();
-    const groundT = _dir.y < -0.01 ? Math.min(len, -_pos.y / _dir.y) : len;
-    for (let s = 0; s < groundT + 2; s += 3) {
-      const x = _pos.x + _dir.x * s, z = _pos.z + _dir.z * s, y = _pos.y + _dir.y * s;
-      g.enemies.within(x, z, 1.8, _tmp);
-      for (const e of _tmp) {
-        if (hit.has(e)) continue;
-        const top = e.y + e.sp.height * e.scale;
-        if (y < e.y - 1 || y > top + 1.5) continue;
-        hit.add(e);
-        const weak = g.boss?.weakHit(e, x, y, z) ?? 1;
-        g.enemies.damage(e, dmg * this._rollCrit(weak > 1 ? weak * 1.6 : 1), { source: 'rail', crit: weak > 1, kx: _dir.x * 8, kz: _dir.z * 8 });
-      }
+    const ph = g.pickups.raycast(ray, endT);
+    if (ph) g.pickups.shoot(ph.item);
+    const wh = g.boss.raycastWrecks(ray, endT);
+    if (wh) g.boss.shootWreck(wh.w, dmg * 2);
+    let skip = null;
+    const seen = new Set();
+    for (let k = 0; k < 24; k++) {
+      const h = g.enemies.raycast(ray, endT, _hit, skip, seen);
+      if (!h) break;
+      seen.add(h.e);
+      skip = h.e;
+      const x = ray.origin.x + ray.direction.x * h.t, y = ray.origin.y + ray.direction.y * h.t, z = ray.origin.z + ray.direction.z * h.t;
+      const crit = this._rollCrit(h.weak > 1 ? h.weak * 1.4 : 1);
+      const killed = g.enemies.damage(h.e, dmg * crit, { source: 'rail', crit: crit > 1, head: h.head, stagger: 2, kx: ray.direction.x * 10, kz: ray.direction.z * 10 });
+      g.vfx.hitSpark(x, y, z, 2, 6, 9);
+      g.onGunHit(h.e, h, killed, x, y, z);
     }
-    const endT = Math.min(len, groundT + 1);
-    const hx = _pos.x + _dir.x * endT, hy = _pos.y + _dir.y * endT, hz = _pos.z + _dir.z * endT;
-    g.vfx.beam(_pos.x, _pos.y, _pos.z, hx, hy, hz, 0.35, 2, 7, 9, 0.16);
-    g.vfx.beam(_pos.x, _pos.y, _pos.z, hx, hy, hz, 0.12, 8, 10, 12, 0.1);
-    if (endT < len) g.vfx.hitSpark(hx, hy + 0.2, hz, 2, 6, 9);
-    g.vfx.muzzle(_pos.x, _pos.y, _pos.z, _dir.x, _dir.y, _dir.z, 2.2, 1.5, 6, 9);
-    g.vfx.light(_pos.x, _pos.y, _pos.z, 0x66ffff, 90, 14, 0.1);
-    p.recoil = 1;
+    const hx = ray.origin.x + ray.direction.x * endT, hy = ray.origin.y + ray.direction.y * endT, hz = ray.origin.z + ray.direction.z * endT;
+    g.vfx.beam(_pos.x, _pos.y, _pos.z, hx, hy, hz, 0.16, 2, 7, 9, 0.16);
+    g.vfx.beam(_pos.x, _pos.y, _pos.z, hx, hy, hz, 0.05, 8, 10, 12, 0.1);
+    if (endT < 199) g.vfx.hitSpark(hx, hy + 0.2, hz, 2, 6, 9);
+    g.gunner.fire(1.6);
     g.audio.play('gun', { volume: 0.8, pitch: 0.6 });
     g.audio.play('tesla', { volume: 0.3 });
-    g.cam.addTrauma(0.07);
+    g.cam.kick += 0.02;
+    g.cam.addTrauma(0.06);
     g.cam.fovKick -= 1.2;
     this.shotsFired++;
-    void ex; void ey; void ez;
   }
 
   /** Area damage with falloff; color 0 fire, 1 plasma, 2 magenta */
@@ -448,13 +549,15 @@ class WeaponSystem {
       let dead = B.life[i] <= 0;
       const x0 = B.x[i], y0 = B.y[i], z0 = B.z[i];
       B.x[i] += B.vx[i] * dt; B.y[i] += B.vy[i] * dt; B.z[i] += B.vz[i] * dt;
-      if (!dead && B.y[i] <= 0.05) {
+      if (B.kind[i] === 4) {
+        // visual tracer: no collision
+      } else if (!dead && B.y[i] <= 0.05) {
         // Hit the street
         dead = true;
         g.vfx.hitSpark(B.x[i], 0.15, B.z[i], B.cr[i], B.cg[i], B.cb[i]);
         if (B.boom[i] > 0) this.blast(B.x[i], B.z[i], B.boom[i], B.dmg[i] * 0.8, B.kind[i] === 1 ? 1 : 0, 'blast');
       }
-      if (!dead) {
+      if (!dead && B.kind[i] !== 4) {
         // Sweep test: sample midpoint and end (bullets move ≤ 2.5 m per frame at 150 m/s)
         const steps = 2;
         for (let s = 1; s <= steps && !dead; s++) {
@@ -599,12 +702,15 @@ class WeaponSystem {
     if (s.charge < 1 || s.active) return false;
     s.charge = 0;
     const g = this.game;
-    const tx = this.aim.x, tz = this.aim.z;
+    const tx = this.aim.gx ?? this.aim.x, tz = this.aim.gz ?? this.aim.z;
     const p = g.player;
     // Strikes walk along the car's heading through the target point
-    s.active = { t: 0, x: tx, z: tz, fx: p.fx, fz: p.fz, n: 0 };
+    // Keep the strike on the road behind the cab, within reach
+    const dx = tx - p.x, dz = tz - p.z, d = Math.hypot(dx, dz) || 1;
+    const k = Math.min(1, 60 / d);
+    s.active = { t: 0, x: p.x + dx * k, z: p.z + dz * k, fx: dx / d, fz: dz / d, n: 0 };
     g.audio.play('airstrike', { volume: 0.9 });
-    g.hud.banner('SKYHAMMER INBOUND', 'Air strike on your mark', 'special');
+    g.hud.callout('SKYHAMMER INBOUND!', 'special');
     return true;
   }
 

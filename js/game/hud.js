@@ -2,8 +2,10 @@ import { iconSVG } from './icons.js';
 import { describeChoice } from './upgrades.js';
 
 // js/game/hud.js
-// DOM HUD and screens: hull / nitro / XP bars, timer, score + combo, build slots, Skyhammer charge ring, boss bar,
-// banners, prompts, warnings, the boss name card, the level-up cards, pause and the results screen.
+// DOM HUD and screens for the arcade rail shooter: the big crosshair (hit markers, heat bloom, red over a dinosaur,
+// gold over a weak point), the AMMO belt with RELOAD! warnings, hull / XP bars, score + combo multiplier, build slots,
+// Skyhammer charge ring, boss bar, banners, arcade CALLOUTS (DANGER! STAGGER! GO GO GO!), cracked-glass hits and the
+// red damage flash, the boss name card, the level-up cards, pause, the CONTINUE? countdown and the results screen.
 
 const $ = (id) => document.getElementById(id);
 
@@ -12,6 +14,31 @@ function fmtTime(t) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
+// Cracked-glass splat (spider web), drawn once, positioned per hit
+const CRACK_SVG = (() => {
+  let d = '';
+  const rays = 11;
+  for (let i = 0; i < rays; i++) {
+    const a = (i / rays) * Math.PI * 2 + Math.sin(i * 7.3) * 0.22;
+    let x = 50, y = 50;
+    d += `M50 50`;
+    for (let k = 1; k <= 4; k++) {
+      const r = k * 12 + Math.sin(i * 3.1 + k) * 4;
+      x = 50 + Math.cos(a + Math.sin(i + k) * 0.12) * r;
+      y = 50 + Math.sin(a + Math.sin(i + k) * 0.12) * r;
+      d += ` L${x.toFixed(1)} ${y.toFixed(1)}`;
+    }
+  }
+  for (const r of [10, 22, 34]) {
+    for (let i = 0; i < rays; i++) {
+      const a0 = (i / rays) * Math.PI * 2, a1 = ((i + 1) / rays) * Math.PI * 2;
+      if ((i * 5 + r) % 3 === 0) continue;
+      d += ` M${(50 + Math.cos(a0) * r).toFixed(1)} ${(50 + Math.sin(a0) * r).toFixed(1)} L${(50 + Math.cos(a1) * (r + 3)).toFixed(1)} ${(50 + Math.sin(a1) * (r + 3)).toFixed(1)}`;
+    }
+  }
+  return `<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="5" /><path d="${d}" /></svg>`;
+})();
+
 class HUD {
   constructor(game) {
     this.game = game;
@@ -19,21 +46,24 @@ class HUD {
     this.el = {
       level: $('h-level'), xp: document.querySelector('.xp-fill'), xpWrap: document.querySelector('.xp'),
       hp: $('h-hp'), hull: document.querySelector('.bar.hull'), hullFill: document.querySelector('.hull .bar-fill'), hullGhost: document.querySelector('.hull .bar-ghost'),
-      nitro: document.querySelector('.bar.nitro'), nitroFill: document.querySelector('.nitro .bar-fill'),
       time: $('h-time'), wave: $('h-wave'), score: $('h-score'), kills: $('h-kills'),
       combo: $('h-combo'), comboN: $('h-combo-n'), mult: $('h-mult'), comboBar: document.querySelector('.combo-bar i'),
       build: $('h-build'), special: $('h-special'), specialFill: document.querySelector('.special .fill'),
       loc: $('h-loc'), bossbar: $('bossbar'), bName: $('b-name'), bSub: $('b-sub'), bPhase: $('b-phase'),
       bFill: document.querySelector('.boss-fill'), bGhost: document.querySelector('.boss-ghost'),
       banner: $('banner'), prompt: $('prompt'), warning: $('warning'), hint: $('hint'), namecard: $('namecard'),
-      reticle: $('reticle'), lock: $('lock'), flash: $('flash')
+      reticle: $('reticle'), flash: $('flash'), callout: $('callout'), cracks: $('cracks'), redflash: $('redflash'),
+      ammo: $('ammo'), ammoN: $('ammo-n'), ammoBelt: $('ammo-belt'), ammoMax: $('ammo-max'), reload: $('reload-bar'), mult2: $('h-mult-big')
     };
     this.cache = {};
     this.buildKey = '';
     this.bannerQueue = [];
     this.bannerT = 0;
     this.promptT = 0;
+    this.calloutT = 0;
     this.bossTarget = null;
+    this.cracks = [];
+    this.beltN = -1;
   }
 
   _set(key, el, value, prop = 'textContent') {
@@ -53,6 +83,7 @@ class HUD {
     const g = this.game;
     const p = g.player;
     const el = this.el;
+    const w = g.weapons;
     this._set('level', el.level, String(g.level));
     this._style('xp', el.xp, 'width', `${Math.min(100, (g.xp / g.xpNeed) * 100).toFixed(1)}%`);
     const hpf = Math.max(0, p.hp / p.maxHp);
@@ -60,21 +91,38 @@ class HUD {
     this._style('hullFill', el.hullFill, 'transform', `scaleX(${hpf.toFixed(3)})`);
     this._style('hullGhost', el.hullGhost, 'transform', `scaleX(${hpf.toFixed(3)})`);
     el.hull.classList.toggle('low', hpf < 0.3);
-    this._style('nitro', el.nitroFill, 'transform', `scaleX(${p.nitro.toFixed(3)})`);
-    el.nitro.classList.toggle('on', p.boosting);
     this._set('time', el.time, fmtTime(g.director.time));
-    const w = g.director;
-    this._set('wave', el.wave, w.bossActive ? 'APEX SPECIMEN' : w.bossDone && !w.endless ? 'APEX DOWN' : w.endless ? `ENDLESS · ${fmtTime(w.endlessT)}` : `WAVE ${w.waveNumber} · BOSS IN ${fmtTime(Math.max(0, w.bossTime - w.time))}`);
+    this._set('wave', el.wave, g.director.stageName);
     this._set('score', el.score, g.score.toLocaleString('en-US'));
     this._set('kills', el.kills, g.stats.kills.toLocaleString('en-US'));
-    const comboOn = g.combo >= 5;
+    const comboOn = g.combo >= 3;
     el.combo.classList.toggle('on', comboOn);
     if (comboOn) {
       this._set('comboN', el.comboN, String(g.combo));
       this._set('mult', el.mult, `x${g.comboMult()}`);
-      this._style('comboBar', el.comboBar, 'transform', `scaleX(${Math.max(0, g.comboT / 2.5).toFixed(2)})`);
+      this._style('comboBar', el.comboBar, 'transform', `scaleX(${Math.max(0, g.comboT / 3.2).toFixed(2)})`);
     }
-    const ch = g.weapons.special.charge;
+    // Ammo belt
+    const mag = w.magSize;
+    if (mag !== this.beltN) {
+      this.beltN = mag;
+      const cells = Math.min(mag, 45);
+      el.ammoBelt.innerHTML = Array.from({ length: cells }, () => '<i></i>').join('');
+      this._set('ammoMax', el.ammoMax, `/${mag}`);
+    }
+    const reloading = w.reloadT > 0;
+    this._set('ammoN', el.ammoN, w.overdrive > 0 ? '∞' : reloading ? '--' : String(w.ammo));
+    const cells = el.ammoBelt.children.length;
+    const lit = reloading ? 0 : Math.ceil((w.ammo / mag) * cells);
+    if (this.cache.lit !== lit) {
+      this.cache.lit = lit;
+      for (let i = 0; i < cells; i++) el.ammoBelt.children[i].className = i < lit ? 'on' : '';
+    }
+    el.ammo.classList.toggle('low', !reloading && w.ammo / mag <= 0.2 && w.overdrive <= 0);
+    el.ammo.classList.toggle('reloading', reloading);
+    el.ammo.classList.toggle('overdrive', w.overdrive > 0);
+    this._style('reload', el.reload, 'transform', `scaleX(${reloading ? (1 - w.reloadT / w.reloadDur).toFixed(3) : 0})`);
+    const ch = w.special.charge;
     this._style('special', el.specialFill, 'strokeDashoffset', String((213.6 * (1 - ch)).toFixed(1)));
     el.special.classList.toggle('ready', ch >= 1);
     if (this.tSpecial || (this.tSpecial = document.getElementById('t-special'))) {
@@ -83,7 +131,7 @@ class HUD {
     }
     this._set('loc', el.loc, g.route.legName(p.s));
     // Build slots
-    const list = g.weapons.buildList();
+    const list = w.buildList();
     const key = list.map((b) => `${b.id}${b.level}`).join(',');
     if (key !== this.buildKey) {
       const prev = this.buildKey;
@@ -108,6 +156,16 @@ class HUD {
     if (this.bannerT > 0) this.bannerT -= dt;
     if (this.bannerT <= 0 && this.bannerQueue.length) this._showBanner(this.bannerQueue.shift());
     if (this.promptT > 0) this.promptT -= dt;
+    if (this.calloutT > 0) { this.calloutT -= dt; if (this.calloutT <= 0) el.callout.className = ''; }
+    // Persistent callouts: RELOAD! while reloading / empty
+    if (reloading && this.calloutT <= 0 && w.overdrive <= 0) this.callout('RELOAD!', 'reload', 0.5);
+    // Cracks fade
+    for (let i = this.cracks.length - 1; i >= 0; i--) {
+      const c = this.cracks[i];
+      c.t -= dt;
+      c.el.style.opacity = String(Math.max(0, Math.min(1, c.t / 1.2)) * 0.9);
+      if (c.t <= 0) { c.el.remove(); this.cracks.splice(i, 1); }
+    }
   }
 
   slotHTML(b, isNew = false) {
@@ -134,6 +192,19 @@ class HUD {
     this.bannerT = kind === 'combo' ? 1.2 : 2.2;
   }
 
+  /** Big arcade callout in the middle of the screen: DANGER! RELOAD! STAGGER! GO GO GO! */
+  callout(text, kind = '', dur = 0.9) {
+    const el = this.el.callout;
+    if (this.calloutT > 0 && el.textContent === text) { this.calloutT = Math.max(this.calloutT, dur); return; }
+    // Danger outranks the reload nag
+    if (this.calloutT > 0.3 && kind === 'reload' && /danger/.test(el.className)) return;
+    el.className = '';
+    el.textContent = text;
+    void el.offsetWidth;
+    el.className = `on ${kind}`;
+    this.calloutT = dur;
+  }
+
   prompt(text, kind = '') {
     if (this.promptT > 0 && this.el.prompt.textContent === text) return;
     const el = this.el.prompt;
@@ -141,7 +212,7 @@ class HUD {
     el.textContent = text;
     void el.offsetWidth;
     el.className = `on ${kind}`;
-    this.promptT = 0.9;
+    this.promptT = 1.2;
   }
 
   hint(html, on = true) {
@@ -190,11 +261,57 @@ class HUD {
     this.el.bossbar.classList.add('hidden');
   }
 
-  hurt() {
+  /** Player took a hit: hull shake, red flash, cracked glass where it came from, damage number */
+  hurt(dmg, sx = 0.5, sy = 0.6, kind = '') {
     const h = this.el.hull;
     h.classList.remove('hit');
     void h.offsetWidth;
     h.classList.add('hit');
+    const r = this.el.redflash;
+    r.classList.remove('on');
+    void r.offsetWidth;
+    r.classList.add('on');
+    this.crack(sx, sy, Math.min(1.6, 0.7 + dmg * 0.05));
+    const n = document.createElement('div');
+    n.className = 'dmg-pop';
+    n.textContent = `-${Math.round(dmg)}`;
+    n.style.left = `${(sx * 100).toFixed(1)}%`;
+    n.style.top = `${(sy * 100).toFixed(1)}%`;
+    this.el.cracks.appendChild(n);
+    setTimeout(() => n.remove(), 900);
+    void kind;
+  }
+
+  crack(sx, sy, size = 1) {
+    if (this.cracks.length > 6) { const c = this.cracks.shift(); c.el.remove(); }
+    const el = document.createElement('div');
+    el.className = 'crack';
+    el.innerHTML = CRACK_SVG;
+    el.style.left = `${(sx * 100).toFixed(1)}%`;
+    el.style.top = `${(sy * 100).toFixed(1)}%`;
+    el.style.setProperty('--s', size.toFixed(2));
+    el.style.setProperty('--r', `${Math.round(Math.random() * 360)}deg`);
+    this.el.cracks.appendChild(el);
+    this.cracks.push({ el, t: 3.2 });
+  }
+
+  clearCracks() {
+    for (const c of this.cracks) c.el.remove();
+    this.cracks.length = 0;
+  }
+
+  healFlash() {
+    const h = this.el.hull;
+    h.classList.remove('heal');
+    void h.offsetWidth;
+    h.classList.add('heal');
+  }
+
+  ammoPulse() {
+    const a = this.el.ammo;
+    a.classList.remove('pulse');
+    void a.offsetWidth;
+    a.classList.add('pulse');
   }
 
   flash(a) {
@@ -207,6 +324,24 @@ class HUD {
   }
 
   // ------------------------------------------------------------------------------------------------------------------
+  showContinue(score, continues) {
+    $('c-score').textContent = score.toLocaleString('en-US');
+    $('c-note').textContent = continues ? `Continues used: ${continues} · continuing resets your combo multiplier` : 'FREE PLAY · continuing resets your combo multiplier';
+    $('s-continue').classList.add('open');
+  }
+
+  continueCount(n) {
+    const el = $('c-count');
+    el.textContent = String(n);
+    el.classList.remove('tick');
+    void el.offsetWidth;
+    el.classList.add('tick');
+  }
+
+  hideContinue() {
+    $('s-continue').classList.remove('open');
+  }
+
   showLevelUp(choices, build, { title = 'CHOOSE AN UPGRADE', kicker = `LEVEL ${build.level}`, crate = false, rerolls = 0 } = {}, onPick) {
     const s = $('s-levelup');
     s.classList.toggle('crate', crate);
@@ -248,15 +383,14 @@ class HUD {
     $('r-kicker').textContent = r.win ? 'SHIFT REPORT · UNIT 77 · APEX DOWN' : 'SHIFT REPORT · UNIT 77';
     $('r-title').textContent = r.title;
     $('r-sub').textContent = r.sub;
-    $('r-best').textContent = r.newBest ? 'NEW PERSONAL BEST' : r.best ? `BEST ${r.best.toLocaleString('en-US')}` : '';
+    $('r-best').textContent = r.newBest ? 'NEW HI-SCORE' : r.best ? `HI-SCORE ${r.best.toLocaleString('en-US')}` : '';
     const stats = [
-      [fmtTime(r.time), 'Survived'], [r.kills.toLocaleString('en-US'), 'Fossilized'], [String(r.level), 'Level'],
-      [String(r.maxCombo), 'Max combo'], [r.roadkill.toLocaleString('en-US'), 'Roadkill'], [r.bossTime ? fmtTime(r.bossTime) : r.boss ? 'YES' : '—', r.bossTime ? 'Rex kill time' : 'Apex down']
+      [fmtTime(r.time), 'Time'], [r.kills.toLocaleString('en-US'), 'Fossilized'], [String(r.headshots), 'Headshots'],
+      [String(r.maxCombo), 'Max combo'], [String(r.continues), 'Continues'], [r.bossTime ? fmtTime(r.bossTime) : r.boss ? 'YES' : '—', r.bossTime ? 'Rex kill time' : 'Apex down']
     ];
     $('r-stats').innerHTML = stats.map(([v, l]) => `<div><b>${v}</b><span>${l}</span></div>`).join('');
     $('r-build').innerHTML = r.build.map((b) => this.slotHTML(b)).join('');
     $('btn-endless').style.display = r.win && !r.endless ? '' : 'none';
-    // Count-up score
     const target = r.score;
     const el = $('r-score');
     const t0 = performance.now();
@@ -270,28 +404,24 @@ class HUD {
     el.textContent = '0';
   }
 
-  /** Reticle + lock-on brackets (screen px) */
-  reticle(x, y, firing, lock) {
+  /** Crosshair (screen px). state: null | 'enemy' | 'weak'; heat 0..1 opens the brackets */
+  reticle(x, y, firing, state, heat = 0) {
     const r = this.el.reticle;
     r.style.transform = `translate(${x}px, ${y}px)`;
+    this._style('heat', r, '--heat', heat.toFixed(2));
     r.classList.toggle('firing', firing);
-    const l = this.el.lock;
-    if (lock) {
-      l.style.transform = `translate(${lock.x}px, ${lock.y}px) scale(${lock.s})`;
-      l.classList.add('on');
-      l.classList.toggle('weak', !!lock.weak);
-      r.classList.toggle('weak', !!lock.weak);
-    } else {
-      l.classList.remove('on');
-      r.classList.remove('weak');
-    }
+    r.classList.toggle('enemy', state === 'enemy');
+    r.classList.toggle('weak', state === 'weak');
   }
 
-  hitmark() {
+  hitmark(weak = false, killed = false) {
     const r = this.el.reticle;
-    r.classList.add('hit');
+    r.classList.remove('hit', 'hitweak', 'kill');
+    void r.offsetWidth;
+    r.classList.add(weak ? 'hitweak' : 'hit');
+    if (killed) r.classList.add('kill');
     clearTimeout(this._hm);
-    this._hm = setTimeout(() => r.classList.remove('hit'), 70);
+    this._hm = setTimeout(() => r.classList.remove('hit', 'hitweak', 'kill'), 110);
   }
 }
 

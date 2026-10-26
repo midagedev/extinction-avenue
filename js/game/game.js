@@ -11,32 +11,37 @@ import { TRexBoss } from './boss.js';
 import { Director, BOSS_TIME } from './director.js';
 import { GameAudio } from './audio.js';
 import { GameCamera } from './camera.js';
+import { GunnerView } from './gunner.js';
 import { HUD, fmtTime } from './hud.js';
 import { Input } from './input.js';
 import { rollChoices } from './upgrades.js';
 import { iconSVG } from './icons.js';
 
 // js/game/game.js
-// EXTINCTION AVENUE — entry point and game state machine.
+// EXTINCTION AVENUE — entry point and game state machine. A first-person arcade rail shooter: Unit 77 drives itself
+// down the avenues and you are the REAR GUNNER, aiming the tail gun at the dinosaurs chasing the cab.
 //
-//   loading → title (attract: raptors circling the parked cab) → intro (camera swoop) → playing ⇄ levelup / paused
-//           → bossintro (GRIDLOCK reveal) → playing → results (victory / defeat) → [endless] / title
+//   loading → title (attract: PRESS START) → intro (camera swoop into the gunner's hatch) → playing ⇄ levelup / paused
+//           → bossintro (GRIDLOCK reveal) → playing → results (victory)
+//   playing → dead (wreck) → continue (10 s countdown; continuing is free but resets the combo multiplier) → playing
+//                                                   └ time out → results (game over)
 //
 // URL parameters (handy for testing and clips): ?quality=high|medium|low  ?webgl (force WebGL2)
-//   ?boss (start 12 s before GRIDLOCK with a mid-game build)  ?t=SECONDS (start later in the run)  ?nointro
-//   ?god (invulnerable, for testing)  ?test (no animation loop: drive the game from window.__game.step()/render(), used by the headless test)
+//   ?boss (start just before GRIDLOCK with a mid-game build)  ?t=SECONDS (start later in the run)  ?nointro
+//   ?god (invulnerable)  ?test (no animation loop: drive the game from window.__game.step()/render(), headless tests)
 
 const params = new URLSearchParams(location.search);
 const START_S = 120; // 5th Ave, a few blocks south of 57th St, heading downtown
+const CONTINUE_SECONDS = 10;
 const GAME_URL = location.protocol.startsWith('http') ? `${location.origin}${location.pathname}` : 'https://midagedev.github.io/extinction-avenue/';
 const TIPS = [
-  'Hit GRIDLOCK\'s glowing containment collar for weak-point crits.',
-  'Ram small dinosaurs at speed — they fly. Nitro makes rams hit harder.',
+  'Shoot dinosaurs while they wind up (red ring) to STAGGER them out of the attack.',
+  'Headshots deal 1.6x. GRIDLOCK\'s glowing collar deals 2.5x.',
+  'Shoot the floating supply drops — repair kits, overdrive, air strikes.',
+  'Empty belt? It reloads by itself. R or right click reloads early.',
   'Max a weapon and own its partner passive to EVOLVE it.',
-  'Stomp rings are huge. Hit NITRO to outrun them.',
-  'Red lanes mean something heavy is coming down them. Steer out.',
-  'Elites glow magenta and drop Cretagen supply crates.',
-  'Skyhammer charges with every kill. Save it for the swarm — or the Rex.'
+  'Shoot the wrecked cars the T. rex throws out of the air.',
+  'Skyhammer charges with every kill. SPACE calls it onto the crosshair.'
 ];
 
 const SETTINGS_KEY = 'ea-settings';
@@ -44,7 +49,7 @@ const BEST_KEY = 'ea-best';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
-const _proj = new THREE.Vector3();
+const _hit = {};
 
 function loadSettings() {
   const def = { shake: 1, numbers: true, autoFire: false, quality: 'high' };
@@ -57,7 +62,6 @@ function makeLivery() {
     c.width = 256; c.height = 128;
     const x = c.getContext('2d');
     x.fillStyle = '#ffbe14'; x.fillRect(0, 0, 256, 128);
-    // hazard band
     x.save(); x.beginPath(); x.rect(0, 96, 256, 32); x.clip();
     for (let i = -2; i < 20; i++) { x.fillStyle = i % 2 ? '#111317' : '#ffbe14'; x.beginPath(); x.moveTo(i * 18, 128); x.lineTo(i * 18 + 18, 96); x.lineTo(i * 18 + 36, 96); x.lineTo(i * 18 + 18, 128); x.fill(); }
     x.restore();
@@ -97,6 +101,9 @@ class Game {
     this.combo = 0;
     this.comboT = 0;
     this.maxCombo = 0;
+    this.assist = false;
+    this.aimRay = new THREE.Ray();
+    this.calloutT = {};
   }
 
   async init() {
@@ -133,6 +140,9 @@ class Game {
     this.route = new Route();
     this.walk = new WalkGrid(this.route);
     this.player = new Player(scene, this.assets, this.route, makeLivery());
+    // The camera carries the first-person view model, so it has to be part of the scene graph
+    scene.add(this.cam.camera);
+    this.gunner = new GunnerView(this.cam.camera, this.assets, this.player.propMaterial);
     this.vfx = new VFX(scene, this.assets);
     this.vfx.showNumbers = this.settings.numbers;
     this.audio = new GameAudio();
@@ -176,7 +186,7 @@ class Game {
   }
 
   _freshStats() {
-    return { kills: 0, damageDealt: 0, damageTaken: 0, roadkill: 0, byType: {}, elites: 0, bossKilled: false, bossKillTime: 0 };
+    return { kills: 0, damageDealt: 0, damageTaken: 0, headshots: 0, staggers: 0, shotDown: 0, byType: {}, elites: 0, bossKilled: false, bossKillTime: 0, continues: 0, hitsTaken: 0 };
   }
 
   setState(s) {
@@ -200,6 +210,8 @@ class Game {
     click('btn-endless', () => this.continueEndless());
     click('btn-share', () => this.share());
     click('lu-reroll', () => this.reroll());
+    click('btn-continue', () => this.doContinue());
+    click('btn-giveup', () => this.giveUp());
     for (const b of document.querySelectorAll('[data-close]')) b.addEventListener('click', () => { this.audio.play('ui'); b.closest('.screen').classList.remove('open'); });
     for (const b of document.querySelectorAll('.btn')) b.addEventListener('pointerenter', () => this.audio.play('ui_hover'));
     // Settings
@@ -224,7 +236,7 @@ class Game {
     window.addEventListener('pointerdown', unlock, { once: true });
     window.addEventListener('keydown', unlock, { once: true });
     const best = this._best();
-    if (best.score) document.getElementById('best').innerHTML = `Best shift: <b>${best.score.toLocaleString('en-US')}</b> · ${fmtTime(best.time)}${best.boss ? ' · Apex down' : ''}`;
+    if (best.score) document.getElementById('best').innerHTML = `HI-SCORE <b>${best.score.toLocaleString('en-US')}</b>${best.boss ? ' · APEX DOWN' : ''}`;
   }
 
   openSettings() {
@@ -234,16 +246,22 @@ class Game {
   onAction(a) {
     const st = this.state;
     if (a === 'mute') { this.audio.setEnabled(!this.audio.enabled); document.getElementById('set-sound').checked = this.audio.enabled; return; }
-    if (a === 'autofire') { this.settings.autoFire = !this.settings.autoFire; document.getElementById('set-autofire').checked = this.settings.autoFire; this.hud.prompt(this.settings.autoFire ? 'AUTO-FIRE ON' : 'AUTO-FIRE OFF', 'nitro'); return; }
+    if (a === 'autofire') { this.settings.autoFire = !this.settings.autoFire; document.getElementById('set-autofire').checked = this.settings.autoFire; this.hud.prompt(this.settings.autoFire ? 'AUTO-FIRE ON' : 'AUTO-FIRE OFF', ''); return; }
     if (st === 'levelup') {
       if (a.startsWith('pick')) { const i = +a.slice(4) - 1; if (i < this.choices.length) this.pick(i); }
       if (a === 'reroll') this.reroll();
       return;
     }
+    if (st === 'continue') {
+      if (a === 'confirm' || a === 'special' || a === 'fire') this.doContinue();
+      if (a === 'pause') this.giveUp();
+      return;
+    }
     if (a === 'pause' && (st === 'playing' || st === 'paused')) { this.togglePause(st === 'playing'); return; }
-    if (st === 'title' && a === 'confirm') { this.audio.unlock(); this.startRun(); return; }
+    if (st === 'title' && (a === 'confirm' || a === 'special')) { this.audio.unlock(); this.startRun(); return; }
+    if (st === 'playing' && (a === 'reroll' || a === 'reload')) { if (this.weapons.reload()) this.hud.callout('RELOAD!', 'reload'); return; }
     if (st === 'playing' && a === 'special') {
-      if (!this.weapons.triggerSpecial() && this.weapons.special.charge < 1) this.hud.prompt('SKYHAMMER CHARGING', 'nitro');
+      if (!this.weapons.triggerSpecial() && this.weapons.special.charge < 1) this.hud.prompt('SKYHAMMER CHARGING', '');
     }
   }
 
@@ -269,8 +287,9 @@ class Game {
     this.boss.reset();
     this.weapons.reset();
     this.player.reset(START_S);
-    this.player.stats.nitroRegen = 1;
     this.weapons.recomputeStats();
+    this.player.hp = this.player.maxHp;
+    this.weapons.ammo = this.weapons.magSize;
     this.score = 0;
     this.level = 1;
     this.xp = 0;
@@ -285,33 +304,39 @@ class Game {
     this.minibosses = [];
     this.hud.hideBoss();
     this.hud.bannerQueue.length = 0;
+    this.hud.clearCracks();
     this.victory = false;
+    this.victoryT = undefined;
     this.slow = null;
     this.timeScale = 1;
     this.hintStep = 0;
     this.hintT = 0;
+    this.cam.swing(0, 0, 10, 0);
+    this.cam.swingYaw = 0;
+    this.cam.swingPitch = 0;
+    this.enemies.attackGrace = 8;
+    this.calloutT = {};
   }
 
   setupTitle() {
     this._resetRun();
     this.director.reset(0);
-    this.player.update(0.016, { steer: 0, boost: false, brake: true }, 0);
+    this.player.update(0.016, 0);
     this.player.speed = 0;
-    this.cam.orbit(this.player, 15, 5.2, 0.12, 0.6, 46);
-    this.cam.orbitState.lookY = 1.2;
+    this.gunner.setVisible(false);
+    this.cam.orbit(this.player, 14, 4.2, 0.12, 2.6, 46);
+    this.cam.orbitState.lookY = 1.6;
     this.cam.snap = true;
-    // A pack prowling around the cab
+    // A pack lined up behind the parked cab, a brute and a Hornwall waiting further back, pterosaurs circling
     const p = this.player;
-    for (let i = 0; i < 26; i++) {
-      const a = Math.random() * Math.PI * 2, r = 9 + Math.random() * 16;
-      const x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r;
-      if (!this.walk.isBlocked(x, z)) this.enemies.spawn(i < 8 ? 'raptor' : 'compy', x, z, { heading: a + Math.PI });
-    }
-    this.enemies.spawn('brute', p.x + p.fx * 18, p.z + p.fz * 18, { heading: p.heading + Math.PI, elite: true });
-    this.enemies.spawn('trike', p.x - p.fx * 28 + 4, p.z - p.fz * 28, { heading: p.heading });
-    this.enemies.spawn('ankylo', p.x + p.fx * 40, p.z + p.fz * 40, { heading: p.heading });
-    this.enemies.spawn('ptero', p.x + 10, p.z + 6, {});
-    this.enemies.spawn('ptero', p.x - 12, p.z - 8, {});
+    for (let i = 0; i < 10; i++) this.director.spawnChaser(i < 4 ? 'raptor' : 'compy', 'behind');
+    for (const e of this.enemies.list) { e.s = this.route.wrap(p.s - 9 - Math.random() * 14); e.d = (Math.random() - 0.5) * 10; }
+    const b = this.director.spawnChaser('brute', 'behind', { elite: true });
+    if (b) { b.s = this.route.wrap(p.s - 20); b.slotGap = -20; }
+    const t = this.director.spawnChaser('trike', 'behind');
+    if (t) { t.s = this.route.wrap(p.s - 30); t.slotGap = -30; }
+    this.director.spawnChaser('ptero', 'sky');
+    this.director.spawnChaser('ptero', 'sky');
     this.audio.setMusic('title');
   }
 
@@ -319,51 +344,53 @@ class Game {
     this.audio.unlock();
     this._resetRun();
     this.setState('intro');
-    const start = params.has('boss') ? BOSS_TIME - 12 : Math.max(0, +(params.get('t') || 0));
+    const start = params.has('boss') ? BOSS_TIME - 6 : Math.max(0, +(params.get('t') || 0));
     this.director.reset(start);
     if (start > 0) this._grantBuild(start);
     this.audio.setMusic('run');
     const p = this.player;
-    p.update(0.016, { steer: 0, boost: false, brake: false }, 0);
+    p.update(0.016, 0);
+    this.gunner.setVisible(true);
     if (params.has('nointro') || this.testMode) {
+      this.cam.setMode('gunner', true);
       this._beginPlay();
-      this.cam.setMode('chase', true);
       return;
     }
     document.body.classList.add('cine');
-    p.autoDrive = true;
-    const air = new THREE.Vector3(), side = new THREE.Vector3(), look = new THREE.Vector3(), look2 = new THREE.Vector3(), chase = new THREE.Vector3(), chaseLook = new THREE.Vector3();
+    const air = new THREE.Vector3(), side = new THREE.Vector3(), look = new THREE.Vector3(), look2 = new THREE.Vector3(), behind = new THREE.Vector3(), behindLook = new THREE.Vector3();
+    this.gunner.setVisible(false);
     this.cam.playCinematic([
-      { t: 0, pos: () => air.set(p.x + p.fx * 90 - p.rx * 30, 85, p.z + p.fz * 90 - p.rz * 30), look: () => look.set(p.x, 0, p.z), fov: 55 },
-      { t: 1.6, pos: () => side.set(p.x + p.fx * 9 + Math.cos(p.heading) * 6, 1.4, p.z + p.fz * 9 - Math.sin(p.heading) * 6), look: () => look2.set(p.x, 1, p.z), fov: 44 },
-      { t: 3.0, pos: () => chase.set(p.x - p.fx * 13, 7.6, p.z - p.fz * 13), look: () => chaseLook.set(p.x + p.fx * 16, 0.6, p.z + p.fz * 16), fov: 60 }
+      { t: 0, pos: () => air.set(p.x - p.fx * 70 - p.rx * 26, 60, p.z - p.fz * 70 - p.rz * 26), look: () => look.set(p.x, 0, p.z), fov: 55 },
+      { t: 1.5, pos: () => side.set(p.x - p.fx * 8 + p.rx * 6, 1.6, p.z - p.fz * 8 + p.rz * 6), look: () => look2.set(p.x, 1.3, p.z), fov: 46 },
+      { t: 2.7, pos: () => behind.set(p.x + p.fx * 1.5, 3.2, p.z + p.fz * 1.5), look: () => behindLook.set(p.x - p.fx * 20, 1.2, p.z - p.fz * 20), fov: 60 }
     ], () => {
       document.body.classList.remove('cine');
-      p.autoDrive = false;
-      this.cam.setMode('chase');
+      this.gunner.setVisible(true);
+      this.cam.setMode('gunner');
       this._beginPlay();
     });
-    this.hud.banner('MIDTOWN · 7:14 PM', 'Unit 77 — contain the outbreak', 'wave', true);
+    this.hud.banner('MIDTOWN · 7:14 PM', 'Unit 77 — you\'re on the tail gun', 'wave', true);
   }
 
   _beginPlay() {
     this.setState('playing');
-    this.hud.banner('GO!', '', 'good', true);
+    this.hud.callout('GO!', 'good');
     this.audio.play('bell');
     this.hintStep = 0;
-    this.hintT = 1.5;
+    this.hintT = 1.2;
   }
 
   /** Debug/test: a plausible build for starting mid-run */
   _grantBuild(t) {
-    const picks = [['weapon', 'gatling'], ['weapon', 'gatling'], ['weapon', 'missiles'], ['weapon', 'saws'], ['passive', 'hollow'], ['weapon', 'cannon'], ['weapon', 'tesla'],
-      ['weapon', 'gatling'], ['passive', 'loader'], ['weapon', 'missiles'], ['weapon', 'cannon'], ['passive', 'chassis'], ['weapon', 'saws'], ['weapon', 'gatling'], ['weapon', 'gatling'],
-      ['passive', 'magnet'], ['weapon', 'tesla'], ['weapon', 'missiles'], ['weapon', 'cannon'], ['weapon', 'cannon'], ['evolution', 'storm_gatling']];
-    const n = Math.min(picks.length, Math.round(t / 22));
+    const picks = [['weapon', 'cannon'], ['weapon', 'gatling'], ['passive', 'hollow'], ['weapon', 'cannon'], ['weapon', 'missiles'], ['passive', 'turbo'],
+      ['weapon', 'cannon'], ['weapon', 'gatling'], ['passive', 'hollow'], ['weapon', 'cannon'], ['weapon', 'tesla'], ['passive', 'chassis'], ['weapon', 'missiles'],
+      ['passive', 'hollow'], ['weapon', 'gatling'], ['passive', 'ram'], ['evolution', 'railgun'], ['weapon', 'tesla']];
+    const n = Math.min(picks.length, Math.round(t / 24));
     for (let i = 0; i < n; i++) this.weapons.apply({ kind: picks[i][0], id: picks[i][1] });
     this.level = n + 1;
     this.xpNeed = this._need(this.level);
     this.player.hp = this.player.maxHp;
+    this.weapons.ammo = this.weapons.magSize;
     this.weapons.special.charge = 1;
   }
 
@@ -375,7 +402,8 @@ class Game {
     this.player.hp = this.player.maxHp;
     this.audio.setMusic('run');
     this.setState('playing');
-    this.cam.setMode('chase');
+    this.gunner.setVisible(true);
+    this.cam.setMode('gunner');
     this.hud.banner('ENDLESS', 'Manhattan never sleeps', 'wave', true);
   }
 
@@ -402,19 +430,23 @@ class Game {
     const simulating = st === 'playing' || st === 'intro' || st === 'bossintro' || st === 'title' || st === 'dead';
     if (simulating) this.simulate(sim, dt);
     else this.vfx.update(0); // keeps telegraph batches stable while paused
+    if (st === 'continue') this._continueTick(dt);
     this.cam.update(dt, this.player);
-    this.world.post.uniforms.hurt.value = Math.max(this.player.hurtFlash * 0.5, this.player.alive && this.player.hp / this.player.maxHp < 0.25 ? 0.3 + 0.2 * Math.sin(this.realTime * 6) : 0);
-    this.world.post.uniforms.aberration.value *= Math.max(0, 1 - dt * 4);
-    this.world.post.uniforms.desat.value += ((st === 'levelup' || st === 'paused' ? 0.8 : this.timeScale < 0.6 ? 0.45 : 0) - this.world.post.uniforms.desat.value) * Math.min(1, dt * 6);
-    this.world.post.uniforms.flash.value *= Math.max(0, 1 - dt * 3);
-    this.world.post.uniforms.danger.value = this.boss.active ? 0.35 : 0;
+    this.player.tailGun.visible = this.cam.mode !== 'gunner';
+    const u = this.world.post.uniforms;
+    const p = this.player;
+    u.hurt.value = Math.max(p.hurtFlash * 0.65, p.alive && p.hp / p.maxHp < 0.25 ? 0.3 + 0.2 * Math.sin(this.realTime * 6) : 0);
+    u.aberration.value *= Math.max(0, 1 - dt * 4);
+    u.desat.value += ((st === 'levelup' || st === 'paused' || st === 'continue' ? 0.8 : this.timeScale < 0.6 ? 0.45 : 0) - u.desat.value) * Math.min(1, dt * 6);
+    u.flash.value *= Math.max(0, 1 - dt * 3);
+    u.danger.value = this.boss.active ? 0.3 : 0;
     const c = this.cam.camera;
     c.getWorldDirection(_v);
     this.audio.setListener(c.position.x, c.position.z, _v.x, _v.z);
-    this.audio.updateLoops(this.player.speed, this.player.boosting, this.weapons.flaming, simulating && st !== 'title' && this.player.alive);
+    this.audio.updateLoops(p.speed, false, this.weapons.flaming, simulating && st !== 'title' && p.alive);
     if (st !== 'loading' && st !== 'title') this.hud.update(dt);
     // Queued level-ups open as soon as the action allows
-    if (this.state === 'playing' && (this.pendingLevels > 0 || this.pendingCrates > 0) && this.player.alive && this.cam.mode !== 'cinematic') this.openLevelUp();
+    if (this.state === 'playing' && (this.pendingLevels > 0 || this.pendingCrates > 0) && p.alive && this.cam.mode === 'gunner' && this.enemies.attackers === 0) this.openLevelUp();
     this._hints(dt);
   }
 
@@ -424,24 +456,13 @@ class Game {
     this.elapsed += dt;
     this.vfx.beginTelegraphs();
     this.vfx.threats.length = 0;
-    const playing = st === 'playing' || st === 'bossintro' || st === 'dead';
     if (st === 'playing') this.director.update(dt);
-    // Controls
-    const rev = this.cam.reverseAmt > 0.5 ? -1 : 1;
-    const ctl = st === 'playing'
-      ? { steer: this.input.steer * rev, boost: this.input.boost, brake: this.input.brake }
-      : { steer: 0, boost: false, brake: false };
-    if (st === 'playing' && ctl.boost && !p.wasBoosting && p.nitro > 0.1) this.audio.play('nitro', { volume: 0.6 });
-    p.wasBoosting = p.boosting;
-    const cruise = st === 'title' ? 0 : this.director.cruise();
-    p.update(dt, ctl, cruise);
-    if (p.stats.nitroRegen > 1 && !p.boosting) p.nitro = Math.min(1, p.nitro + dt * 0.075 * (p.stats.nitroRegen - 1));
-    if (p.boosting) this.vfx.speedLines = Math.min(1, this.vfx.speedLines + dt * 4); else this.vfx.speedLines = Math.max(0, this.vfx.speedLines - dt * 3);
-    if (p.edgeScrape > 4) { this.vfx.sparks(p.x + (p.d > 0 ? -1 : 1) * -1, 0.4, p.z, 3, 6); }
+    p.update(dt, st === 'title' ? 0 : st === 'dead' ? 0 : this.director.cruise());
     // Aim + weapons
+    this._updateAim(realDt);
     if (st === 'playing' && p.alive) {
-      this._updateAim();
-      this.weapons.update(dt, { fire: this.input.fire && st === 'playing', autoFire: (this.settings.autoFire || this.input.touchMode) && st === 'playing' });
+      const touchFire = this.input.touchMode && this.input.touchAim.id !== null;
+      this.weapons.update(dt, { fire: this.input.fire || touchFire, autoFire: this.settings.autoFire });
     } else if (st === 'title') {
       this.weapons.sawBatch.begin(); this.weapons.sawBatch.end();
     }
@@ -449,21 +470,21 @@ class Game {
     this.enemies.update(dt);
     this.boss.update(dt);
     this.pickups.update(dt);
+    // Pose every rig now (cheap CPU work): hit spheres and the boss weak points need it even when nothing renders
+    this.enemies.render(this.elapsed);
     // Combo decay
     if (this.comboT > 0) { this.comboT -= dt; if (this.comboT <= 0) this.combo = 0; }
     this.vfx.endTelegraphs();
     this.vfx.update(dt);
-    // Mini-boss bars
     if (this.minibosses.length && !this.boss.active) {
       const mb = this.minibosses[0];
       if (!mb.alive || mb.hp <= 0) this.minibosses.shift();
     }
-    // Dead: after the slow-mo wreck, the report
     if (st === 'dead') {
       this.deadT -= realDt;
       if (Math.random() < 0.3) this.vfx.smoke.spawn(p.x, 1, p.z, (Math.random() - 0.5), 3, (Math.random() - 0.5), 1.6, 0.8, 3, 0.08, 0.08, 0.08, { drag: 1 });
       if (Math.random() < 0.2) this.vfx.glow.spawn(p.x + (Math.random() - 0.5) * 2, 0.8, p.z + (Math.random() - 0.5) * 2, 0, 3, 0, 0.5, 0.8, 1.4, 7, 2.2, 0.4, { r1: 1, g1: 0.1, b1: 0 });
-      if (this.deadT <= 0) this.endRun(false);
+      if (this.deadT <= 0) this.openContinue();
     }
     if (this.victoryT !== undefined && this.victoryT > 0) {
       this.victoryT -= realDt;
@@ -472,142 +493,184 @@ class Game {
   }
 
   renderFrame() {
-    this.enemies.render(this.elapsed);
+    if (this.state !== 'playing' && this.state !== 'title' && this.state !== 'intro' && this.state !== 'bossintro' && this.state !== 'dead') this.enemies.render(this.elapsed);
     this.world.update(this.cam.camera, this.elapsed);
     this.world.render();
-    this.vfx.drawOverlay(this.cam.camera);
+    this.vfx.drawOverlay(this.cam.camera, this.enemies.dangers);
   }
 
   // ------------------------------------------------------------------------------------------------------------------
-  _updateAim() {
-    const cam = this.cam.camera;
+  /** Crosshair → ray. Whatever is under it is the target; the gun model swivels toward it. */
+  _updateAim(realDt = 0.016) {
     const W = window.innerWidth, H = window.innerHeight;
     const inp = this.input;
     const aim = this.weapons.aim;
-    const p = this.player;
-    const touchAuto = inp.touchMode && inp.touchAim.id === null;
     const mx = inp.mouse.x, my = inp.mouse.y;
-    let best = null, bestD = (inp.touchMode ? 110 : 64) ** 2, weak = false, bx = 0, by = 0;
-    const consider = (e, x, y, z, isWeak, bonus = 1) => {
-      _proj.set(x, y, z).project(cam);
-      if (_proj.z > 1 || _proj.z < -1) return;
-      const sx = (_proj.x * 0.5 + 0.5) * W, sy = (-_proj.y * 0.5 + 0.5) * H;
-      const d = ((sx - mx) ** 2 + (sy - my) ** 2) / bonus;
-      if (d < bestD) { bestD = d; best = e; weak = isWeak; bx = sx; by = sy; aim.x = x; aim.y = y; aim.z = z; }
-    };
-    if (!touchAuto) {
-      const be = this.boss.e;
-      if (be && this.boss.active && be.state !== 'dying') consider(be, this.boss.collar.x, this.boss.collar.y, this.boss.collar.z, true, 2.2);
-      for (const e of this.enemies.list) {
-        if (e.state === 'dying' || e.state === 'launched' || e.ghost) continue;
-        const dx = e.x - p.x, dz = e.z - p.z;
-        if (dx * dx + dz * dz > 130 * 130) continue;
-        const h = e.ctrl ? 4.5 * e.scale : e.sp.height * e.scale * 0.55;
-        consider(e, e.x, e.y + h, e.z, false);
-      }
-    } else {
-      // Touch / auto-fire with no finger aiming: nearest threat ahead, the boss collar when it's up
-      const be = this.boss.e;
-      if (be && this.boss.active && be.state !== 'dying') { best = be; weak = true; aim.x = this.boss.collar.x; aim.y = this.boss.collar.y; aim.z = this.boss.collar.z; }
-      else {
-        const t = this.enemies.nearest(p.x + p.fx * 12, p.z + p.fz * 12, 55);
-        if (t) { best = t; aim.x = t.x; aim.y = t.y + t.sp.height * t.scale * 0.55; aim.z = t.z; }
-      }
-      if (best) {
-        _proj.set(aim.x, aim.y, aim.z).project(cam);
-        bx = (_proj.x * 0.5 + 0.5) * W; by = (-_proj.y * 0.5 + 0.5) * H;
-      }
+    const ndcX = (mx / W) * 2 - 1, ndcY = -(my / H) * 2 + 1;
+    const ray = this.cam.ray(ndcX, ndcY);
+    this.aimRay.copy(ray);
+    this.cam.sway.x += (ndcX - this.cam.sway.x) * Math.min(1, realDt * 4);
+    this.cam.sway.y += (ndcY - this.cam.sway.y) * Math.min(1, realDt * 4);
+    const h = this.enemies.raycast(ray, 220, _hit);
+    let t = 60;
+    if (h) t = h.t;
+    else if (ray.direction.y < -0.01) t = Math.min(160, (ray.origin.y - 0.05) / -ray.direction.y);
+    _v2.copy(ray.direction).multiplyScalar(t).add(ray.origin);
+    aim.x = _v2.x; aim.y = _v2.y; aim.z = _v2.z;
+    aim.target = h ? h.e : null;
+    aim.weak = h ? h.weak > 1 : false;
+    // Skyhammer lands where the crosshair meets the street
+    this.cam.aimPoint(ndcX, ndcY, 0.3, _v);
+    aim.gx = _v.x; aim.gz = _v.z;
+    if (this.gunner.visible) this.gunner.update(realDt, _v2, this.weapons.reloadT > 0 ? 1 - this.weapons.reloadT / this.weapons.reloadDur : 0);
+    if (this.state === 'playing' || this.state === 'bossintro' || this.state === 'intro') {
+      const touchFire = inp.touchMode && inp.touchAim.id !== null;
+      this.hud.reticle(mx, my, this.weapons.firing || (touchFire && this.weapons.reloadT <= 0), h ? (h.weak > 1 ? 'weak' : 'enemy') : null, this.weapons.heat);
     }
-    if (best) {
-      // Lead moving targets for the cannon's travel time
-      if (!weak) {
-        const d = Math.hypot(aim.x - p.x, aim.z - p.z);
-        aim.x += best.vx * d / 150;
-        aim.z += best.vz * d / 150;
-      }
-    } else {
-      const ndcX = (mx / W) * 2 - 1, ndcY = -(my / H) * 2 + 1;
-      this.cam.aimPoint(ndcX, ndcY, 0.9, _v2);
-      const dx = _v2.x - p.x, dz = _v2.z - p.z;
-      const d = Math.hypot(dx, dz);
-      if (d > 140) { _v2.x = p.x + dx / d * 140; _v2.z = p.z + dz / d * 140; }
-      aim.x = _v2.x; aim.y = 0.9; aim.z = _v2.z;
-    }
-    aim.target = best;
-    aim.weak = weak;
-    const s = best ? Math.max(0.6, Math.min(2.4, (best.radius * 3) / Math.max(4, Math.hypot(best.x - cam.position.x, best.z - cam.position.z)) * 6)) : 1;
-    this.hud.reticle(mx, my, inp.fire, best ? { x: bx, y: by, s: weak ? 1.2 : s, weak } : null);
   }
 
   // ------------------------------------------------------------------------------------------------------------------
   // Hooks called by the systems
-  hurtPlayer(dmg, x, z, kind) {
+  hurtPlayer(dmg, x, z, kind, src = null) {
     const p = this.player;
     if (this.state !== 'playing' || !p.alive || params.has('god')) return 0;
     const dealt = p.hurt(dmg);
     if (!dealt) return 0;
     this.stats.damageTaken += dealt;
-    this.cam.addTrauma(Math.min(0.55, 0.18 + dealt * 0.012));
-    this.world.post.uniforms.aberration.value = Math.min(1, 0.3 + dealt * 0.03);
-    this.vfx.number(p.x, 2.4, p.z, `-${Math.round(dealt)}`, 2);
-    this.vfx.sparks(p.x + (x - p.x) * 0.3, 1, p.z + (z - p.z) * 0.3, 10, 9);
-    this.audio.play('hurt', { volume: 0.8, pitch: 0.9 + Math.random() * 0.2 });
-    this.hud.hurt();
-    if (this.combo >= 10) this.combo = Math.floor(this.combo / 2);
+    this.stats.hitsTaken++;
+    this.cam.addTrauma(Math.min(0.75, 0.3 + dealt * 0.02));
+    this.world.post.uniforms.aberration.value = Math.min(1, 0.35 + dealt * 0.04);
+    this.audio.play('hurt', { volume: 0.9, pitch: 0.9 + Math.random() * 0.2 });
+    // Where the hit came from, on screen (for the cracked-glass splat)
+    let sx = 0.5, sy = 0.62;
+    if (src) {
+      _v.set(src.hx ?? x, src.hy ?? 1.5, src.hz ?? z).project(this.cam.camera);
+      if (_v.z < 1) { sx = THREE.MathUtils.clamp(_v.x * 0.5 + 0.5, 0.12, 0.88); sy = THREE.MathUtils.clamp(-_v.y * 0.5 + 0.5, 0.15, 0.8); }
+    }
+    this.hud.hurt(dealt, sx, sy, kind);
+    if (this.combo >= 3) this.hud.callout('COMBO BROKEN', 'bad');
+    this.combo = 0;
+    this.comboT = 0;
     if (!p.alive) this.onPlayerDeath();
-    void kind;
     return dealt;
   }
 
-  onRam(e, speed) {
-    this.audio.play('ram', { x: e.x, z: e.z, volume: Math.min(1, 0.3 + speed * 0.03) });
-    this.vfx.sparks(e.x, 0.8, e.z, 5, 8);
-    if (e.sp.mass > 2) { this.cam.addTrauma(0.2); this.hitStop(0.04); }
-    else this.cam.addTrauma(0.05);
+  onTelegraph(e) {
+    // DANGER! callout (rate-limited); the overlay draws the red ring around the attacker
+    if (this.realTime - (this.calloutT.danger || -9) > 3) {
+      this.calloutT.danger = this.realTime;
+      this.hud.callout('DANGER!', 'danger');
+      this.audio.play('ui', { pitch: 0.5, volume: 0.6 });
+    }
+    void e;
   }
 
-  onCannonHit(e, weak) {
-    this.hud.hitmark();
-    if (weak) this.vfx.sparks(this.boss.collar.x, this.boss.collar.y, this.boss.collar.z, 4, 6, 1.5, 5, 7);
+  onStagger(e) {
+    this.stats.staggers++;
+    const big = e.boss || e.miniboss || e.sp.mass > 3;
+    this.addScore((big ? 2000 : 200) * this.comboMult());
+    this.vfx.number(e.hx ?? e.x, (e.hy ?? 2) + 0.8, e.hz ?? e.z, big ? 'STAGGER! +2000' : 'STAGGER', 4);
+    if (big) { this.hud.callout('STAGGER!', 'good'); this.flash(0.12); }
+    this.audio.play('combo', { pitch: 1.4, volume: 0.7 });
   }
+
+  onGunHit(e, h, killed, x, y, z) {
+    this.hud.hitmark(h.weak > 1, killed);
+    if (h.head && killed && !e.boss) {
+      this.stats.headshots++;
+      this.vfx.number(x, y + 0.5, z, 'HEADSHOT', 1);
+    }
+    if (e.boss && h.weak >= 2.5 && this.realTime - (this.calloutT.collar || -9) > 6) {
+      this.calloutT.collar = this.realTime;
+      this.hud.prompt('WEAK POINT!', 'good');
+    }
+  }
+
+  onEmpty() {
+    this.hud.callout('RELOAD!', 'reload');
+  }
+
+  onReloaded() {
+    this.hud.ammoPulse();
+  }
+
+  onWindowHit(e) {
+    this.hud.crack(0.5 + (Math.random() - 0.5) * 0.3, 0.4 + (Math.random() - 0.5) * 0.2, 1.4);
+    void e;
+  }
+
+  onPickupShot(it) {
+    this.hud.callout(it.type === 'repair' ? 'REPAIR!' : it.type === 'overdrive' ? 'OVERDRIVE!' : it.type === 'airstrike' ? 'SKYHAMMER!' : 'SUPPLY!', 'good');
+  }
+
+  onStorefront(x, z, sign, r) {
+    // Glass bursts out of the shop front onto the sidewalk
+    for (let k = 0; k < 24; k++) {
+      const a = (Math.random() - 0.5) * 2;
+      this.vfx.streak.spawn(x + r.hx * a * 2, 1 + Math.random() * 3, z + r.hz * a * 2, -r.rx * sign * (4 + Math.random() * 6) + r.hx * a * 3, 1 + Math.random() * 4, -r.rz * sign * (4 + Math.random() * 6) + r.hz * a * 3,
+        0.6 + Math.random() * 0.5, 0.12, 0.04, 2.4, 3.2, 3.6, { grav: 14, drag: 0.8, stretch: 0.02, bounce: 0.3 });
+    }
+    this.vfx.dust(x, z, 1.4, 5);
+    this.audio.play('shatter_big', { x, z, volume: 0.9, pitch: 1.6 });
+    this.cam.addTrauma(0.12);
+  }
+
+  onZoneEnter(b) {
+    this.hud.callout('STOP! COMBAT ZONE', 'danger');
+    void b;
+  }
+
+  onZoneClear(t) {
+    const bonus = Math.max(2000, Math.round(12000 - t * 150));
+    this.addScore(bonus);
+    this.hud.banner('ZONE CLEAR', `+${bonus.toLocaleString('en-US')} · Moving out!`, 'good', true);
+    this.hud.callout('GO! GO! GO!', 'good');
+    this.audio.play('bell');
+    this.pickups.spawnFloating('repair', -12);
+  }
+
+  onRam() { /* kept for compatibility (no ramming in the rail shooter) */ }
+
+  onCannonHit() { this.hud.hitmark(false, false); }
 
   onEnemyKilled(e, cause) {
     if (e.ghost) return;
     const st = this.stats;
     st.kills++;
     st.byType[e.type] = (st.byType[e.type] || 0) + 1;
-    if (cause === 'ram') st.roadkill++;
     if (e.elite) st.elites++;
     if (e.boss) { this.onBossKilled(e); return; }
     this.combo++;
-    this.comboT = 2.5;
+    this.comboT = 3.2;
     if (this.combo > this.maxCombo) this.maxCombo = this.combo;
-    const callouts = { 50: 'RAMPAGE', 100: 'MASS EXTINCTION', 200: 'METEOR STRIKE', 400: 'K-PG BOUNDARY' };
-    if (callouts[this.combo]) { this.hud.banner(callouts[this.combo], `${this.combo} kill combo · x${this.comboMult()}`, 'combo', true); this.audio.play('combo', { pitch: 1 + this.combo / 400 }); }
-    const sc = e.sp.score * (e.elite ? 5 : 1) * (e.miniboss ? 10 : 1);
-    this.addScore(sc * this.comboMult());
-    this.weapons.addCharge((e.elite ? 0.12 : 0.0045) * (e.sp.mass > 3 ? 3 : 1));
-    if (e.sp.mass * e.scale > 3) this.hitStop(e.elite ? 0.08 : 0.035);
+    const callouts = { 10: 'NICE!', 20: 'GREAT!', 30: 'EXCELLENT!', 50: 'RAMPAGE!', 80: 'MASS EXTINCTION!', 120: 'K-PG BOUNDARY!' };
+    if (callouts[this.combo]) { this.hud.callout(callouts[this.combo], 'combo'); this.audio.play('combo', { pitch: 1 + this.combo / 200 }); }
+    const sc = e.sp.score * (e.elite ? 4 : 1) * (e.miniboss ? 5 : 1);
+    const pts = Math.round(sc * this.comboMult());
+    this.addScore(pts);
+    this.vfx.number(e.hx ?? e.x, (e.hy ?? 1.5) + 1.1, e.hz ?? e.z, `+${pts}`, 3);
+    this.weapons.addCharge((e.elite ? 0.12 : 0.012) * (e.sp.mass > 3 ? 3 : 1));
+    if (e.sp.mass * e.scale > 3) this.hitStop(e.elite ? 0.08 : 0.045);
+    else this.hitStop(0.015);
     if (e.miniboss) {
       this.hud.banner('MINI-BOSS DOWN', e.name, 'good', true);
       this.flash(0.25);
       this.cam.addTrauma(0.5);
     }
+    void cause;
   }
 
   dropLoot(e) {
-    const xp = e.sp.xp * (e.elite ? 5 : 1) * (e.miniboss ? 4 : 1);
+    const xp = e.sp.xp * (e.elite ? 4 : 1) * (e.miniboss ? 4 : 1);
     if (xp > 0) {
-      const n = xp >= 40 ? 4 : xp >= 15 ? 2 : 1;
+      const n = xp >= 40 ? 4 : xp >= 12 ? 2 : 1;
       for (let i = 0; i < n; i++) this.pickups.gem(e.x, e.z, xp / n);
     }
     if (e.dropCrate) this.pickups.spawnItem('crate', e.x, e.z);
-    const big = e.sp.mass > 3 ? 4 : 1;
+    const big = e.sp.mass > 3;
     const r = Math.random();
-    if (r < 0.007 * big) this.pickups.spawnItem('repair', e.x, e.z);
-    else if (r < 0.012 * big) this.pickups.spawnItem('nitro', e.x, e.z);
-    else if (r < 0.0145 * big) this.pickups.spawnItem('vacuum', e.x, e.z);
-    else if (r < 0.0165 * big) this.pickups.spawnItem('airstrike', e.x, e.z);
+    if (r < (big ? 0.12 : 0.015)) this.pickups.spawnItem('repair', e.x, e.z);
+    else if (r < (big ? 0.16 : 0.02)) this.pickups.spawnItem('overdrive', e.x, e.z);
   }
 
   collectItem(type, x, z) {
@@ -618,47 +681,47 @@ class Game {
         this.audio.play('crate');
         this.hud.banner('SUPPLY DROP', 'Cretagen crate secured', 'good');
         break;
-      case 'repair':
-        p.heal(p.maxHp * 0.35);
-        this.vfx.number(p.x, 2.4, p.z, `+${Math.round(p.maxHp * 0.35)} HULL`, 3);
+      case 'repair': {
+        const amt = 30;
+        p.heal(amt);
+        this.hud.prompt(`+${amt} HULL`, 'good');
         this.audio.play('heal');
+        this.hud.healFlash();
         break;
-      case 'nitro':
-        p.nitro = 1;
-        this.vfx.number(p.x, 2.4, p.z, 'NITRO FULL', 4);
+      }
+      case 'overdrive':
+        this.weapons.overdrive = 8;
+        this.weapons.ammo = this.weapons.magSize;
+        this.weapons.reloadT = 0;
+        this.hud.banner('OVERDRIVE', 'Bottomless belt · +50% fire rate', 'special');
         this.audio.play('nitro');
-        break;
-      case 'vacuum':
-        this.pickups.vacuum();
-        this.vfx.number(p.x, 2.4, p.z, 'GENE MAGNET', 4);
-        this.audio.play('levelup');
         break;
       case 'airstrike':
         this.weapons.special.charge = 1;
-        this.hud.banner('SKYHAMMER READY', 'Press SPACE to call it in', 'special');
+        this.hud.banner('SKYHAMMER READY', 'Press SPACE to call it onto the crosshair', 'special');
         this.audio.play('crate');
         break;
     }
-    this.vfx.shockwave(x, z, 4, 1, 3, 3, 0.4);
+    void x; void z;
   }
 
   addScore(v, label = null) {
     this.score += Math.round(v);
-    if (label) this.vfx.number(this.player.x, 3, this.player.z, `+${Math.round(v)} ${label}`, 4);
+    if (label) this.hud.prompt(`+${Math.round(v)} ${label}`, 'good');
   }
 
   comboMult() {
     const c = this.combo;
-    return c >= 200 ? 8 : c >= 100 ? 5 : c >= 50 ? 4 : c >= 25 ? 3 : c >= 10 ? 2 : 1;
+    return c >= 60 ? 8 : c >= 40 ? 6 : c >= 25 ? 5 : c >= 15 ? 4 : c >= 8 ? 3 : c >= 3 ? 2 : 1;
   }
 
   _need(level) {
-    return Math.round(10 + level * 9 + level * level * 1.5);
+    return Math.round(12 + level * 7 + level * level * 0.9);
   }
 
   addXP(v) {
     if (this.state === 'title') return;
-    this.xp += v;
+    this.xp += v * (this.weapons.xpMult || 1);
     while (this.xp >= this.xpNeed) {
       this.xp -= this.xpNeed;
       this.level++;
@@ -691,6 +754,7 @@ class Game {
     this.choices = rollChoices({ weapons: this.weapons.weapons, passives: this.weapons.passives, evolved: this.weapons.evolved, level: this.level }, crate ? 4 : 3);
     this.choiceCrate = crate;
     this.setState('levelup');
+    this.input.mouse.down = false;
     this.audio.play(this.choices[0]?.kind === 'evolution' ? 'evolve' : 'levelup');
     this.audio.setMuffled(true);
     this._showChoices();
@@ -730,12 +794,14 @@ class Game {
     this.hud.hideLevelUp();
     this.audio.setMuffled(false);
     this.setState('playing');
-    // A breath of slow motion before the action resumes
-    this.timeScale = 0.2;
+    // A breath of slow motion and a moment's grace before the action resumes
+    this.timeScale = 0.25;
+    this.enemies.attackGrace = Math.max(this.enemies.attackGrace, 0.8);
   }
 
   // ------------------------------------------------------------------------------------------------------------------
   startBoss() {
+    this.bossStartT = this.director.time;
     this.boss.start();
   }
 
@@ -743,25 +809,26 @@ class Game {
     this.setState('bossintro');
     this.vfx.showNumbers = false;
     document.body.classList.add('cine');
+    this.gunner.setVisible(false);
     this.slowmo(0.3, 3.4);
-    for (const mb of this.minibosses) void mb;
     const p = this.player;
     const boss = this.boss;
-    const a = this.cam.pos.clone(), al = this.cam.look.clone();
+    const a = this.cam.camera.position.clone(), al = this.cam.look.clone();
     const k1 = new THREE.Vector3(), k2 = new THREE.Vector3(), head = new THREE.Vector3(), rp = new THREE.Vector3(), rl = new THREE.Vector3();
     const fwd = () => [Math.sin(e.heading), Math.cos(e.heading)];
     this.cam.playCinematic([
-      { t: 0, pos: a, look: al, fov: 58 },
+      { t: 0, pos: a, look: al, fov: 60 },
       { t: 0.5, pos: () => { const [fx, fz] = fwd(); return k1.set(e.rx + fx * 26 + fz * 9, 3.2, e.rz + fz * 26 - fx * 9); }, look: () => head.copy(boss.headPos).setY(boss.headPos.y * 0.75), fov: 40 },
       { t: 2.9, pos: () => { const [fx, fz] = fwd(); return k2.set(e.rx + fx * 20 + fz * 6, 2.6, e.rz + fz * 20 - fx * 6); }, look: () => head.copy(boss.headPos).setY(boss.headPos.y * 0.8), fov: 33 },
-      { t: 3.6, pos: () => rp.set(p.x + p.fx * 10.5, 4.6, p.z + p.fz * 10.5), look: () => rl.set(p.x - p.fx * 16, 2.6, p.z - p.fz * 16), fov: 56 }
+      { t: 3.6, pos: () => rp.set(p.x + p.fx * 1.5, 3, p.z + p.fz * 1.5), look: () => rl.set(p.x - p.fx * 16, 3.2, p.z - p.fz * 16), fov: 60 }
     ], () => {
       document.body.classList.remove('cine');
-      this.cam.reverseAmt = 1;
-      this.cam.setMode('reverse');
+      this.gunner.setVisible(true);
+      this.cam.setMode('gunner');
       this.setState('playing');
       this.vfx.showNumbers = this.settings.numbers;
-      this.hud.prompt('AIM FOR THE COLLAR!', '');
+      this.hud.prompt('SHOOT THE COLLAR!', 'good');
+      this.enemies.attackGrace = 2;
     });
     setTimeout(() => this.hud.nameCard('CRETAGEN APEX SPECIMEN T-01', 'GRIDLOCK', 'Tyrannosaurus rex · 9.6 m · Containment: FAILED'), this.testMode ? 0 : 500);
     this.hud.showBoss(e, 'GRIDLOCK', 'Cretagen Apex Specimen T-01 · Tyrannosaurus rex', false);
@@ -771,16 +838,17 @@ class Game {
     this.hitStop(0.18);
     this.slowmo(0.45, 2.4);
     this.stats.bossKilled = true;
-    this.stats.bossKillTime = this.director.time - BOSS_TIME;
+    this.stats.bossKillTime = this.director.time - (this.bossStartT ?? this.director.time);
     this.flash(0.5);
     this.audio.play('trex_roar', { volume: 1.2, pitch: 0.7, dur: 2.6 });
     const fx = Math.sin(e.heading), fz = Math.cos(e.heading);
+    this.gunner.setVisible(false);
+    this.cam.swing(0, 0, 3, 0);
     this.cam.orbit({ get x() { return e.rx + fx * 3; }, get z() { return e.rz + fz * 3; }, y: 0 }, 25, 12, 0.3, e.heading + 0.9, 50);
     this.cam.orbitState.lookY = 3;
     this.vfx.showNumbers = false;
     this.hud.banner('APEX DOWN', 'GRIDLOCK is going extinct', 'boss', true);
-    // Clear the small fry for the money shot
-    for (const o of this.enemies.list) if (!o.boss && Math.hypot(o.x - e.x, o.z - e.z) < 40) this.enemies.kill(o, 'boss', { launch: true, vy: 8 });
+    for (const o of this.enemies.list) if (!o.boss) this.enemies.kill(o, 'boss', { launch: true, vy: 8 });
   }
 
   onBossDefeated() {
@@ -796,15 +864,67 @@ class Game {
   onPlayerDeath() {
     const p = this.player;
     this.setState('dead');
-    this.deadT = 2.8;
-    this.slowmo(0.3, 2.2);
+    this.deadT = 2.2;
+    this.slowmo(0.3, 2);
     this.hitStop(0.15);
     this.vfx.explosion(p.x, 1, p.z, 3, 0);
     this.audio.play('death');
     this.cam.addTrauma(1);
     this.flash(0.4);
-    this.cam.orbit({ x: p.x, z: p.z, y: 0 }, 16, 6, 0.4, p.heading + 2.4, 50);
-    this.hud.banner('UNIT 77 DOWN', 'The city belongs to them now', 'boss', true);
+    this.gunner.setVisible(false);
+    this.cam.swing(0, 0, 10, 0);
+    this.cam.orbit({ x: p.x, z: p.z, y: 0 }, 14, 6, 0.4, p.heading + 2.4, 50);
+    this.hud.banner('UNIT 77 DOWN', 'The cab is wrecked', 'boss', true);
+    this.input.mouse.down = false;
+  }
+
+  openContinue() {
+    this.setState('continue');
+    this.continueT = CONTINUE_SECONDS;
+    this.audio.setMuffled(true);
+    this.hud.showContinue(this.score, this.stats.continues);
+    this.hud.continueCount(CONTINUE_SECONDS);
+  }
+
+  _continueTick(dt) {
+    const before = Math.ceil(this.continueT);
+    this.continueT -= dt;
+    const n = Math.max(0, Math.ceil(this.continueT));
+    if (n !== before) { this.hud.continueCount(n); if (n > 0) this.audio.play('ui', { pitch: 0.8 + (10 - n) * 0.03 }); }
+    if (this.continueT <= 0) this.giveUp();
+  }
+
+  /** Free continue: full hull, the street around the cab is cleared, the combo multiplier resets */
+  doContinue() {
+    if (this.state !== 'continue') return;
+    this.stats.continues++;
+    this.hud.hideContinue();
+    this.audio.setMuffled(false);
+    this.audio.play('levelup');
+    const p = this.player;
+    p.revive();
+    this.combo = 0;
+    this.comboT = 0;
+    this.hud.clearCracks();
+    for (const o of this.enemies.list) if (!o.boss && !o.ghost) this.enemies.kill(o, 'continue', { launch: true, vy: 7 });
+    this.vfx.shockwave(p.x, p.z, 30, 1.2, 4, 6, 0.8);
+    this.enemies.attackGrace = 4;
+    this.weapons.ammo = this.weapons.magSize;
+    this.weapons.reloadT = 0;
+    const be = this.boss.e;
+    if (be && this.boss.active && be.mode !== 'cameo') { be.bs = this.route.wrap(p.s - 34); be.mode = 'chase'; be.stateT = 0; be.atkCd = 4; this.boss._clearView(); }
+    this.gunner.setVisible(true);
+    this.cam.setMode('gunner');
+    this.setState('playing');
+    this.hud.callout('CONTINUE!', 'good');
+    this.hud.banner('BACK IN THE FIGHT', `Continue ${this.stats.continues} · combo multiplier reset`, 'wave', true);
+  }
+
+  giveUp() {
+    if (this.state !== 'continue') return;
+    this.hud.hideContinue();
+    this.audio.setMuffled(false);
+    this.endRun(false);
   }
 
   endRun(win, quit = false) {
@@ -813,18 +933,19 @@ class Game {
     const best = this._best();
     const time = this.director.time;
     const r = {
-      win, score: this.score, time, kills: this.stats.kills, level: this.level, maxCombo: this.maxCombo, roadkill: this.stats.roadkill,
-      boss: this.stats.bossKilled, bossTime: this.stats.bossKillTime, build: this.weapons.buildList(), endless: this.director.endless,
-      title: win ? 'CITY SAVED' : quit ? 'OFF DUTY' : 'FOSSILIZED',
-      sub: win ? `GRIDLOCK fossilized in ${fmtTime(this.stats.bossKillTime)} · ${this.stats.kills.toLocaleString('en-US')} dinosaurs down` : `Unit 77 held Midtown for ${fmtTime(time)}`,
+      win, score: this.score, time, kills: this.stats.kills, level: this.level, maxCombo: this.maxCombo, headshots: this.stats.headshots, staggers: this.stats.staggers,
+      continues: this.stats.continues, boss: this.stats.bossKilled, bossTime: this.stats.bossKillTime, build: this.weapons.buildList(), endless: this.director.endless,
+      title: win ? 'CITY SAVED' : quit ? 'OFF DUTY' : 'GAME OVER',
+      sub: win ? `GRIDLOCK fossilized in ${fmtTime(this.stats.bossKillTime)} · ${this.stats.kills.toLocaleString('en-US')} dinosaurs down${this.stats.continues ? ` · ${this.stats.continues} continue${this.stats.continues > 1 ? 's' : ''}` : ' · NO CONTINUES'}` : `Unit 77 held Midtown for ${fmtTime(time)}`,
       best: best.score, newBest: this.score > (best.score || 0)
     };
     if (r.newBest) {
       try { localStorage.setItem(BEST_KEY, JSON.stringify({ score: this.score, time, boss: this.stats.bossKilled })); } catch { /* ignore */ }
-      document.getElementById('best').innerHTML = `Best shift: <b>${this.score.toLocaleString('en-US')}</b> · ${fmtTime(time)}${this.stats.bossKilled ? ' · Apex down' : ''}`;
+      document.getElementById('best').innerHTML = `HI-SCORE <b>${this.score.toLocaleString('en-US')}</b>${this.stats.bossKilled ? ' · APEX DOWN' : ''}`;
     }
     this.lastResult = r;
     this.vfx.showNumbers = this.settings.numbers;
+    this.gunner.setVisible(false);
     this.setState('results');
     this.audio.setMusic('results');
     this.hud.hideBoss();
@@ -838,9 +959,9 @@ class Game {
   shareText(r = this.lastResult) {
     const weapons = r.build.filter((b) => b.kind === 'weapon').map((b) => b.name).slice(0, 3).join(' + ');
     const head = r.win
-      ? `I put down GRIDLOCK the T. rex in ${fmtTime(r.bossTime)} 🦖💥`
-      : `My armored cab survived ${fmtTime(r.time)} of the Manhattan dinosaur outbreak 🦖🚕`;
-    return `${head}\n${r.score.toLocaleString('en-US')} pts · ${r.kills.toLocaleString('en-US')} dinos fossilized · ${r.maxCombo}x combo\nBuild: ${weapons}\nCan you beat it? #ExtinctionAvenue`;
+      ? `I put down GRIDLOCK the T. rex in ${fmtTime(r.bossTime)}${r.continues ? '' : ' with no continues'} 🦖💥`
+      : `I held the tailgate for ${fmtTime(r.time)} of the Manhattan dinosaur outbreak 🦖🚕`;
+    return `${head}\n${r.score.toLocaleString('en-US')} pts · ${r.kills.toLocaleString('en-US')} dinos fossilized · ${r.headshots} headshots · ${r.maxCombo}x combo\nBuild: ${weapons}\nCan you beat it? #ExtinctionAvenue`;
   }
 
   shareURL(r = this.lastResult) {
@@ -853,17 +974,17 @@ class Game {
 
   // ------------------------------------------------------------------------------------------------------------------
   _hints(dt) {
-    if (this.state !== 'playing' || this.director.time > 40) { if (this.hintStep < 99 && this.hintStep > 0) { this.hud.hint(null, false); this.hintStep = 99; } return; }
+    if (this.state !== 'playing' || this.director.time > 45) { if (this.hintStep < 99 && this.hintStep > 0) { this.hud.hint(null, false); this.hintStep = 99; } return; }
     this.hintT -= dt;
     if (this.hintT > 0) return;
     const touch = this.input.touchMode;
     const steps = touch
-      ? ['Left thumb: <b>STEER</b> · cannon auto-fires', 'Tap the street to <b>AIM</b>', '<b>NITRO</b> button to boost & ram']
-      : [`${iconSVG('mouse')} <b>AIM</b> + <b>HOLD LEFT CLICK</b> to fire`, '<kbd>A</kbd><kbd>D</kbd> <b>STEER</b> — ram the small ones', '<kbd>SHIFT</kbd> <b>NITRO</b> · <kbd>SPACE</kbd> <b>SKYHAMMER</b>'];
+      ? ['<b>TOUCH</b> a dinosaur to aim and fire', 'Hit them during the <b class="red">red ring</b> to stagger', '<b>RELOAD</b> button — or empty the belt']
+      : [`${iconSVG('mouse')} <b>AIM</b> + <b>HOLD LEFT CLICK</b> to fire`, 'Shoot them during the <b class="red">red ring</b> to <b>STAGGER</b>', '<kbd>R</kbd> / right click <b>RELOAD</b> · <kbd>SPACE</kbd> <b>SKYHAMMER</b>'];
     if (this.hintStep < steps.length) {
       this.hud.hint(steps[this.hintStep], true);
       this.hintStep++;
-      this.hintT = 5;
+      this.hintT = 6;
     } else if (this.hintStep < 99) {
       this.hud.hint(null, false);
       this.hintStep = 99;
@@ -889,14 +1010,34 @@ class Game {
       pick: (i) => this.pick(i),
       setAim: (x, y) => { this.input.mouse.x = x; this.input.mouse.y = y; },
       fire: (on) => { this.input.mouse.down = on; },
-      key: (code, on) => { if (on) this.input.keys.add(code); else this.input.keys.delete(code); }
+      key: (code, on) => { if (on) this.input.keys.add(code); else this.input.keys.delete(code); },
+      /** On-screen threats for bots: [{ x, y (px), head {x,y}, state, attacking, type, dist, boss }] */
+      threats: () => this.threats()
     };
+  }
+
+  threats() {
+    const W = window.innerWidth, H = window.innerHeight;
+    const out = [];
+    const cam = this.cam.camera;
+    const px = (x, y, z) => { _v.set(x, y, z).project(cam); return _v.z < 1 && Math.abs(_v.x) < 1 && Math.abs(_v.y) < 1 ? { x: (_v.x * 0.5 + 0.5) * W, y: (-_v.y * 0.5 + 0.5) * H } : null; };
+    for (const e of this.enemies.list) {
+      if (e.ghost || e.state === 'dying' || e.state === 'launched') continue;
+      const b = e.boss ? px(this.boss.collar.x, this.boss.collar.y, this.boss.collar.z) : px(e.bx, e.by, e.bz);
+      if (!b) continue;
+      const h = e.boss ? b : px(e.hx, e.hy, e.hz);
+      out.push({ x: b.x, y: b.y, head: h, type: e.type, state: e.boss ? e.mode : e.state, attacking: e.boss ? this.boss._telegraphing(e) : e.state === 'windup' || e.state === 'leap' || e.state === 'charge' || e.state === 'dive', dist: Math.hypot(e.x - this.player.x, e.z - this.player.z), boss: !!e.boss, hp: e.hp });
+    }
+    for (const w of this.boss.wrecks) { const b = px(w.x, w.y, w.z); if (b) out.push({ x: b.x, y: b.y, head: b, type: 'wreck', attacking: true, dist: Math.hypot(w.x - this.player.x, w.z - this.player.z) }); }
+    for (const it of this.pickups.items) { if (!it.float || it.pull) continue; const b = px(it.x, it.y + 0.5, it.z); if (b) out.push({ x: b.x, y: b.y, head: b, type: 'pickup:' + it.type, attacking: false, dist: Math.hypot(it.x - this.player.x, it.z - this.player.z) }); }
+    return out;
   }
 
   summary() {
     return {
-      state: this.state, time: +this.director.time.toFixed(1), level: this.level, score: this.score, kills: this.stats.kills,
-      enemies: this.enemies.count, hp: Math.round(this.player.hp), boss: this.boss.e ? { mode: this.boss.e.mode, hp: Math.round(this.boss.e.hp), phase: this.boss.e.phase } : null,
+      state: this.state, time: +this.director.time.toFixed(1), beat: this.director.beat?.id, level: this.level, score: this.score, kills: this.stats.kills,
+      enemies: this.enemies.threatCount, attackers: this.enemies.attackers, hp: Math.round(this.player.hp), ammo: this.weapons.ammo, continues: this.stats.continues,
+      boss: this.boss.e && this.boss.active ? { mode: this.boss.e.mode, hp: Math.round(this.boss.e.hp), phase: this.boss.e.phase } : null,
       build: this.weapons.buildList().map((b) => `${b.id}:${b.level}`).join(' '), choices: this.choices?.map((c) => `${c.kind}:${c.id}`)
     };
   }

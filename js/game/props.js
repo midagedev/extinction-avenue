@@ -86,6 +86,65 @@ const BUILDERS = {
     ...[0.4, 0.8, 1.2, 1.6].map((z) => prim(box(0.46, 0.2, 0.08), C.dark, C.cyanGlow, { p: [0, 0.05, z] })),
     prim(box(0.64, 0.08, 0.6), C.yellow, null, { p: [0, 0.26, -0.1] })
   ]),
+  // First-person tail gun (the rear gunner's view model): heavy twin-grip machine gun with the gunner's gloved hands.
+  // Pivot = the aiming centre on the receiver, barrel along +z, muzzle at z ≈ 1.3, spade grips toward -z.
+  tailGun: () => merge([
+    prim(box(0.24, 0.2, 0.6), C.gunmetal, null, { p: [0, 0, 0.02] }),
+    prim(box(0.25, 0.03, 0.5), C.steel, null, { p: [0, 0.115, 0.04] }),
+    prim(box(0.04, 0.032, 0.5), C.yellow, null, { p: [0.09, 0.12, 0.04] }),
+    prim(box(0.02, 0.03, 0.4), C.dark, C.cyanGlow, { p: [0.125, 0.03, 0.05] }),
+    prim(box(0.02, 0.03, 0.4), C.dark, C.cyanGlow, { p: [-0.125, 0.03, 0.05] }),
+    prim(cyl(0.07, 0.07, 0.5, 10), C.steel, null, { p: [0, 0.01, 0.55], r: [X, 0, 0] }),
+    ...[0.38, 0.48, 0.58, 0.68].map((z) => prim(cyl(0.075, 0.075, 0.025, 10), C.dark, null, { p: [0, 0.01, z], r: [X, 0, 0] })),
+    prim(cyl(0.04, 0.04, 0.5, 8), C.gunmetal, null, { p: [0, 0.01, 1.03], r: [X, 0, 0] }),
+    prim(cyl(0.06, 0.055, 0.12, 8), C.gunmetal, null, { p: [0, 0.01, 1.3], r: [X, 0, 0] }),
+    prim(cyl(0.032, 0.032, 0.02, 8), C.dark, C.orangeGlow, { p: [0, 0.01, 1.365], r: [X, 0, 0] }),
+    // ammo can on the left, feed tray, rear sight ring + front post
+    prim(box(0.16, 0.2, 0.3), C.green, null, { p: [-0.21, -0.03, 0.02] }),
+    prim(box(0.165, 0.04, 0.31), C.yellow, null, { p: [-0.21, 0.05, 0.02] }),
+    prim(box(0.08, 0.05, 0.12), C.gunmetal, null, { p: [-0.12, 0.06, 0.05] }),
+    prim(box(0.05, 0.05, 0.012), C.dark, null, { p: [0, 0.16, -0.12] }),
+    prim(box(0.012, 0.012, 0.014), C.dark, C.redGlow, { p: [0, 0.18, -0.12] }),
+    prim(box(0.012, 0.07, 0.012), C.dark, C.cyanGlow, { p: [0, 0.12, 1.22] }),
+    // spade grips + trigger plate
+    prim(box(0.3, 0.05, 0.05), C.gunmetal, null, { p: [0, -0.02, -0.3] }),
+    prim(cyl(0.025, 0.025, 0.2, 6), C.dark, null, { p: [0.13, -0.02, -0.34] }),
+    prim(cyl(0.025, 0.025, 0.2, 6), C.dark, null, { p: [-0.13, -0.02, -0.34] }),
+    prim(box(0.08, 0.03, 0.04), C.red, C.redGlow, { p: [0, 0.02, -0.33] }),
+    // gloved hands on the grips, sleeves running back toward the camera (hi-vis Animal Control jacket)
+    ...[-1, 1].flatMap((s) => [
+      prim(box(0.09, 0.13, 0.1), [0.06, 0.045, 0.035], null, { p: [s * 0.13, -0.02, -0.36] }),
+      prim(box(0.035, 0.05, 0.08), [0.06, 0.045, 0.035], null, { p: [s * 0.095, 0.04, -0.32] }),
+      prim(cyl(0.06, 0.07, 0.42, 7), [0.09, 0.1, 0.085], null, { p: [s * 0.17, -0.1, -0.58], r: [X - 0.45, 0, s * 0.25] }),
+      prim(cyl(0.072, 0.072, 0.05, 7), C.yellow, [0.5, 0.35, 0.02], { p: [s * 0.15, -0.06, -0.44], r: [X - 0.45, 0, s * 0.25] })
+    ])
+  ]),
+  // Rail Lance view model (evolved tail gun), same pivot/axes as tailGun
+  tailRail: () => merge([
+    prim(box(0.28, 0.22, 0.62), C.gunmetal, null, { p: [0, 0, 0.02] }),
+    prim(box(0.06, 0.07, 1.25), C.steel, null, { p: [0.08, 0.01, 0.85] }),
+    prim(box(0.06, 0.07, 1.25), C.steel, null, { p: [-0.08, 0.01, 0.85] }),
+    ...[0.45, 0.7, 0.95, 1.2].map((z) => prim(box(0.26, 0.12, 0.05), C.dark, C.cyanGlow, { p: [0, 0.01, z] })),
+    prim(box(0.29, 0.04, 0.5), C.yellow, null, { p: [0, 0.13, 0.04] }),
+    prim(box(0.3, 0.05, 0.05), C.gunmetal, null, { p: [0, -0.02, -0.3] }),
+    ...[-1, 1].flatMap((s) => [
+      prim(box(0.09, 0.13, 0.1), [0.06, 0.045, 0.035], null, { p: [s * 0.14, -0.02, -0.36] }),
+      prim(cyl(0.06, 0.07, 0.42, 7), [0.09, 0.1, 0.085], null, { p: [s * 0.18, -0.1, -0.58], r: [X - 0.45, 0, s * 0.25] }),
+      prim(cyl(0.072, 0.072, 0.05, 7), C.yellow, [0.5, 0.35, 0.02], { p: [s * 0.16, -0.06, -0.44], r: [X - 0.45, 0, s * 0.25] })
+    ])
+  ]),
+  // Rear deck gun mount (the ring the tail gun sits on), origin on the car roof
+  tailMount: () => merge([
+    prim(box(1.5, 0.12, 0.9), C.gunmetal, null, { p: [0, 0.06, 0] }),
+    prim(box(1.52, 0.05, 0.2), C.yellow, null, { p: [0, 0.13, -0.38] }),
+    ...[-0.6, -0.2, 0.2, 0.6].map((x, i) => prim(box(0.2, 0.051, 0.2), i % 2 ? C.black : C.yellow, null, { p: [x, 0.135, -0.38] })),
+    prim(cyl(0.3, 0.34, 0.14, 12), C.steel, null, { p: [0, 0.2, 0] }),
+    prim(cyl(0.31, 0.31, 0.02, 12), C.dark, C.cyanGlow, { p: [0, 0.28, 0] }),
+    // roll bar the gunner braces against
+    prim(cyl(0.04, 0.04, 1.4, 6), C.steel, null, { p: [0, 0.75, 0.45], r: [0, 0, X] }),
+    prim(cyl(0.04, 0.04, 0.7, 6), C.steel, null, { p: [0.7, 0.4, 0.45] }),
+    prim(cyl(0.04, 0.04, 0.7, 6), C.steel, null, { p: [-0.7, 0.4, 0.45] })
+  ]),
   // Hood gun pod (one side); origin at its mount, barrels along +z
   attGatling: () => merge([
     prim(box(0.22, 0.18, 0.5), C.gunmetal, null, { p: [0, 0.09, 0] }),
