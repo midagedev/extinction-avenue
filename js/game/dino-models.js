@@ -644,6 +644,36 @@ function trex() {
 
 const BUILDERS = { compy, raptor, brute, trike, ankylo, ptero, trex };
 
+/**
+ * GRIDLOCK's cracked containment collar for the rigged T. rex: a glowing seam band, 10 bolted armour plates and the
+ * front lock light (the weak point), as one geometry (position / normal / color / emissive) around a neck of radius r,
+ * centred at `at` with its axis along `dir` (rest pose, model space). skin-rig.js binds it rigidly to the neck bone.
+ */
+function buildCollar(at = [0, 3.62, 1.8], dir = [0, 0.53, 0.35], r = 0.44) {
+  const pal = PAL.trex;
+  const parts = [];
+  const band = loft([[0, 0, -0.13 * r / 0.74, r, r, 'c'], [0, 0, 0.13 * r / 0.74, r, r]], { n: 20, cap0: false, cap1: false });
+  parts.push(paint(band, 'skin', pal));
+  const plates = [], bolts = [];
+  const K = 10;
+  for (let k = 0; k < K; k++) {
+    const a = (k + 0.5) * TAU / K, c = Math.cos(a), sn = Math.sin(a);
+    plates.push(xf(box(r * 0.52, r * 0.15, r * 0.4), [c * r * 1.08, sn * r * 1.08, 0], [0, 0, a - Math.PI / 2]));
+    bolts.push(xf(octa(r * 0.065), [c * r * 1.18, sn * r * 1.18, 0], [0, 0, a]));
+  }
+  parts.push(paint(cat(plates), { c: pal.armor }, pal));
+  parts.push(paint(cat(bolts), 'glow', pal));
+  // the lock housing hangs under the throat (−y side of the ring) and glows hot
+  parts.push(paint(xf(box(r * 0.42, r * 0.28, r * 0.55), [0, -r * 1.16, 0]), { c: pal.armorLight }, pal));
+  parts.push(paint(xf(box(r * 0.22, r * 0.09, r * 0.34), [0, -r * 1.32, 0]), { c: glowBase(pal.eye), e: pal.eye }, pal));
+  const g = mergeGeometries(parts);
+  const d = new V3(...dir).normalize();
+  const q = new THREE.Quaternion().setFromUnitVectors(new V3(0, 0, 1), d);
+  g.applyMatrix4(new THREE.Matrix4().compose(new V3(...at), q, new V3(1, 1, 1)));
+  g.computeVertexNormals();
+  return g;
+}
+
 /** Builds a NEW rig model for a species id (see DINO_IDS) */
 function buildDinoModel(id) {
   const b = BUILDERS[id];
@@ -651,4 +681,4 @@ function buildDinoModel(id) {
   return b();
 }
 
-export { buildDinoModel, DINO_IDS };
+export { buildDinoModel, buildCollar, DINO_IDS };

@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 import { PropBatch } from './batches.js';
 import { setJoint } from './poses.js';
 import { raySphere } from './enemies.js';
+import { AnimState, clipOf } from './creature-anim.js';
 
 // js/game/boss.js
 // GRIDLOCK — Cretagen Apex Specimen T-01, a Tyrannosaurus rex in a cracked containment collar.
@@ -24,6 +25,15 @@ const _s = {};
 const _v = new THREE.Vector3();
 const COLLAR_LOCAL = new THREE.Vector3(0, 0.27, 0.42); // neck-local collar centre (model units, see dino-models.js)
 const THIGH_LOCAL = new THREE.Vector3(0, -0.6, 0.2);
+// Sockets on the rigged T. rex (geometry-space offsets from the joints of tools/lab/rig-theropod.js)
+const SK = {
+  collar: new THREE.Vector3(0, 0.27, 0.2), // neck1 → the collar ring (buildCollar)
+  head: new THREE.Vector3(0, -0.12, 0.62), // head → middle of the skull
+  thighL: new THREE.Vector3(0.08, -0.45, 0.12), thighR: new THREE.Vector3(-0.08, -0.45, 0.12),
+  body: new THREE.Vector3(0, 0.1, 0), // spine
+  chest: new THREE.Vector3(0, -0.25, 0.15) // chest
+};
+const HERO_LOOK = new Set(['intro', 'roar', 'cameo', 'lunge_tele', 'flank_tele', 'charge_tele', 'chase']);
 const WRECK_HP = 70;
 
 class TRexBoss {
@@ -697,8 +707,79 @@ class TRexBoss {
     return lift;
   }
 
+  /**
+   * Skinned T. rex: picks the clip for the current mode (roar on the reveal and the summon, crouch on every telegraph,
+   * bite on lunges / door hits, the head-swing throw, a long stagger flinch, the death collapse), matches the run to its
+   * speed, and turns the head toward the gunner's camera in the hero moments (reveal, roars, telegraphs, the chase).
+   * Returns the extra root lift (metres, before scale).
+   */
+  animate(e, rig, time) {
+    const m = rig.model;
+    const an = e.anim || (e.anim = new AnimState());
+    const dt = Math.min(0.1, Math.max(0, time - (e.poseT ?? time)));
+    e.poseT = time;
+    const ws = e.scale * m.baseScale;
+    const sp = e.moveSpeed || 0;
+    let clip = 'run', rate = 1, once = false, fade = 0.25;
+    switch (e.mode) {
+      case 'cameo': clip = e.roar > 0 ? 'roar' : 'walk'; once = clip === 'roar'; break;
+      case 'intro': case 'roar': clip = 'roar'; once = true; fade = 0.3; break;
+      case 'lunge_tele': case 'flank_tele': case 'charge_tele': clip = 'crouch'; fade = 0.3; break;
+      case 'lunge': case 'flank_hit': clip = 'bite'; once = true; fade = 0.1; rate = 0.9; break;
+      case 'throw': clip = 'throw'; once = true; break;
+      case 'stagger': clip = 'hit'; once = true; rate = 0.32; fade = 0.08; break;
+    }
+    if (e.state === 'dying') { clip = 'death'; once = true; rate = 0.75; fade = 0.15; }
+    if (clip === 'run' || clip === 'walk') {
+      if (sp < 0.6 && e.mode !== 'cameo') clip = 'idle';
+      else {
+        const c = m.clips[clipOf(m, clip)];
+        rate = Math.min(2.2, Math.max(0.55, sp / Math.max(0.1, (c?.speed || 8) * ws)));
+      }
+    }
+    const key = e.state === 'dying' ? 'dying' : `${e.mode}:${clip}`;
+    an.play(clipOf(m, clip), fade, rate, once && key !== an.key);
+    an.key = key;
+    // a flash spike (big hit) replays a light flinch on top
+    if ((e.flash || 0) > (e.flashPrev || 0) + 0.3 && e.mode !== 'stagger') { an.c = clipOf(m, 'hit'); an.tc = 0; }
+    e.flashPrev = e.flash || 0;
+    an.wc = an.c >= 0 && an.tc < 0.45 && e.state !== 'dying' ? 0.35 : 0;
+    // Hero look: the head swings toward the gunner (camera)
+    const cam = this.game.cam.camera.position;
+    let ly = 0, lp = 0;
+    if (HERO_LOOK.has(e.mode) && e.state !== 'dying') {
+      const dx = cam.x - this.headPos.x, dz = cam.z - this.headPos.z;
+      const rel = Math.atan2(Math.sin(Math.atan2(dx, dz) - e.heading), Math.cos(Math.atan2(dx, dz) - e.heading));
+      const k = e.mode === 'chase' ? 0.55 : 1;
+      ly = THREE.MathUtils.clamp(rel, -0.9, 0.9) * k;
+      lp = THREE.MathUtils.clamp(Math.atan2(this.headPos.y - cam.y, Math.hypot(dx, dz)), -0.4, 0.45) * 0.7 * k;
+    }
+    an.lookYaw += (ly - an.lookYaw) * Math.min(1, dt * 4);
+    an.lookPitch += (lp - an.lookPitch) * Math.min(1, dt * 4);
+    an.jaw = clip === 'run' || clip === 'crouch' || clip === 'idle' || clip === 'walk' ? (e.jaw || 0) * 0.4 : 0;
+    if ((e.stone || 0) < 1) an.advance(dt);
+    // gait phase for the footstep thumps (two steps per run cycle)
+    const ac = m.clips[an.a];
+    if (ac && (clip === 'run' || clip === 'walk')) e.gait = (an.ta / ac.duration) * Math.PI * 2;
+    else e.gait = e.gait || 0;
+    // death: the collapse clip drops it, then it topples sideways onto the street
+    const fall = e.fall || 0;
+    e.roll = fall * 1.35;
+    e.pitch = 0;
+    return fall * 0.35;
+  }
+
   /** After the rig placed the individual: read weak point & head positions from the part matrices */
   afterAdd(rig) {
+    if (rig.skinned) {
+      rig.partWorldPosition('neck1', this.collar, SK.collar);
+      rig.partWorldPosition('thighL', this.thighs[0], SK.thighL);
+      rig.partWorldPosition('thighR', this.thighs[1], SK.thighR);
+      rig.partWorldPosition('head', this.headPos, SK.head);
+      rig.partWorldPosition('spine', this.bodyPos, SK.body);
+      rig.partWorldPosition('chest', this.chestPos, SK.chest);
+      return;
+    }
     rig.partWorldPosition('neck', this.collar, COLLAR_LOCAL);
     rig.partWorldPosition('thighL', this.thighs[0], THIGH_LOCAL);
     rig.partWorldPosition('thighR', this.thighs[1], THIGH_LOCAL);

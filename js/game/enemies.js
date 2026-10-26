@@ -1,6 +1,8 @@
 import * as THREE from 'three/webgpu';
 import { InstancedRig, createPose } from './rig.js';
 import { poseCreature } from './poses.js';
+import { SkinnedCrowd } from './skin-rig.js';
+import { animateCreature } from './creature-anim.js';
 
 // js/game/enemies.js
 // The dinosaurs, rebuilt for the rear-gunner view. Ground pursuers live in ROUTE SPACE (arc length s + lateral offset d
@@ -16,8 +18,9 @@ import { poseCreature } from './poses.js';
 //     the start of a run and after a continue.
 //   - Shooting an enemy during its windup or lunge staggers it (cancels the attack) once enough damage lands.
 //
-// Rendering: one InstancedRig per species (rigid-part instancing, rig.js). Hit testing: two spheres per individual
-// (body + head, head = weak point ×1.6 "HEADSHOT"), taken from the rest pose of each model.
+// Rendering: one SkinnedCrowd per species (rigged GLB models, GPU-instanced skinning, skin-rig.js; animation state in
+// creature-anim.js) — or the v2 rigid-part InstancedRig (rig.js) when a species has no rigged model. Hit testing: two
+// spheres per individual (body + head, head = weak point ×1.6 "HEADSHOT"), taken from the rest pose of each model.
 
 const SPECIES = {
   //          hp: base HP · close: closing speed on the cab (m/s) · dmg: per landed attack · wind: telegraph seconds
@@ -107,9 +110,11 @@ class EnemyManager {
       const model = entry.model;
       this.models[id] = model;
       const cap = Math.min(entry.def.capacity, id === 'compy' ? 90 : id === 'raptor' ? 60 : entry.def.capacity);
-      const rig = new InstancedRig(model, cap, { glow: glow[id] || new THREE.Color(1, 1, 1) });
+      const rig = model.kind === 'skinned'
+        ? new SkinnedCrowd(model, id === 'compy' ? 48 : id === 'raptor' ? 48 : Math.min(cap, 24), { attachments: entry.attachments })
+        : new InstancedRig(model, cap, { glow: glow[id] || new THREE.Color(1, 1, 1) });
       this.rigs[id] = rig;
-      this.poses[id] = createPose(model);
+      this.poses[id] = model.kind === 'skinned' ? null : createPose(model);
       this.group.add(rig.group);
       const sp = SPECIES[id];
       // Gameplay radius follows the model when a replacement asset changes the size
@@ -119,7 +124,8 @@ class EnemyManager {
       rig.begin();
       rig.add(0, 0, 0, 0, 1, this.poses[id]);
       const b = rig.partWorldPosition('body', new THREE.Vector3());
-      const h = rig.partWorldPosition('head', new THREE.Vector3());
+      const hc = model.def?.skin?.headCenter;
+      const h = rig.partWorldPosition('head', new THREE.Vector3(), hc ? new THREE.Vector3(...hc) : null);
       rig.begin();
       rig.end();
       this.hitLocal[id] = { bf: b.z * 0.6, by: Math.max(b.y, sp.height * 0.45), hf: h.z, hy: h.y };
@@ -207,6 +213,13 @@ class EnemyManager {
     e.ctrl = opts.ctrl || null;
     e.ghost = false;
     e.miniboss = false;
+    // Per-individual look: a slight brightness / hue shift so a pack doesn't read as clones (scale varies above)
+    const v = 0.9 + Math.random() * 0.2, hshift = (Math.random() - 0.5) * 0.12;
+    e.tint = e.tint || [1, 1, 1];
+    e.tint[0] = v * (1 + hshift); e.tint[1] = v; e.tint[2] = v * (1 - hshift);
+    e.flinchPrev = 0; e.flashPrev = 0;
+    if (e.anim) { e.anim.a = -1; e.anim.w = 0; e.anim.wc = 0; e.anim.key = null; }
+    e.poseT = undefined;
     e.rx = x; e.rz = z;
     e.moveSpeed = 0;
     e.gait = 0;
@@ -823,10 +836,27 @@ class EnemyManager {
   }
 
   render(time) {
-    for (const id of SPECIES_IDS) this.rigs[id].begin();
+    const cam = this.game.cam?.camera;
+    for (const id of SPECIES_IDS) {
+      const rig = this.rigs[id];
+      if (rig.skinned && cam) rig.setView(cam);
+      rig.begin();
+    }
     for (const e of this.list) {
       const rig = this.rigs[e.type];
       const pose = this.poses[e.type];
+      if (rig.skinned) {
+        if (e.ctrl) {
+          const lift = e.ctrl.animate(e, rig, time);
+          rig.add(e.rx, lift * e.scale, e.rz, e.heading, e.scale, e.anim, e.flash, e.stone, 0, e.pitch, e.roll, e.tint);
+          e.ctrl.afterAdd(rig);
+          continue;
+        }
+        animateCreature(e, rig, time, cam?.position);
+        const tele = e.state === 'windup' ? 0.22 + 0.22 * Math.sin(time * 30) : 0;
+        rig.add(e.x, e.y, e.z, e.heading, e.scale, e.anim, Math.max(e.flash, tele), e.stone, e.elite ? 1 : 0, e.pitch, e.roll, e.tint);
+        continue;
+      }
       if (e.ctrl) {
         const lift = e.ctrl.pose(e, pose, rig.partIndex, time);
         rig.add(e.rx, lift * e.scale, e.rz, e.heading, e.scale, pose, e.flash, e.stone, 0, e.pitch, e.roll);

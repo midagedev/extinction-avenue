@@ -1,5 +1,7 @@
 import * as THREE from 'three/webgpu';
-import { buildDinoModel } from './dino-models.js';
+import { buildDinoModel, buildCollar } from './dino-models.js';
+import { loadSkinnedModel } from './skin-model.js';
+import { CLIP_LIBRARY } from './creature-clips.js';
 import { buildPropGeometry } from './props.js';
 
 // js/game/assets.js
@@ -16,6 +18,16 @@ import { buildPropGeometry } from './props.js';
 //
 // Conventions for replacement files: metres, +Y up, creatures face +Z with their origin on the ground under the hips,
 // props centred on their pivot (see ART_PIPELINE.md for per-asset pivots, budgets and animation clips).
+
+// The rigged theropod (auto-rigged CC0 sculpt by damik, see ASSETS.md): one mesh + textures shared by four species
+const THEROPOD = 'assets/models/theropod.glb';
+const THEROPOD_TEX = { map: 'assets/models/theropod_albedo.jpg', normal: 'assets/models/theropod_normal.jpg' };
+function theropod(o) {
+  return {
+    clips: 'theropod', textures: THEROPOD_TEX, feet: ['toeL', 'toeR'],
+    aliases: { body: 'spine', neck: 'neck1' }, headCenter: [0, -0.12, 0.62], ...o
+  };
+}
 
 const ASSET_MANIFEST = {
   // Player vehicle (Big Apple Animal Control — Unit 77)
@@ -35,14 +47,34 @@ const ASSET_MANIFEST = {
   attPlow: { kind: 'prop', url: null, placeholder: 'attPlow' },
   attArmor: { kind: 'prop', url: null, placeholder: 'attArmor' },
 
-  // Creatures (capacity = max simultaneous individuals drawn)
-  compy: { kind: 'rig', url: null, placeholder: 'compy', capacity: 700 },
-  raptor: { kind: 'rig', url: null, placeholder: 'raptor', capacity: 240 },
-  brute: { kind: 'rig', url: null, placeholder: 'brute', capacity: 48 },
+  // Creatures (capacity = max simultaneous individuals drawn). `skin` = rigged GLB drawn by skin-rig.js (instanced
+  // skinning); without it (or if loading fails) the procedural placeholder rig is used.
+  compy: { kind: 'rig', url: THEROPOD, placeholder: 'compy', capacity: 700, skin: theropod({
+    targetHeight: 0.63, radius: 0.3, morph: { head: 1.3, jaw: 1.3, neck2: [0.95, 0.95, 0.95], thighL: [1, 1.05, 1], thighR: [1, 1.05, 1] },
+    look: { ramp: [[0.03, 0.07, 0.015], [0.22, 0.4, 0.06], [0.78, 0.84, 0.42]], stripes: [10, 0.65], stripeColor: [0.18, 0.2, 0.1], belly: [1.6, 1.45, 1.05], roughness: 0.72 }
+  }) },
+  raptor: { kind: 'rig', url: THEROPOD, placeholder: 'raptor', capacity: 240, skin: theropod({
+    targetHeight: 1.78, radius: 0.55, morph: { head: 1.06, jaw: 1.06 },
+    look: { ramp: [[0.07, 0.025, 0.01], [0.55, 0.23, 0.07], [0.96, 0.8, 0.52]], stripes: [7, 0.75], stripeColor: [0.22, 0.12, 0.08], belly: [1.55, 1.45, 1.25], roughness: 0.75 }
+  }) },
+  brute: { kind: 'rig', url: THEROPOD, placeholder: 'brute', capacity: 48, skin: theropod({
+    targetHeight: 3.28, radius: 1.05,
+    morph: { root: [1.16, 1.1, 1], spine: [1.2, 1.14, 1], chest: [1.2, 1.14, 1], neck1: [1.18, 1.12, 1], neck2: [1.14, 1.08, 1], head: 1.16, jaw: 1.16, thighL: [1.14, 1.04, 1.14], thighR: [1.14, 1.04, 1.14], tail1: [1.12, 1.1, 1] },
+    look: { ramp: [[0.02, 0.025, 0.04], [0.19, 0.24, 0.3], [0.68, 0.72, 0.76]], blotch: [1.6, 0.55], blotchColor: [0.35, 0.36, 0.45], belly: [1.5, 1.45, 1.4], roughness: 0.78 }
+  }) },
   trike: { kind: 'rig', url: null, placeholder: 'trike', capacity: 24 },
   ankylo: { kind: 'rig', url: null, placeholder: 'ankylo', capacity: 16 },
   ptero: { kind: 'rig', url: null, placeholder: 'ptero', capacity: 40 },
-  trex: { kind: 'rig', url: null, placeholder: 'trex', capacity: 1 },
+  // GRIDLOCK: the same sculpt as a T. rex — huge head, short thick neck, tiny arms, heavier body, dark olive hide
+  trex: { kind: 'rig', url: THEROPOD, placeholder: 'trex', capacity: 1, skin: theropod({
+    targetHeight: 5.23, radius: 3.2, lodK: 1e9, collar: [[0, 3.62, 1.8], [0, 0.53, 0.35], 0.44],
+    morph: {
+      root: [1.15, 1.1, 1.04], spine: [1.2, 1.15, 1.04], chest: [1.22, 1.16, 1.06], neck1: [1.38, 0.92, 0.95], neck2: [1.42, 0.9, 0.95],
+      head: [1.48, 1.44, 1.38], jaw: [1.48, 1.44, 1.38], armL: 0.42, foreL: 0.42, handL: 0.42, armR: 0.42, foreR: 0.42, handR: 0.42,
+      tail1: [1.16, 1.12, 1.02], tail2: [1.1, 1.08, 1.02], thighL: [1.12, 1.03, 1.12], thighR: [1.12, 1.03, 1.12]
+    },
+    look: { ramp: [[0.025, 0.03, 0.018], [0.19, 0.18, 0.1], [0.66, 0.56, 0.36]], blotch: [1.1, 0.6], blotchColor: [0.45, 0.42, 0.34], stripes: [3.2, 0.35], stripeColor: [0.4, 0.38, 0.3], belly: [1.7, 1.5, 1.15], roughness: 0.74, rim: [0.16, 0.18, 0.26] }
+  }) },
 
   // Pickups
   gem: { kind: 'prop', url: null, placeholder: 'gem' },
@@ -151,7 +183,10 @@ async function loadAssets(manifest = ASSET_MANIFEST, onProgress = null) {
     const def = manifest[id];
     let entry = null;
     try {
-      if (def.kind === 'rig') {
+      if (def.kind === 'rig' && def.skin && def.url) {
+        entry = { kind: 'rig', def, model: await loadSkinnedModel(id, def, CLIP_LIBRARY) };
+        if (def.skin.collar) entry.attachments = [{ geometry: buildCollar(...def.skin.collar), bone: def.skin.collarBone || 'neck1' }];
+      } else if (def.kind === 'rig') {
         const placeholder = buildDinoModel(def.placeholder);
         entry = { kind: 'rig', def, model: def.url ? await loadRigGLB(def.url, placeholder) : placeholder };
       } else if (def.kind === 'prop') {

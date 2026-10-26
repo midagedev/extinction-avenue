@@ -113,6 +113,8 @@ if (want('trex')) {
   // Intro cinematic runs in slow motion; the close-up keyframe is around 1.4–2.4 s of real time
   for (let i = 0; i < 12; i++) await step(0.1);
   await shot('trex-hero');
+  for (let i = 0; i < 6; i++) await step(0.1);
+  await shot('trex-hero2');
   for (let i = 0; i < 80; i++) { const s = await step(0.1); if (s.state === 'playing') break; }
   await page.evaluate(() => { const b = window.__game.game.boss; b.e.atkCd = 99; });
   await step(2.5);
