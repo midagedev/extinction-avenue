@@ -157,6 +157,7 @@ noise, and only holds the trigger when the crosshair is near the target. It pick
 | Idle (never touches anything) | — | — | — | — (wrecked at **62.8 s**) | — | 1 | first hit at 11–16 s | 20 |
 | Weak (skill 0.35, seed 6) | 0.37–0.64 s | 1,065 px/s | 40 px | **6:35** | 81 s | 1 (at 7:17, mid-boss; continued and won) | 23 (416) | 19 |
 | Average (skill 0.6, seed 4) | 0.28–0.49 s | 1,394 px/s | 23 px | **6:34** | 75 s | 0 (lowest hull 6) | 14 (265) | 26 |
+| Average (skill 0.6, seed 7, after the pterosaur fix) | 0.28–0.49 s | 1,394 px/s | 23 px | **6:35** | 86 s | 1 (phase 3 at 7:36; continued, won at 8:01) | 20 (424) | 24 |
 | Attentive (skill 1, seed 5) | 0.22–0.38 s | 1,800 px/s | 14 px | **6:35** | 43 s | 0 | 3 (64) | 15 |
 | Attentive (skill 1, seed 3, boss HP 21k) | 0.22–0.38 s | 1,800 px/s | 14 px | 6:35 | 45 s | 0 | 8 (185) | 22 |
 
@@ -185,7 +186,7 @@ damage ×(1 + t/700); windups scale from ×1.0 early to ×0.77 in the stampede (
   - `10` flank (view swung to the side)
   - `11` phase 3 head-on charge (view forward over the hood)
   - `12` death
-  - `13` results
+  - `13` results (from the weak-bot full run with one continue)
 - **0 page errors** in every v2 run (smoke, idle, bots, shots).
 - **`node --test tests/`: 113/113 pass** (the original sim's unit tests, `sim.html` unchanged apart from the pin).
 - **three.js pin.** I first pinned to the npm release 0.186.1, which has every API the game imports, but the city's TSL
