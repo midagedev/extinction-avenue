@@ -121,10 +121,20 @@ class GameAudio {
     this.md = new MusicDirector(this);
     this.duckUntil = 0;
     this.duckDepth = 1;
+    // Decoded music is big (stereo float ≈ 21 MB a minute; all cues ≈ 310 MB) and phones kill tabs that hold that much,
+    // so decoded cues live under a budget: the least recently used long cue that isn't needed is dropped and decoded
+    // again from its kept MP3 bytes (≈ 10 MB in total) when it is wanted. ?musicbudget=<MB> overrides (tests).
+    const mb = typeof location !== 'undefined' && /[?&]musicbudget=(\d+)/.exec(location.search);
+    this.musicBudget = (mb ? +mb[1] : isMobile ? 140 : 320) * 1e6;
+    this.musicUsed = new Map(); // cue id → last use (ms)
+    this.failed = new Map(); // load key → time of the last failure (retry after a pause)
     try {
       const saved = JSON.parse(localStorage.getItem(STORE) || 'null');
       if (saved) {
-        Object.assign(this.volume, saved.volume || {});
+        for (const k of Object.keys(this.volume)) {
+          const v = Number(saved.volume?.[k]);
+          if (saved.volume?.[k] != null && Number.isFinite(v)) this.volume[k] = Math.max(0, Math.min(1, v));
+        }
         this.enabled = saved.enabled !== false;
         this.announcer = saved.announcer !== false;
       }
@@ -162,8 +172,33 @@ class GameAudio {
   /** Must be called from a user gesture (pointer/key/touch) */
   unlock() {
     if (!this.supported) return;
-    if (!this.ctx) this._build();
-    if (this.ctx.state === 'suspended' && this.enabled && !document.hidden) this.ctx.resume().catch(() => {});
+    if (!this.ctx) {
+      // Outside a real activation (touch pointerdown, gamepad, scripted calls) the browser would refuse and warn
+      // "The AudioContext was not allowed to start": wait for the next gesture instead
+      const ua = navigator.userActivation;
+      if (ua && !ua.isActive) return;
+      this._build();
+    }
+    const s = this.ctx.state;
+    if (s !== 'running' && s !== 'closed' && this.enabled && !document.hidden) this.ctx.resume().catch(() => {});
+  }
+
+  /** Unlock on the next user gesture anywhere: the first start, and again whenever the OS suspends or interrupts the
+   *  context (iOS after an app switch or a phone call refuses a resume() that isn't inside a gesture) */
+  armGesture() {
+    if (this._armed || !this.supported) return;
+    this._armed = true;
+    const evs = ['pointerdown', 'pointerup', 'keydown', 'touchend', 'click'];
+    const fn = (e) => {
+      // A touch pointerdown is not a user activation (it comes with pointerup/touchend)
+      if (e.type === 'pointerdown' && e.pointerType !== 'mouse') return;
+      this.unlock();
+      if (this.ctx?.state === 'running') {
+        for (const ev of evs) window.removeEventListener(ev, fn, true);
+        this._armed = false;
+      }
+    };
+    for (const ev of evs) window.addEventListener(ev, fn, true);
   }
 
   _build() {
@@ -245,8 +280,9 @@ class GameAudio {
     document.addEventListener('visibilitychange', () => {
       if (!this.ctx) return;
       if (document.hidden) this.ctx.suspend().catch(() => {});
-      else if (this.enabled) this.ctx.resume().catch(() => {});
+      else if (this.enabled) { this.ctx.resume().catch(() => {}); this.armGesture(); }
     });
+    ctx.onstatechange = () => { if (ctx.state !== 'running' && ctx.state !== 'closed' && !document.hidden) this.armGesture(); };
     // Start loading: title + UI + the most frequent sounds first, then everything except the boss music
     this._manifestP.then(() => this._queueAll());
     if (this.musicState !== 'off') this.md.set(this.musicState);
@@ -281,7 +317,11 @@ class GameAudio {
     for (const g of first) if (m.sfx[g]) add('sfx', g);
     add('music', 'combat');
     for (const g of Object.keys(m.sfx)) add('sfx', g);
-    for (const id of ['combat_heat', 'breather', 'combat_hi', 'boss_sting', 'continue', 'gameover', 'results', 'victory']) if (m.music[id]) add('music', id);
+    // On a tight memory budget (phones) the rarer long cues (combat_hi, results) decode on demand instead
+    const tight = this.musicBudget < 200e6;
+    for (const id of ['combat_heat', 'breather', 'combat_hi', 'boss_sting', 'continue', 'gameover', 'results', 'victory']) {
+      if (m.music[id] && !(tight && (id === 'combat_hi' || id === 'results'))) add('music', id);
+    }
     this._pump();
   }
 
@@ -289,6 +329,7 @@ class GameAudio {
   loadMusic(ids) {
     for (const id of ids) {
       if (!this.manifest?.music?.[id] || this.music.has(id) || this.loading.has('music:' + id)) continue;
+      if (performance.now() - (this.failed.get('music:' + id) ?? -1e9) < 10000) continue;
       this.queue = this.queue.filter((q) => !(q.kind === 'music' && q.id === id));
       this.queue.unshift({ kind: 'music', id });
     }
@@ -303,13 +344,14 @@ class GameAudio {
       if (this.loading.has(key) || (job.kind === 'music' ? this.music.has(job.id) : this.sfxBuf.has(job.id))) continue;
       this.loading.add(key);
       this.active++;
-      this._load(job).finally(() => { this.active--; this._pump(); });
+      this._load(job).finally(() => { this.loading.delete(key); this.active--; this._pump(); });
     }
   }
 
-  async _decode(url, n) {
-    const data = await this._prefetch(url);
-    this.raw.delete(url); // decoded copies only from here on
+  async _decode(url, n, keepRaw = false) {
+    let data;
+    try { data = await this._prefetch(url); } catch (err) { this.raw.delete(url); throw err; } // refetch on a retry
+    if (!keepRaw) this.raw.delete(url); // decoded copies only from here on (music keeps its MP3 bytes, see musicBudget)
     const buffer = await this.ctx.decodeAudioData(data.slice(0));
     // MP3 decoders that ignore the encoder delay return it as extra leading samples: skip them
     const extra = buffer.length - (n || 0) * (buffer.sampleRate / 44100);
@@ -321,7 +363,9 @@ class GameAudio {
     try {
       if (job.kind === 'music') {
         const e = this.manifest.music[job.id];
-        this.music.set(job.id, await this._decode(e.file, e.n));
+        this.music.set(job.id, await this._decode(e.file, e.n, true));
+        this.musicUsed.set(job.id, performance.now());
+        this._trimMusic(job.id);
         this.md.onLoaded(job.id);
       } else {
         const e = this.manifest.sfx[job.id];
@@ -331,7 +375,30 @@ class GameAudio {
         if (job.id === 'flamer_loop') this._sampleFlamer();
       }
     } catch (err) {
+      this.failed.set(job.kind + ':' + job.id, performance.now());
       console.warn(`Audio: could not load ${job.kind} "${job.id}":`, err.message || err);
+    }
+  }
+
+  /** Keep decoded music under musicBudget: drop the least recently used long cues that nothing needs right now */
+  _trimMusic(loaded) {
+    const bytes = (m) => m.buffer.length * m.buffer.numberOfChannels * 4;
+    let total = 0;
+    for (const m of this.music.values()) total += bytes(m);
+    if (total <= this.musicBudget) return;
+    const md = this.md;
+    const keep = new Set([loaded, md.want, md.cur?.id, ...md.stings.map((s) => s.id)]);
+    if (md.cur?.id === 'combat') keep.add('combat_heat');
+    if (md.state === 'prebos' || md.state === 'boss') for (const id of ['boss1', 'boss2_intro', 'boss2', 'boss3']) keep.add(id);
+    if (md.state === 'victory' || md.state === 'gameover') keep.add('results');
+    // Short cues (stingers, the heat layer) are cheap and timing-critical: only long ones are dropped
+    const order = [...this.music.keys()]
+      .filter((id) => !keep.has(id) && bytes(this.music.get(id)) > 8e6)
+      .sort((a, b) => (this.musicUsed.get(a) ?? 0) - (this.musicUsed.get(b) ?? 0));
+    for (const id of order) {
+      if (total <= this.musicBudget) break;
+      total -= bytes(this.music.get(id));
+      this.music.delete(id);
     }
   }
 
@@ -385,7 +452,16 @@ class GameAudio {
     const t = this.ctx.currentTime;
     const g = 10 ** (db / 20);
     // Keep the deeper of overlapping ducks
-    if (t < this.duckUntil && g > this.duckDepth) { this.duckUntil = Math.max(this.duckUntil, t + hold); return; }
+    if (t < this.duckUntil && g > this.duckDepth) {
+      // A shallower duck inside a deeper one only pushes the release back
+      if (t + hold > this.duckUntil) {
+        const p = this.musicDuck.gain;
+        p.cancelScheduledValues(this.duckUntil);
+        this.duckUntil = t + hold;
+        p.setTargetAtTime(1, this.duckUntil, release / 3);
+      }
+      return;
+    }
     this.duckDepth = g;
     this.duckUntil = t + hold;
     const p = this.musicDuck.gain;
@@ -622,6 +698,7 @@ class GameAudio {
 
   updateLoops(speed, boosting, flamer, active) {
     if (!this.ctx || !this.loops.engine) return;
+    this.loopsActive = active; // positional loops (stampede) fall silent while paused / levelling up / dead
     const t = this.ctx.currentTime;
     const e = this.loops.engine;
     const rev = 38 + speed * 3.2 + (boosting ? 25 : 0);
@@ -661,7 +738,7 @@ class GameAudio {
       const x = f.rx ?? f.x, z = f.rz ?? f.z;
       if (lv.panner.positionX) { lv.panner.positionX.value = x; lv.panner.positionZ.value = z; }
       const d = Math.hypot(x - L.x, z - L.z);
-      lv.gain.gain.setTargetAtTime(lv.vol / (1 + (d / (lv.range * 0.35)) ** 2), this.ctx.currentTime, 0.1);
+      lv.gain.gain.setTargetAtTime(this.loopsActive === false ? 0 : lv.vol / (1 + (d / (lv.range * 0.35)) ** 2), this.ctx.currentTime, 0.1);
     }
   }
 
@@ -671,7 +748,7 @@ class GameAudio {
     return {
       peak: read(this.meter), peakPre: read(this.meterPre),
       state: this.ctx?.state || 'none', voices: this.voices.length, loops: this.loopVoices.size, music: this.md.cur?.id || null, musicState: this.md.state,
-      sfxLoaded: this.sfxBuf.size, sfxTotal: Object.keys(this.manifest?.sfx || {}).length, musicLoaded: [...this.music.keys()], layer: +this.md.layerLevel.toFixed(2), heat: +this.md.heat.toFixed(2)
+      sfxLoaded: this.sfxBuf.size, sfxTotal: Object.keys(this.manifest?.sfx || {}).length, musicLoaded: [...this.music.keys()], musicMB: Math.round([...this.music.values()].reduce((t, m) => t + m.buffer.length * m.buffer.numberOfChannels * 4, 0) / 1e6), layer: +this.md.layerLevel.toFixed(2), heat: +this.md.heat.toFixed(2)
     };
   }
 }

@@ -251,13 +251,9 @@ class Game {
     $('set-touchsens').addEventListener('input', (e) => { s.touchSens = +e.target.value; this._applyTouchSettings(); save(); });
     $('set-assist').addEventListener('change', (e) => { s.aimAssist = e.target.checked; this._applyTouchSettings(); save(); });
     $('set-quality').addEventListener('change', (e) => { s.quality = e.target.value; save(); $('set-note').textContent = 'Graphics quality applies after a reload.'; });
-    // Browsers only allow audio after a user gesture: unlock (and start the title theme) on the first one anywhere.
-    // touchend/click cover iOS Safari, which ignores pointerdown for this purpose.
-    const unlock = () => {
-      this.audio.unlock(); // builds the graph and starts whatever music state the game is in (title theme)
-      if (!this.audio.supported || this.audio.ctx?.state === 'running') for (const ev of ['pointerdown', 'keydown', 'touchend', 'click']) window.removeEventListener(ev, unlock, true);
-    };
-    for (const ev of ['pointerdown', 'keydown', 'touchend', 'click']) window.addEventListener(ev, unlock, true);
+    // Browsers only allow audio after a user gesture: unlock on the first one anywhere. This builds the graph and starts
+    // whatever music state the game is in (title theme).
+    this.audio.armGesture();
     const best = this._best();
     if (best.score) document.getElementById('best').innerHTML = `HI-SCORE <b>${best.score.toLocaleString('en-US')}</b>${best.boss ? ' · APEX DOWN' : ''}`;
   }

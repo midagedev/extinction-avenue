@@ -36,7 +36,7 @@ server.unref();
 
 const t0 = Date.now();
 const log = (...a) => console.log(`[${((Date.now() - t0) / 1000).toFixed(0)}s]`, ...a);
-const browser = await chromium.launch({ channel: 'chromium', args: ['--ignore-gpu-blocklist', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required'] });
+const browser = await chromium.launch({ channel: 'chromium', args: ['--ignore-gpu-blocklist', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] }); // default autoplay policy: audio must unlock from the taps
 const results = {};
 let failures = 0;
 const check = (res, name, ok, info = '') => { res[name] = ok ? 'PASS' : `FAIL ${info}`; if (!ok) failures++; log(ok ? 'PASS' : 'FAIL', name, info); };
@@ -45,7 +45,11 @@ async function run(orient) {
   const [W, H] = orient === 'portrait' ? [390, 844] : [844, 390];
   const ctx = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Mobile Safari/537.36' });
   const page = await ctx.newPage();
-  page.on('pageerror', (e) => log('[pageerror]', e.message));
+  const errors = [];
+  page.on('pageerror', (e) => { errors.push(e.message); log('[pageerror]', e.message); });
+  page.on('console', (m) => {
+    if (m.type() === 'error' || (m.type() === 'warning' && /AudioContext was not allowed|user gesture|autoplay/i.test(m.text()))) { errors.push(m.text()); log(`[console.${m.type()}]`, m.text().slice(0, 300)); }
+  });
   const cdp = await ctx.newCDPSession(page);
   const touch = (type, x, y) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y, id: 1, radiusX: 18, radiusY: 22 }] });
   const res = {};
@@ -57,7 +61,10 @@ async function run(orient) {
     Math.random = () => { x ^= x << 13; x >>>= 0; x ^= x >> 17; x ^= x << 5; x >>>= 0; return x / 4294967296; };
   }, seed);
   check(res, 'starts-in-touch-mode', await page.evaluate(() => document.body.classList.contains('touch')));
+  check(res, 'no-audio-before-first-tap', await page.evaluate(() => !window.__game.game.audio.ctx));
   await page.tap('#btn-play');
+  const ac = await page.waitForFunction(() => window.__game.game.audio.ctx?.state === 'running', null, { timeout: 10000 }).then(() => 'running', () => page.evaluate(() => window.__game.game.audio.ctx?.state || 'none'));
+  check(res, 'first-tap-unlocks-audio', ac === 'running', ac);
   const step = (s) => page.evaluate((s) => { const g = window.__game; g.step(s, 1 / 30); if (g.game.state === 'levelup') g.pick(0); return g.summary(); }, s);
   const ts = () => page.evaluate(() => window.__game.touchState());
   const threats = () => page.evaluate(() => window.__game.threats().filter((t) => !t.type.startsWith('pickup') && t.type !== 'wreck'));
@@ -145,6 +152,9 @@ async function run(orient) {
   const ret = boxes.find((b) => b.sel === '#reticle');
   if (ret) res.reticlePx = Math.round(ret.r - ret.l);
   await shot(page, `${out}/mobile-${orient}-hud.png`);
+  const au = await page.evaluate(() => window.__game.game.audio.stats());
+  check(res, 'audio-running-on-touch', au.state === 'running' && au.musicMB <= 140, JSON.stringify({ state: au.state, music: au.music, musicMB: au.musicMB, voices: au.voices }));
+  check(res, 'no-console-errors', errors.length === 0, errors.slice(0, 3).join(' | '));
   await ctx.close();
 }
 

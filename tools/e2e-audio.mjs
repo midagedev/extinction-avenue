@@ -1,12 +1,15 @@
 // Headless audio checks for EXTINCTION AVENUE v4 (Playwright + Chromium, which runs WebAudio on a fake output device).
 //   node tools/e2e-audio.mjs [shotsDir]
-// 1. no AudioContext before the first gesture; a click unlocks it and the title theme starts
-// 2. settings: mute / master / music / effects / announcer persist in localStorage; screenshot of the audio settings
+// 1. no AudioContext is constructed before the first gesture (the constructor is wrapped, so this covers every code
+//    path) and no autoplay warnings; a click unlocks it and the title theme starts
+// 2. settings: mute / master / music / effects / announcer persist in localStorage and come back after a reload
+//    (store, engine and slider values); screenshot of the audio settings
 // 3. every SFX group and the run cues decode; a run with a simple bot: voices play, the voice cap holds, the master
 //    peak stays under 0 dBFS, the run cue follows the heat (breather / combat / combat_hi + heat layer)
+// 3b. phone memory budget (?musicbudget=140): decoded music stays under it while the run cues keep changing
 // 4. ?boss: warning → sting, boss1 → phase 2 boss2 (intro → loop) → phase 3 boss3 → victory sting → results loop
-// 5. death → continue loop → give up → game-over jingle → results loop
-// 6. no console errors / page errors anywhere
+// 5. death → continue loop → give up → game-over jingle → results loop; a new run cuts a still-playing jingle
+// 6. no console errors / page errors / autoplay-policy warnings anywhere
 const localPW = new URL('../.tools/node_modules/playwright/index.mjs', import.meta.url);
 const fs = await import('node:fs');
 const path = await import('node:path');
@@ -34,11 +37,26 @@ const check = (name, ok, info = '') => { results.push({ name, ok: !!ok, info });
 const t0 = Date.now();
 const log = (...a) => console.log(`[${((Date.now() - t0) / 1000).toFixed(0)}s]`, ...a);
 const errors = [];
+// Chromium's autoplay-policy warning ("The AudioContext was not allowed to start…") is a console warning, not an error
+const autoplayRe = /AudioContext was not allowed|user gesture|autoplay/i;
 
 async function open(params, viewport = { width: 1280, height: 720 }) {
   const page = await browser.newPage({ viewport });
   page.on('pageerror', (e) => { errors.push(`pageerror: ${e.message}`); console.log('[pageerror]', e.message); });
-  page.on('console', (m) => { if (m.type() === 'error') { errors.push(`console: ${m.text()}`); console.log('[console.error]', m.text().slice(0, 300)); } });
+  page.on('console', (m) => {
+    if (m.type() === 'error' || (m.type() === 'warning' && autoplayRe.test(m.text()))) { errors.push(`console.${m.type()}: ${m.text()}`); console.log(`[console.${m.type()}]`, m.text().slice(0, 300)); }
+  });
+  // record every AudioContext construction and whether the page had a user activation at that moment
+  await page.addInitScript(() => {
+    window.__acLog = [];
+    for (const k of ['AudioContext', 'webkitAudioContext']) {
+      const C = window[k];
+      if (!C) continue;
+      window[k] = class extends C {
+        constructor(...a) { super(...a); window.__acLog.push({ activated: !!navigator.userActivation?.hasBeenActive, state: this.state }); }
+      };
+    }
+  });
   await page.goto(`${base}?test&webgl&quality=low${params}`);
   await page.waitForFunction(() => ['title', 'playing'].includes(window.__game?.game?.state), null, { timeout: 900000 });
   return page;
@@ -50,10 +68,13 @@ const step = (page, s) => page.evaluate((s) => window.__game.step(s), s);
 // --- 1. gesture unlock + title -----------------------------------------------------------------------------------------
 let page = await open('');
 log('title up');
-check('no AudioContext before the first gesture', await page.evaluate(() => !window.__game.game.audio.ctx));
+await page.waitForTimeout(3000); // idle on the title without any input: nothing may start
+check('no AudioContext before the first gesture', await page.evaluate(() => !window.__game.game.audio.ctx && window.__acLog.length === 0), await page.evaluate(() => window.__acLog));
 await page.mouse.click(30, 30);
 check('first click unlocks a running AudioContext', await until(page, () => window.__game.game.audio.ctx?.state === 'running', null, 10000), await page.evaluate(() => window.__game.game.audio.ctx?.state));
 check('title theme starts', await until(page, () => window.__game.game.audio.md.cur?.id === 'title', null, 30000), (await stats(page)).music);
+const acs = await page.evaluate(() => window.__acLog);
+check('the only AudioContext was created inside a user gesture', acs.length === 1 && acs[0].activated, acs);
 
 // --- 2. settings -------------------------------------------------------------------------------------------------------
 await page.click('#btn-settings');
@@ -71,6 +92,14 @@ await page.waitForTimeout(200);
 const muted = await page.evaluate(() => ({ enabled: window.__game.game.audio.enabled, store: JSON.parse(localStorage.getItem('ea-audio')), label: document.querySelector('#set-mute b').textContent }));
 check('mute toggles and persists', !muted.enabled && muted.store.enabled === false && muted.label === 'MUTED', muted);
 await page.screenshot({ path: `${shots}/audio-settings-muted.png` });
+// reload while muted: mute comes back
+await page.reload();
+await page.waitForFunction(() => window.__game?.game?.state === 'title', null, { timeout: 900000 });
+const mutedBack = await page.evaluate(() => ({ enabled: window.__game.game.audio.enabled, label: document.querySelector('#set-mute b').textContent, ac: window.__acLog.length }));
+check('mute restored after reload (and still no AudioContext)', !mutedBack.enabled && mutedBack.label === 'MUTED' && mutedBack.ac === 0, mutedBack);
+await page.mouse.click(30, 30);
+await page.click('#btn-settings');
+await page.waitForTimeout(400);
 await page.click('#set-mute');
 await page.click('#set-announcer');
 const st2 = await page.evaluate(() => JSON.parse(localStorage.getItem('ea-audio')));
@@ -80,8 +109,8 @@ await page.click('#s-settings [data-close]');
 // reload: settings come back
 await page.reload();
 await page.waitForFunction(() => window.__game?.game?.state === 'title', null, { timeout: 900000 });
-const back = await page.evaluate(() => ({ v: window.__game.game.audio.volume, m: document.getElementById('set-music').value, a: document.getElementById('set-announcer').checked }));
-check('settings restored after reload', back.v.music === 0.45 && back.m === '0.45' && back.a === true, back);
+const back = await page.evaluate(() => ({ v: { ...window.__game.game.audio.volume }, enabled: window.__game.game.audio.enabled, sl: ['set-master', 'set-music', 'set-sfx'].map((id) => document.getElementById(id).value), a: document.getElementById('set-announcer').checked }));
+check('volumes restored after reload (engine + sliders)', back.enabled && back.v.master === 0.8 && back.v.music === 0.45 && back.v.sfx === 0.9 && back.sl.join() === '0.8,0.45,0.9' && back.a === true, back);
 await page.mouse.click(30, 30);
 await until(page, () => window.__game.game.audio.ctx?.state === 'running', null, 10000);
 
@@ -119,6 +148,35 @@ check('master peak below 0 dBFS (output)', seen.maxPeak > 0.01 && seen.maxPeak <
 check('limiter keeps the level under 0 dBFS before the safety clipper', seen.maxPre < 1.0, seen.maxPre);
 check('heat layer faded in at some point', seen.maxLayer > 0.05, seen.maxLayer);
 await page.screenshot({ path: `${shots}/audio-run.png` });
+await page.close();
+
+// --- 3b. memory budget ------------------------------------------------------------------------------------------------
+page = await open('&musicbudget=140');
+await page.mouse.click(30, 30);
+await until(page, () => window.__game.game.audio.ctx?.state === 'running', null, 10000);
+await until(page, () => window.__game.game.audio.md.cur?.id === 'title', null, 30000);
+await until(page, () => window.__game.game.audio.stats().musicLoaded.includes('breather'), null, 60000);
+await page.click('#btn-play');
+await until(page, () => window.__game.game.state === 'playing', null, 20000);
+const tight = { cues: new Set(), maxMB: 0, silent: 0 };
+for (let k = 0; k < 40; k++) {
+  await page.evaluate(() => {
+    const g = window.__game;
+    const th = g.threats().filter((t) => !t.type.startsWith('pickup')).sort((a, b) => (b.attacking - a.attacking) || (a.dist - b.dist))[0];
+    if (th) { g.setAim(th.head?.x ?? th.x, th.head?.y ?? th.y); g.fire(true); } else g.fire(false);
+    if (g.game.state === 'levelup') g.pick(0);
+    if (g.game.player.hp < 40) g.game.player.hp = g.game.player.maxHp;
+  });
+  await step(page, 2);
+  await page.waitForTimeout(250);
+  const s = await stats(page);
+  if (s.music) tight.cues.add(s.music); else if (k > 3) tight.silent++;
+  tight.maxMB = Math.max(tight.maxMB, s.musicMB);
+  if (k % 10 === 0) log(`budget run cue=${s.music} musicMB=${s.musicMB} loaded=${s.musicLoaded.join(',')}`);
+}
+await page.evaluate(() => window.__game.fire(false));
+check('decoded music stays under a 140 MB budget', tight.maxMB > 0 && tight.maxMB <= 140, tight.maxMB);
+check('run cues still change under the budget (evicted cues decode again)', tight.cues.size >= 2 && tight.silent <= 2, { cues: [...tight.cues], silentSamples: tight.silent });
 await page.close();
 
 // --- 4. boss ------------------------------------------------------------------------------------------------------------
@@ -182,6 +240,12 @@ await page.screenshot({ path: `${shots}/audio-continue.png` });
 await page.evaluate(() => window.__game.game.giveUp());
 check('give up → game-over jingle', (await stats(page)).musicState === 'gameover', await stats(page));
 check('game-over jingle chains into the results loop', await until(page, () => window.__game.game.audio.md.cur?.id === 'results', null, 30000), await stats(page));
+// "Again" while a jingle is still playing: the new run must cut it
+await page.evaluate(() => window.__game.game.audio.setMusic('gameover'));
+const jingle = await page.evaluate(() => window.__game.game.audio.md.stings.length);
+await page.evaluate(() => window.__game.game.audio.setMusic('run'));
+const after = await page.evaluate(() => ({ stings: window.__game.game.audio.md.stings.length, state: window.__game.game.audio.md.state }));
+check('a new run stops a still-playing stinger', jingle === 1 && after.stings === 0 && after.state === 'run', { jingle, ...after });
 await page.close();
 
 check('no console errors / page errors', errors.length === 0, errors.slice(0, 5));

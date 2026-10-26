@@ -20,8 +20,9 @@ export class MusicDirector {
   constructor(audio) {
     this.a = audio;
     this.state = 'off';
-    this.cur = null; // { id, entry, src, gain, layer, t0, len }
-    this.old = [];
+    this.cur = null; // { id, entry, srcs, gain, layer, t0, len, at, fadeIn, outAt }
+    this.old = []; // cues fading out (their fade may still be scheduled on a future bar)
+    this.stings = []; // playing one-shots: { id, src, gain }
     this.want = null; // cue id that should be playing (may still be loading)
     this.bossPhase = 1;
     this.heat = 0;
@@ -47,6 +48,8 @@ export class MusicDirector {
     this.state = state;
     clearTimeout(this.chain);
     if (!this.ctx) return;
+    // A one-shot only carries on into the state it leads to (sting → boss, victory / game over → results)
+    if (state !== 'boss' && state !== 'results') this.stopStingers();
     switch (state) {
       case 'off': this._to(null, { fadeOut: 0.8 }); break;
       case 'title': this._to('title', { quant: 'now', fadeIn: 1.2, fadeOut: 0.8 }); break;
@@ -113,8 +116,23 @@ export class MusicDirector {
     g.gain.value = gain;
     src.connect(g).connect(this.a.stingBus);
     src.start(when, buf.offset);
-    src.onended = () => { try { g.disconnect(); } catch { /* gone */ } };
+    const st = { id, src, gain: g };
+    this.stings.push(st);
+    this.a.musicUsed.set(id, performance.now());
+    src.onended = () => { try { g.disconnect(); } catch { /* gone */ } this.stings = this.stings.filter((s) => s !== st); };
     return buf.buffer.duration - buf.offset + (when - ctx.currentTime);
+  }
+
+  /** Fade out any playing one-shot (e.g. "Again" pressed while the game-over jingle still plays) */
+  stopStingers(fade = 0.3) {
+    const t = this.ctx.currentTime;
+    for (const s of this.stings) {
+      s.gain.gain.cancelScheduledValues(t);
+      s.gain.gain.setValueAtTime(s.gain.gain.value, t);
+      s.gain.gain.linearRampToValueAtTime(0, t + fade);
+      try { s.src.stop(t + fade + 0.02); } catch { /* not started */ }
+    }
+    this.stings = [];
   }
 
   // ------------------------------------------------------------------------------------------------------------------
@@ -180,18 +198,42 @@ export class MusicDirector {
     if (this.cur && this.cur.id === id) return;
     if (id && !this.ready(id)) { this.a.loadMusic([id]); if (!this.cur) return; }
     const when = quant === 'now' ? ctx.currentTime + 0.03 : this._nextGrid(quant);
-    // Fade out whatever plays now
+    // Fade out whatever plays now, and bring forward fades still waiting for a later bar
+    for (const o of this.old) if (o.outAt > when) this._fadeOut(o, when, Math.min(fadeOut, 0.5));
     if (this.cur) {
-      const c = this.cur;
-      c.gain.gain.cancelScheduledValues(when);
-      c.gain.gain.setValueAtTime(c.gain.gain.value || 1, when);
-      c.gain.gain.linearRampToValueAtTime(0, when + fadeOut);
-      for (const s of c.srcs) s.stop(when + fadeOut + 0.05);
-      setTimeout(() => { try { c.gain.disconnect(); } catch { /* gone */ } }, (when - ctx.currentTime + fadeOut + 0.3) * 1000);
+      this._fadeOut(this.cur, when, fadeOut);
       this.cur = null;
     }
     if (!id || !this.ready(id)) return;
     this.cur = this._start(id, when, fadeIn);
+  }
+
+  /** Fade cue `c` out from `when` (a cue that hasn't started by then is dropped outright) */
+  _fadeOut(c, when, fadeOut) {
+    const ctx = this.ctx;
+    const g = c.gain.gain;
+    const stopAll = (t) => { for (const s of c.srcs) { try { s.stop(t); } catch { /* not started */ } } };
+    clearTimeout(c.disc);
+    if (when <= c.at) {
+      g.cancelScheduledValues(0);
+      g.setValueAtTime(0, ctx.currentTime);
+      stopAll(ctx.currentTime);
+      c.outAt = ctx.currentTime;
+    } else {
+      // Level at `when` along the fade-in ramp (reading gain.value would give the level now, not then)
+      const level = Math.max(0, Math.min(1, (when - c.at) / c.fadeIn));
+      if (g.cancelAndHoldAtTime) g.cancelAndHoldAtTime(when); // keeps a fade-in that is still ramping intact up to `when`
+      else g.cancelScheduledValues(when);
+      g.setValueAtTime(level, when);
+      g.linearRampToValueAtTime(0, when + fadeOut);
+      stopAll(when + fadeOut + 0.05);
+      c.outAt = when;
+    }
+    if (!this.old.includes(c)) this.old.push(c);
+    c.disc = setTimeout(() => {
+      try { c.gain.disconnect(); } catch { /* gone */ }
+      this.old = this.old.filter((o) => o !== c);
+    }, (c.outAt - ctx.currentTime + fadeOut + 0.3) * 1000);
   }
 
   _start(id, when, fadeIn) {
@@ -228,7 +270,9 @@ export class MusicDirector {
     s.connect(gain);
     srcs.push(s);
     t0 = loopAt;
-    const cue = { id, entry: e, srcs, gain, t0, len, layer: null };
+    const cue = { id, entry: e, srcs, gain, t0, len, layer: null, at: when, fadeIn: Math.max(0.01, fadeIn), outAt: Infinity };
+    this.a.musicUsed.set(id, performance.now());
+    if (intro) this.a.musicUsed.set('boss2_intro', performance.now());
     // Heat layer: same tempo, 4-bar loop that divides the combat loop exactly → started on the same grid
     if (id === 'combat') this._attachLayer(cue);
     return cue;
