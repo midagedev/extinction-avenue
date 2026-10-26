@@ -1,7 +1,7 @@
-# EXTINCTION AVENUE — Report (v2: first-person rear gunner · v3: rigged creatures & touch aiming)
+# EXTINCTION AVENUE — Report (v2: first-person rear gunner · v3: rigged creatures & touch aiming · v4: music & sound)
 
 **Repo:** `/workspace/dino-game` (local git, never pushed) · **Screenshots:** `/workspace/dino-game-shots/v2/`,
-`/workspace/dino-game-shots/v3/`
+`/workspace/dino-game-shots/v3/`, `/workspace/dino-game-shots/v4/`
 **One-liner:** *Rush hour just went Cretaceous.* Cretagen's specimens are loose in Midtown and they're chasing your cab.
 Unit 77 drives itself down the real avenues; you ride the tail gun, facing backward, and shoot everything that runs
 you down. It ends with **GRIDLOCK**, a T. rex that chases the cab down the avenue, pulls up beside it, and finally
@@ -10,6 +10,169 @@ charges head-on.
 The game is built on mrdoob's MIT-licensed [Slop New York](https://github.com/mrdoob/slop-newyork) (three.js
 WebGPURenderer + TSL). The original free-roam sim still works at `sim.html`. The LICENSE, the OSM / NYC Open Data
 attribution and mrdoob's credit are kept in the README, on the title screen and in ASSETS.md.
+
+---
+
+## v4: music and sound (2026-10-27)
+
+The owner asked for BGM and sound effects that make the game sound like a polished arcade cabinet. The v3 audio was
+36 procedural WebAudio recipes and a 16-step synth sequencer. v4 ships real music and designed SFX as MP3s
+(`assets/audio/`), a new mixer (`js/game/audio.js`) and an adaptive music director (`js/game/audio-music.js`). Every
+source is CC0 or public domain, or is original work made here. Each source has its URL and license in ASSETS.md §2.3
+and a license excerpt in `assets/licenses/audio/`. Screenshots: `/workspace/dino-game-shots/v4/`.
+
+### Music
+
+| Slot | Cue(s) | Source |
+|---|---|---|
+| Title / attract | `title` | "Cyberpunk Moonlight Sonata" by Joth (OGA, CC0) |
+| Combat | `combat` + `combat_heat` layer | "A Flawless Getaway" by vitalezzz (CC0), 130 BPM × 92 bars + **original** 4-bar percussion layer at exactly 130 BPM |
+| High heat | `combat_hi` | "Hunter-class Lifeform" by vitalezzz (CC0) |
+| Breather | `breather` | "Net Infiltration" by vitalezzz (CC0) |
+| Boss incoming | `boss_sting` | **Original** "Apex Approaching": no CC0 sting fit, so it is composed in `tools/audio/music.js` |
+| T. rex, per phase | `boss1` → `boss2_intro`+`boss2` → `boss3` | nene "Boss Battle #8 [Metal]" → nene "Boss Battle #9 [Metal]" (opening + loop) → a 32-bar section of vitalezzz "Unholy Surge" (all CC0) |
+| Victory | `victory` | "Victory Fanfare Short" by cynicmusic (CC0) |
+| Continue / game over | `continue`, `gameover` | "Continue? Theme" by CleytonKauffman (CC0); "Race Finish Bad (Jingle)" by MintoDog (CC0) |
+| Results | `results` | "Race Finish Good (Loop)" by MintoDog (CC0) |
+
+How the tracks were prepared (`tools/audio/music.js`):
+- Each track's tempo and beat grid were measured with `tools/audio/analyze.js`, using onset autocorrelation refined
+  over the whole file.
+- MP3 padding was trimmed so each loop is exactly its musical length. For example, `combat` is 92 bars at 130.000 BPM.
+- Each track was loudness-normalised (−14 to −18 LUFS by role).
+- A 0.25 s pre-roll and post-roll were added around each loop. Seamless looping then doesn't depend on whether the
+  browser's MP3 decoder strips the 1105-sample codec delay. The runtime detects that delay from the decoded length and
+  compensates for it.
+
+### Adaptive mixing
+
+- **Quantised crossfades.** Every cue change waits for the next bar of the playing cue (or the next beat when a bar
+  is too long), then crossfades. Each cue's tempo and bar grid are stored in `manifest.json`.
+- **Combat heat.** The heat value (0–1) comes from:
+  - attackers and dinosaurs on screen
+  - firing
+  - recent kills
+  - low hull
+  - mini-bosses
+
+  The run state uses heat to pick between three cues, with hysteresis and a minimum dwell time:
+  - **breather:** calm beats, a cleared zone, an empty street, or the roll-out
+  - **combat**
+  - **combat_hi:** mini-bosses, the stampede, or sustained heat
+
+  On `combat`, an original percussion layer at the same tempo is started on the same grid. Its level follows heat
+  (heard 0 → 0.95 in the e2e run).
+- **Boss.**
+  - The warning klaxon fades the loop out on the bar and plays the original sting.
+  - The reveal starts phase 1.
+  - Each phase change swaps the track on the next beat, under the phase roar and explosion: phase 2 plays an intro
+    and then its loop, phase 3 is the heaviest cut.
+  - A kill gives the death roar with a −14 dB duck, then the victory sting, then the results loop.
+- **Death.** Death plays the continue loop. Giving up plays the game-over jingle and then the results loop. A continue
+  drops back into the combat or boss music.
+- **Ducking.** The music dips for these, keeping the deepest of any overlapping ducks:
+  - T. rex roars: −9 dB, scaled by the roar's length
+  - the boss name card and reveal: −10 dB for 3 s
+  - the boss death: −14 dB
+  - big explosions: −5 dB
+  - mini-boss entrances
+  - level-up evolutions
+  - the announcer: −5 dB
+
+  Pause and level-up still muffle the music through a low-pass.
+- **Lazy loading.** About 1.4 MB loads for the title screen: the theme plus UI clicks. The run cues and every SFX
+  stream in behind it. The boss suite (2.2 MB) is requested about 100 s before GRIDLOCK is due, and the e2e checks that
+  it isn't loaded up front. If a boss cue isn't ready yet, `combat_hi` covers until it is.
+
+### Sound effects
+
+The build has 71 groups and 160 files. Each is designed in `tools/audio/sfx.js`: CC0/PD recordings are cut into single
+events by an onset detector, then pitched, filtered, saturated and layered with synthesis (sub thumps, clicks,
+formant growls, sweeps, reverb). The output is peak-normalised mono MP3.
+
+| Area | What plays |
+|---|---|
+| Tail gun | 6 short shot bodies cut from CC0 near-distance rifle recordings (pitched down, sub thump, mechanical click). They rotate without immediate repeats, with ±5 % pitch, gain jitter and up to −2 dB of ease-off in long bursts. A street-echo **tail plays only when a burst ends**, so sustained fire stays tight. Brass **casings** tinkle on 45 % of shots, 0.2–0.4 s later. |
+| Reload / overheat / dry fire | Belt out → new belt in at about 55 % → charging handle. A click on an empty belt. A steam hiss plus cooling pings when barrel heat maxes out. |
+| Hits | A metallic hit-marker tick, and a brighter two-tone "ding" for headshots and the collar. |
+| Kills | `fossilize` (6): rock crack + gravel + glass shard + thump. `shatter_big` (3): crack + rock slide + boulder + sub. |
+| Explosions / support weapons | `explosion` (4), `explosion_big` (2, used for the Skyhammer and the boss reveal), plus gatling, shotgun, missiles, tesla, saws, mine beeps, an incoming-shell whistle and a flamer loop. The Rail Lance has its own shot. |
+| Cab | `hurt` (4): plate + sheet metal + glass crack + thump. Storefront glass bursts. A death composite. |
+| Creatures | Scuttler chirps and Sicklejaw calls from a sandhill crane; Sicklejaw screech (eagle + peacock + cat hiss + formant rasp); Brute (grizzly + troll); Hornwall (bison + alligator + deer); Spiketail (bear + pig); Skyreaver (screech + barn owl). Heavy walkers get footsteps within 45 m. A charging Hornwall drags a **positional stampede loop** along with it. Pack hunters call to each other now and then. |
+| T. rex | 5 roars (2 long, 2 short, 1 death), layered from lion (PD) + grizzly (PD) + a CC0 monster roar, pitched down. Added on top: an original three-saw formant growl with vowel sweeps and distortion, a sub drop, chest rumble, breath and a street-canyon reverb. No elephant and no film roar. Roars follow the boss in 3D. Boss stomps are 4 layered impacts with ground shake. |
+| UI / arcade | Clicks, hover, back; the level-up fanfare; card deal / pick / reroll; evolve; combo; the DANGER alert; the boss klaxon; XP ticks that rise in pitch; pickup, heal, overdrive, zone clear; the continue countdown tick. |
+| Announcer | Kenney's CC0 Voiceover Packs: "Go!", "Ready", "Level up", "Look out", "Power up", "Combo", "Multi kill", "Prepare yourself", "Final round", "Hurry up" (3 s left on continue), "Game over", "New highscore", "Flawless victory" / "Mission completed". All of it can be switched off in Settings. |
+
+### Mixer
+
+```
+voices → category buses (weapons / impacts / creatures / ui / ambience) → glue compressor → SFX volume ─┐
+announcer ─────────────────────────────────────────────────────────────────────────→ SFX volume ─┤
+music cues → duck → muffle (LP) → music volume ─────────────────────────────────────────────────────┤
+stingers ─────────────────────→ music volume ───────────────────────────────────────────────────────┤
+                                                       master → limiter (−2.5 dB, 20:1) → −2 dB trim → out
+```
+
+- **Voice limiting.**
+  - Each sound has its own voice limit and minimum retrigger gap.
+  - Weapons steal their own oldest voice instead of dropping the new shot.
+  - A global cap (44 voices on desktop, 26 on mobile) steals the oldest, lowest-priority voice first.
+  - The e2e bot run peaked at 23 simultaneous voices.
+- **3D positioning.** Enemy sounds use a PannerNode, and the listener follows the camera's position and forward
+  vector. On top of that come a tuned distance curve, an air-absorption low-pass beyond 14 m, and a reverb send that
+  grows with distance. Long voices (boss roars, the stampede loop) follow their source.
+- **No distortion on the master.** Peak-normalised sources feed the glue compressor, then the limiter, then the trim.
+  The e2e meter after the trim stayed below 0 dBFS through a 150 s bot run and the boss fight (numbers in Measured).
+
+### UX
+
+- **Settings → AUDIO.** A mute toggle, master / music / effects sliders (with % readouts) and an announcer toggle.
+  They are stored in `localStorage` under `ea-audio`.
+- **Other mute controls.** **M** toggles mute in game, and the pause menu has a SOUND ON/OFF button for touch.
+- **Unlocking.**
+  - No AudioContext exists before the first gesture.
+  - The game listens for pointerdown, keydown, touchend and click; touchend and click cover iOS.
+  - A silent buffer is played inside the gesture.
+- **Background tabs.** The context is suspended while the tab is hidden, which saves battery on phones.
+
+### Measured
+
+`node tools/e2e-audio.mjs`: **25/25 checks pass**, with no console or page errors. Headless Chromium runs WebAudio on a
+fake output device, and the meter is an AnalyserNode after the limiter.
+
+| Check | Result |
+|---|---|
+| AudioContext before the first gesture | none; the first click gives `running` and the title theme |
+| Settings persistence | mute, master 0.8 / music 0.45 / effects 0.9 and the announcer survive a reload |
+| Load at the title | all 71 SFX groups and the run cues decode; the boss cues stay unloaded (lazy) |
+| 150 s bot run | cues seen: breather → combat → combat_hi → combat; heat layer 0 → 0.95; up to 19 simultaneous voices (cap 44) |
+| Master peak, run | 0.71 linear (−3.0 dBFS); before the safety clipper also 0.71, so the clipper never engaged |
+| Boss | warning → sting state → `boss1` → `boss2` (after its intro) → `boss3`; peak 0.66; kill → victory sting (peak 0.74) → `results` loop |
+| Death | `continue` loop (peak 0.73) → give up → game-over jingle → `results` loop |
+| Unit tests | `node --test tests/` 113/113 |
+
+Sizes: music 10.2 MB (boss suite 2.2 MB of it, lazy), SFX 1.76 MB (160 files), license excerpts 260 KB.
+
+### v4 known issues
+
+- **Nothing was auditioned by ear.** This sandbox has no audio output. The tracks were chosen and the effects designed
+  from:
+  - page descriptions and tags
+  - loudness and tempo analysis
+  - waveform and spectrogram contact sheets (`tools/audio/sheet.js`)
+
+  Levels in the `SFX` table in `js/game/audio.js` and cue loudness targets may need a listening pass. Some designs are
+  the most likely to want tweaks: the gun sub thump, the creature layer balances, and the `boss3` section seam.
+- **Boss tempo metadata is approximate.** `boss1`'s BPM is inferred (131.8), so its bar grid is approximate. Those
+  transitions happen under a roar anyway.
+- **Different tracks have different tempos.** The run cues are 127–130 BPM, so a cue change is a bar-quantised cut
+  with a short crossfade, not a beat-matched mix.
+- **Boss music on slow connections.** If the boss suite hasn't loaded by the reveal, `combat_hi` plays until it
+  arrives.
+- **Download size.** The full set is about 12 MB of MP3 (music 10.2 MB, SFX 1.8 MB). The 96 kbps music is the bulk;
+  dropping to 80 kbps would save about 1.7 MB.
+- **Safari is untested.** The audio path uses only standard WebAudio. MP3 was chosen over OGG for Safari, but iOS
+  Safari wasn't tested on a device.
 
 ---
 
