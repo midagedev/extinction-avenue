@@ -47,6 +47,7 @@
   <main id="canvas-container" aria-label="Game view"></main>
   <canvas id="fx-overlay" aria-hidden="true"></canvas>
   <div id="touch-zone" aria-hidden="true"></div>
+  <div id="touch-pad" aria-hidden="true"></div>
   <div id="flash" aria-hidden="true"></div>
   <div id="letterbox" aria-hidden="true"><i></i><i></i></div>
 
@@ -165,7 +166,7 @@
         <div><kbd>R</kbd><b>RELOAD</b><span>The belt reloads by itself when empty. R or right click reloads early.</span></div>
         <div><kbd>SPACE</kbd><b>SKYHAMMER</b><span>Kills charge an air strike. It lands where the crosshair meets the street.</span></div>
         <div><span class="ico-slot" data-icon="gem"></span><b>LEVEL UP</b><span>Fossilized dinosaurs drop gene cores. Pick 1 of 3 upgrades: support guns, passives, and EVOLUTIONS. Shoot floating supply drops to grab them.</span></div>
-        <div><span class="ico-slot" data-icon="touch"></span><b>TOUCH</b><span>Your finger is the light gun: touch and hold where you want to shoot. RELOAD and SKYHAMMER buttons on the right.</span></div>
+        <div><span class="ico-slot" data-icon="touch"></span><b>TOUCH</b><span>Drag anywhere to move the crosshair like a trackpad — your finger never covers it. While you hold, it fires whenever the crosshair is on a dinosaur (mild aim assist helps). Settings can switch to a crosshair that floats above your finger. RELOAD and SKYHAMMER buttons on the right.</span></div>
       </div>
       <button class="btn primary" data-close type="button">GOT IT</button>
     </div>
@@ -181,6 +182,9 @@
         <label>Screen shake <select id="set-shake"><option value="1">Full</option><option value="0.5">Reduced</option><option value="0">Off</option></select></label>
         <label>Damage numbers <input type="checkbox" id="set-numbers" /></label>
         <label>Auto-fire when the crosshair is on a dinosaur <input type="checkbox" id="set-autofire" /></label>
+        <label>Touch aim <select id="set-touchaim"><option value="drag">Drag anywhere (trackpad)</option><option value="offset">Crosshair above finger</option></select></label>
+        <label>Touch sensitivity <input type="range" id="set-touchsens" min="0.6" max="2.6" step="0.1" /></label>
+        <label>Touch aim assist <input type="checkbox" id="set-assist" /></label>
         <label>Graphics <select id="set-quality"><option value="high">High (reflections)</option><option value="medium">Medium</option><option value="low">Low (fast)</option></select></label>
       </div>
       <p class="note" id="set-note"></p>

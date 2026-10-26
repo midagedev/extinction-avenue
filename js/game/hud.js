@@ -406,8 +406,9 @@ class HUD {
   }
 
   /** Crosshair (screen px). state: null | 'enemy' | 'weak'; heat 0..1 opens the brackets */
-  reticle(x, y, firing, state, heat = 0) {
+  reticle(x, y, firing, state, heat = 0, touching = false) {
     const r = this.el.reticle;
+    r.classList.toggle('held', touching);
     r.style.transform = `translate(${x}px, ${y}px)`;
     this._style('heat', r, '--heat', heat.toFixed(2));
     r.classList.toggle('firing', firing);

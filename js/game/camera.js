@@ -229,8 +229,10 @@ class GameCamera {
     );
     cam.lookAt(_c);
     cam.rotateZ(sh * 0.06 * Math.sin(t * 0.9));
-    if (Math.abs(cam.fov - this.fov) > 0.01) {
-      cam.fov = this.fov;
+    // Portrait phones: widen the vertical FOV so the view keeps at least ~52° across (the chase spreads sideways)
+    const fovOut = cam.aspect < 1.15 ? Math.max(this.fov, 2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(Math.min(this.fov, 60) * 0.85 / 2)) / cam.aspect) * 180 / Math.PI) : this.fov;
+    if (Math.abs(cam.fov - fovOut) > 0.01) {
+      cam.fov = fovOut;
       cam.updateProjectionMatrix();
     }
     cam.updateMatrixWorld();

@@ -52,7 +52,7 @@ const _v2 = new THREE.Vector3();
 const _hit = {};
 
 function loadSettings() {
-  const def = { shake: 1, numbers: true, autoFire: false, quality: 'high' };
+  const def = { shake: 1, numbers: true, autoFire: false, quality: 'high', touchAim: 'drag', touchSens: 1.5, aimAssist: true };
   try { return { ...def, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') }; } catch { return def; }
 }
 
@@ -158,6 +158,7 @@ class Game {
     this.director = new Director(this);
     this.input = new Input(this);
     this.input.onAction = (a) => this.onAction(a);
+    this._applyTouchSettings();
     this.stats = this._freshStats();
     this._bindUI();
 
@@ -224,12 +225,18 @@ class Game {
     $('set-numbers').checked = s.numbers;
     $('set-autofire').checked = s.autoFire;
     $('set-quality').value = s.quality;
+    $('set-touchaim').value = s.touchAim;
+    $('set-touchsens').value = String(s.touchSens);
+    $('set-assist').checked = s.aimAssist;
     $('set-sound').addEventListener('change', (e) => { this.audio.unlock(); this.audio.setEnabled(e.target.checked); });
     $('set-music').addEventListener('input', (e) => { this.audio.volume.music = +e.target.value; this.audio.applyVolumes(); });
     $('set-sfx').addEventListener('input', (e) => { this.audio.volume.sfx = +e.target.value; this.audio.applyVolumes(); this.audio.play('gun'); });
     $('set-shake').addEventListener('change', (e) => { s.shake = +e.target.value; this.cam.shakeScale = s.shake; save(); });
     $('set-numbers').addEventListener('change', (e) => { s.numbers = e.target.checked; this.vfx.showNumbers = s.numbers; save(); });
     $('set-autofire').addEventListener('change', (e) => { s.autoFire = e.target.checked; save(); });
+    $('set-touchaim').addEventListener('change', (e) => { s.touchAim = e.target.value; this._applyTouchSettings(); save(); });
+    $('set-touchsens').addEventListener('input', (e) => { s.touchSens = +e.target.value; this._applyTouchSettings(); save(); });
+    $('set-assist').addEventListener('change', (e) => { s.aimAssist = e.target.checked; this._applyTouchSettings(); save(); });
     $('set-quality').addEventListener('change', (e) => { s.quality = e.target.value; save(); $('set-note').textContent = 'Graphics quality applies after a reload.'; });
     // Unlock audio on the first gesture anywhere
     const unlock = () => { this.audio.unlock(); if (this.state === 'title') this.audio.setMusic('title'); };
@@ -464,8 +471,7 @@ class Game {
     // Aim + weapons
     this._updateAim(realDt);
     if (st === 'playing' && p.alive) {
-      const touchFire = this.input.touchMode && this.input.touchAim.id !== null;
-      this.weapons.update(dt, { fire: this.input.fire || touchFire, autoFire: this.settings.autoFire });
+      this.weapons.update(dt, { fire: this.input.fire || this.touchFire, autoFire: this.settings.autoFire });
     } else if (st === 'title') {
       this.weapons.sawBatch.begin(); this.weapons.sawBatch.end();
     }
@@ -508,6 +514,7 @@ class Game {
     const W = window.innerWidth, H = window.innerHeight;
     const inp = this.input;
     const aim = this.weapons.aim;
+    if (inp.touching && inp.touchSettings.assist) this._aimAssist(realDt, W, H);
     const mx = inp.mouse.x, my = inp.mouse.y;
     const ndcX = (mx / W) * 2 - 1, ndcY = -(my / H) * 2 + 1;
     const ray = this.cam.ray(ndcX, ndcY);
@@ -522,14 +529,60 @@ class Game {
     aim.x = _v2.x; aim.y = _v2.y; aim.z = _v2.z;
     aim.target = h ? h.e : null;
     aim.weak = h ? h.weak > 1 : false;
+    // Touch trigger: drag mode fires only while the crosshair is on something shootable (a short grace bridges gaps
+    // between pellets and twitchy targets); offset mode fires whenever the finger is down, like the classic light gun
+    let onShootable = !!h;
+    if (!onShootable && inp.touching) onShootable = !!(this.boss.raycastWrecks(ray, t + 1) || this.pickups.raycast(ray, t + 1));
+    this.touchOnT = onShootable ? 0.14 : Math.max(0, (this.touchOnT || 0) - realDt);
+    this.touchFire = inp.touching && (inp.touchSettings.mode === 'offset' || this.touchOnT > 0);
+    // Aim-assist friction: the crosshair slows down over a target (touch drag only)
+    inp.assistSlow = inp.touching && inp.touchSettings.assist && h ? 0.62 : 1;
     // Skyhammer lands where the crosshair meets the street
     this.cam.aimPoint(ndcX, ndcY, 0.3, _v);
     aim.gx = _v.x; aim.gz = _v.z;
     if (this.gunner.visible) this.gunner.update(realDt, _v2, this.weapons.reloadT > 0 ? 1 - this.weapons.reloadT / this.weapons.reloadDur : 0);
     if (this.state === 'playing' || this.state === 'bossintro' || this.state === 'intro') {
-      const touchFire = inp.touchMode && inp.touchAim.id !== null;
-      this.hud.reticle(mx, my, this.weapons.firing || (touchFire && this.weapons.reloadT <= 0), h ? (h.weak > 1 ? 'weak' : 'enemy') : null, this.weapons.heat);
+      this.hud.reticle(mx, my, this.weapons.firing || (this.touchFire && this.weapons.reloadT <= 0), h ? (h.weak > 1 ? 'weak' : 'enemy') : null, this.weapons.heat, inp.touching);
     }
+  }
+
+  /**
+   * Touch aim assist (mild): while a finger is down, the crosshair is pulled gently toward the nearest on-screen target
+   * point (heads, the boss collar, thrown cars) within ~10 % of the screen; the pull fades with distance and is too weak
+   * to drag the crosshair off a target the player is tracking. Friction (slower drag over a target) is applied in Input.
+   */
+  _aimAssist(dt, W, H) {
+    const m = this.input.mouse;
+    const cam = this.cam.camera;
+    const R = Math.min(W, H) * 0.1 + 16;
+    let best = null, bd = R * R;
+    const consider = (x, y, z) => {
+      _v.set(x, y, z).project(cam);
+      if (_v.z >= 1 || Math.abs(_v.x) > 1 || Math.abs(_v.y) > 1) return;
+      const sx = (_v.x * 0.5 + 0.5) * W, sy = (-_v.y * 0.5 + 0.5) * H;
+      const d2 = (sx - m.x) ** 2 + (sy - m.y) ** 2;
+      if (d2 < bd) { bd = d2; best = best || {}; best.x = sx; best.y = sy; }
+    };
+    for (const e of this.enemies.list) {
+      if (e.ghost || e.state === 'dying' || e.state === 'launched') continue;
+      if (e.boss) { const c = this.boss.collar; consider(c.x, c.y, c.z); continue; }
+      consider(e.hx, e.hy, e.hz);
+      consider(e.bx, e.by, e.bz);
+    }
+    for (const w of this.boss.wrecks) consider(w.x, w.y, w.z);
+    if (!best) return;
+    const d = Math.sqrt(bd);
+    const k = Math.min(1, dt * 4) * 0.55 * (1 - d / R);
+    m.x += (best.x - m.x) * k;
+    m.y += (best.y - m.y) * k;
+  }
+
+  _applyTouchSettings() {
+    const s = this.settings, t = this.input.touchSettings;
+    t.mode = s.touchAim === 'offset' ? 'offset' : 'drag';
+    t.sens = THREE.MathUtils.clamp(+s.touchSens || 1.5, 0.5, 3);
+    t.assist = !!s.aimAssist;
+    document.body.classList.toggle('aim-offset', t.mode === 'offset');
   }
 
   // ------------------------------------------------------------------------------------------------------------------
@@ -982,7 +1035,7 @@ class Game {
     if (this.hintT > 0) return;
     const touch = this.input.touchMode;
     const steps = touch
-      ? ['<b>TOUCH</b> a dinosaur to aim and fire', 'Hit them during the <b class="red">red ring</b> to stagger', '<b>RELOAD</b> button — or empty the belt']
+      ? [this.input.touchSettings.mode === 'offset' ? '<b>TOUCH BELOW</b> a dinosaur — the crosshair sits above your finger' : '<b>DRAG ANYWHERE</b> to move the crosshair — it fires while you hold it on a dinosaur', 'Hit them during the <b class="red">red ring</b> to stagger', '<b>RELOAD</b> button — or empty the belt']
       : [`${iconSVG('mouse')} <b>AIM</b> + <b>HOLD LEFT CLICK</b> to fire`, 'Shoot them during the <b class="red">red ring</b> to <b>STAGGER</b>', '<kbd>R</kbd> / right click <b>RELOAD</b> · <kbd>SPACE</kbd> <b>SKYHAMMER</b>'];
     if (this.hintStep < steps.length) {
       this.hud.hint(steps[this.hintStep], true);
@@ -1013,6 +1066,7 @@ class Game {
       pick: (i) => this.pick(i),
       setAim: (x, y) => { this.input.mouse.x = x; this.input.mouse.y = y; },
       fire: (on) => { this.input.mouse.down = on; },
+      touchState: () => ({ x: this.input.mouse.x, y: this.input.mouse.y, touching: this.input.touching, fire: !!this.touchFire, mode: this.input.touchSettings.mode, target: !!this.weapons.aim.target, ammo: this.weapons.ammo }),
       key: (code, on) => { if (on) this.input.keys.add(code); else this.input.keys.delete(code); },
       /** On-screen threats for bots: [{ x, y (px), head {x,y}, state, attacking, type, dist, boss }] */
       threats: () => this.threats()
