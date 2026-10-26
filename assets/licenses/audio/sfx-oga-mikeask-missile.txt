@@ -1,0 +1,16 @@
+Title: Missile sound
+Author (OGA submitter): mikeask
+Entry URL: https://opengameart.org/content/missile-sound
+Retrieved: 2026-10-27
+License(s) field on entry page: CC0
+License URL(s) linked from that field: http://creativecommons.org/publicdomain/zero/1.0/
+License field HTML (verbatim):
+<div class="field field-name-field-art-licenses field-type-taxonomy-term-reference field-label-above"><div class="field-label">License(s):&nbsp;</div><div class="field-items"><div class="field-item even"><div class='license-icon'><a href='http://creativecommons.org/publicdomain/zero/1.0/' target='_blank'><img src='https://opengameart.org/sites/default/files/license_images/cc0.png' alt='' title=''><div class='license-name'>CC0</div></a></div></div></div>
+
+Copyright/Attribution Notice field (verbatim): free for use in your project, don't worry about license.
+
+Description (verbatim, tags stripped):
+A missile sound being launched. It's my first try with music. but, if i helped you, enjoy it!
+
+Files downloaded:
+  missile.wav  <- https://opengameart.org/sites/default/files/missile.wav  (475308 bytes)

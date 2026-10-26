@@ -1,0 +1,9 @@
+Title (page <title>): Glass Burst — Free Download WAV & MP3 | BigSoundBank
+Author: Joseph SARDIN (BigSoundBank.com)
+Page URL: https://bigsoundbank.com/glass-burst-s0148.html
+Retrieved: 2026-10-27
+License line on sound page (verbatim, tags stripped): CC0 (public domain): Free and royalty-free (More information on licenses)
+Site license page https://bigsoundbank.com/licenses.html says (verbatim excerpt): "This is: Creative Commons CC0 1.0 Universal ... Public Domain Dedication." and "These sounds are released under CC0, and I have never licensed them exclusively to anyone."
+Description (JSON-LD): A glass exploding on the floor. The sound saturates slightly.
+Duration (JSON-LD): PT2S
+File downloaded: https://bigsoundbank.com/UPLOAD/bwf-en/0148.wav (161054 bytes declared)

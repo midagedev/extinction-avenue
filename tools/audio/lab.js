@@ -23,7 +23,7 @@ const lab = {
 
   /** Fetch + decode an audio file (served from the repo root, e.g. '.tools/dl/audio/…') at 44.1 kHz */
   async load(url) {
-    const res = await fetch('/' + url.replace(/^\//, ''));
+    const res = await fetch('/' + url.replace(/^\//, '').split('/').map(encodeURIComponent).join('/'));
     if (!res.ok) throw new Error(`load ${url}: ${res.status}`);
     const data = await res.arrayBuffer();
     const ctx = new OfflineAudioContext(2, 1, SR);

@@ -1,0 +1,14 @@
+Title: Rocket launch
+Author (OGA submitter): qubodup
+Entry URL: https://opengameart.org/content/rocket-launch
+Retrieved: 2026-10-27
+License(s) field on entry page: CC0
+License URL(s) linked from that field: http://creativecommons.org/publicdomain/zero/1.0/
+License field HTML (verbatim):
+<div class="field field-name-field-art-licenses field-type-taxonomy-term-reference field-label-above"><div class="field-label">License(s):&nbsp;</div><div class="field-items"><div class="field-item even"><div class='license-icon'><a href='http://creativecommons.org/publicdomain/zero/1.0/' target='_blank'><img src='https://opengameart.org/sites/default/files/license_images/cc0.png' alt='' title=''><div class='license-name'>CC0</div></a></div></div></div>
+
+Description (verbatim, tags stripped):
+Inspired by this rocket launch . Made in audacity, using "generate noise", "normalize" and "bass boost" and "time change" The 7z archive contains both wav as well as 3-layer audacity project (.aup)
+
+Files downloaded:
+  launch.7z  <- https://opengameart.org/sites/default/files/launch.7z  (2159280 bytes)

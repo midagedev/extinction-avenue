@@ -1,0 +1,18 @@
+Title: Gun reload sounds 
+Author (OGA submitter): SpringySpringo
+Entry URL: https://opengameart.org/content/gun-reload-sounds
+Retrieved: 2026-10-27
+License(s) field on entry page: CC0
+License URL(s) linked from that field: http://creativecommons.org/publicdomain/zero/1.0/
+License field HTML (verbatim):
+<div class="field field-name-field-art-licenses field-type-taxonomy-term-reference field-label-above"><div class="field-label">License(s):&nbsp;</div><div class="field-items"><div class="field-item even"><div class='license-icon'><a href='http://creativecommons.org/publicdomain/zero/1.0/' target='_blank'><img src='https://opengameart.org/sites/default/files/license_images/cc0.png' alt='' title=''><div class='license-name'>CC0</div></a></div></div></div>
+
+Copyright/Attribution Notice field (verbatim): Credit isn't required, but appreciated. If you use this in any project shoot me a link in the comments!
+
+Description (verbatim, tags stripped):
+Some gun reload sounds I made with airsoft guns. Send me the link to the project you are using this with!(Optional) Free to use! But credit will be nice.
+
+Files downloaded:
+  gunreload1.wav  <- https://opengameart.org/sites/default/files/gunreload1.wav  (278572 bytes)
+  assaultriflereload1.wav  <- https://opengameart.org/sites/default/files/assaultriflereload1_0.wav  (274476 bytes)
+  shotguncock.wav  <- https://opengameart.org/sites/default/files/shotguncock_0.wav  (83628 bytes)

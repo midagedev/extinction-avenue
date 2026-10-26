@@ -1,0 +1,15 @@
+Title: Cyberpunk Moonlight Sonata
+Author: Joth
+Page URL: https://opengameart.org/content/cyberpunk-moonlight-sonata
+Date retrieved: 2026-10-27
+License field as stated on page (verbatim text): License(s): CC0
+License field HTML: <div class="field-label">License(s):&nbsp;</div><div class="field-items"><div class="field-item even"><div class='license-icon'><a href='http://creativecommons.org/publicdomain/zero/1.0/' target='_blank'><img src='https://opengameart.org/sites/default/files/license_images/cc0.png' alt='' title=''><div class='license-name'>CC0</div></a>
+Tags: cyberpunk Beethoven waltz 3/4 Classical electronic edm dystopian scifi 108bpm challenge PD Quick
+Description: A cyberpunk reimagining of one of my favorite classical pieces by Beethoven. Some of the musical parts have been changed or omitted, but the skeleton is that of the original.
+Copyright/attribution notice field: Copyright/Attribution Notice: Attribution appreciated, but not required
+
+Downloaded files in this directory:
+  Cyberpunk_Moonlight_Sonata.mp3
+  Cyberpunk_Moonlight_Sonata_v2.mp3
+
+Saved copy of the entry page: page.html (fetched with curl on 2026-10-27)

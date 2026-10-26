@@ -1,0 +1,14 @@
+Title: Peacock scream
+Author (OGA submitter): qubodup
+Entry URL: https://opengameart.org/content/peacock-scream
+Retrieved: 2026-10-27
+License(s) field on entry page: CC0
+License URL(s) linked from that field: http://creativecommons.org/publicdomain/zero/1.0/
+License field HTML (verbatim):
+<div class="field field-name-field-art-licenses field-type-taxonomy-term-reference field-label-above"><div class="field-label">License(s):&nbsp;</div><div class="field-items"><div class="field-item even"><div class='license-icon'><a href='http://creativecommons.org/publicdomain/zero/1.0/' target='_blank'><img src='https://opengameart.org/sites/default/files/license_images/cc0.png' alt='' title=''><div class='license-name'>CC0</div></a></div></div></div>
+
+Description (verbatim, tags stripped):
+I got permission to extract the peacock's voice from this youtube video ! The discussion: From: Iwan 'qubodup' To: popthebubbles4 Subject: Feathery proposal for video games Message: Hello, the following might sound weirder than a peacock scream, I'm looking for animal voices on Youtube, to extract their sound and make them available for use in video game development on http://opengameart.org and found the reply to your proposal to the peacock to be of high quality and probably very useful. Would you or your ..friend mind if I extracted his first scream from the video and made them available on said site, giving it to the public domain? Everybody would be free to do whatever they want with the files. My intension is to ease game developers' and other artists' work with that. I would give you and your feathery friend credit by linking to the video, unless you prefer that I do not (just say so). I will do nothing unless I get a green light from you. If you don't like what I ask for, ignore this message and I won't touch your videos in any way ;) Best regards Iwan ------------------------------------------------------ From: popthebubbles4 To: Iwan 'qubodup' Subject: Re: Feathery proposal for video games Message: Sure.
+
+Files downloaded:
+  peacockscream.flac  <- https://opengameart.org/sites/default/files/peacockscream.flac  (106764 bytes)

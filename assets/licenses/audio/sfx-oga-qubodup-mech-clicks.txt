@@ -1,0 +1,14 @@
+Title: 7 mechanical clicks and buzzes
+Author (OGA submitter): qubodup
+Entry URL: https://opengameart.org/content/7-mechanical-clicks-and-buzzes
+Retrieved: 2026-10-27
+License(s) field on entry page: CC0
+License URL(s) linked from that field: http://creativecommons.org/publicdomain/zero/1.0/
+License field HTML (verbatim):
+<div class="field field-name-field-art-licenses field-type-taxonomy-term-reference field-label-above"><div class="field-label">License(s):&nbsp;</div><div class="field-items"><div class="field-item even"><div class='license-icon'><a href='http://creativecommons.org/publicdomain/zero/1.0/' target='_blank'><img src='https://opengameart.org/sites/default/files/license_images/cc0.png' alt='' title=''><div class='license-name'>CC0</div></a></div></div></div>
+
+Description (verbatim, tags stripped):
+I cleaned my sfx folders and discovered these works of mine
+
+Files downloaded:
+  mechanical.7z  <- https://opengameart.org/sites/default/files/mechanical.7z  (1443883 bytes)

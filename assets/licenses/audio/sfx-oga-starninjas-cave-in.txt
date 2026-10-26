@@ -1,0 +1,16 @@
+Title: Cave In
+Author (OGA submitter): StarNinjas
+Entry URL: https://opengameart.org/content/cave-in
+Retrieved: 2026-10-27
+License(s) field on entry page: CC0
+License URL(s) linked from that field: http://creativecommons.org/publicdomain/zero/1.0/
+License field HTML (verbatim):
+<div class="field field-name-field-art-licenses field-type-taxonomy-term-reference field-label-above"><div class="field-label">License(s):&nbsp;</div><div class="field-items"><div class="field-item even"><div class='license-icon'><a href='http://creativecommons.org/publicdomain/zero/1.0/' target='_blank'><img src='https://opengameart.org/sites/default/files/license_images/cc0.png' alt='' title=''><div class='license-name'>CC0</div></a></div></div></div>
+
+Copyright/Attribution Notice field (verbatim): Credit is appreciated, thanks!
+
+Description (verbatim, tags stripped):
+This is a simple cave in sound effect I made by pouring lentils into a cooking pot, then editing the sound by slowing it down and changing it's bass and treble in Audacity. Enjoy! Youtube channel: https://www.youtube.com/channel/UCxLPx862bQqxGUOkfZOtvZA Discord: https://discord.gg/nKUAtJmtKj
+
+Files downloaded:
+  cave_in_-_starninjas.ogg  <- https://opengameart.org/sites/default/files/cave_in_-_starninjas_0.ogg  (33161 bytes)

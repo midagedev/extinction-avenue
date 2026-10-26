@@ -1,0 +1,30 @@
+Title: Digital Audio &middot; Kenney
+Author: Kenney Vleugels (Kenney.nl)
+Asset page URL: https://kenney.nl/assets/digital-audio
+Download URL: https://kenney.nl/media/pages/assets/digital-audio/216eac4753-1677590265/kenney_digital-audio.zip (saved as pack.zip, extracted here)
+Retrieved: 2026-10-27
+License (asset page "License" row, verbatim HTML): <a href='https://creativecommons.org/publicdomain/zero/1.0/' target='_blank'>Creative Commons CC0</a>
+License: Creative Commons CC0 1.0 Universal (public domain dedication)
+
+--- License.txt (from zip, verbatim) ---
+	
+
+	Digital Audio
+
+	by  Kenney Vleugels (Kenney.nl)
+
+			------------------------------
+
+	License (Creative Commons Zero, CC0)
+	http://creativecommons.org/publicdomain/zero/1.0/
+
+	You may use these assets in personal and commercial projects.
+	Credit (Kenney or www.kenney.nl) would be nice but is not mandatory.
+
+			------------------------------
+
+	Donate:   http://support.kenney.nl
+	Request:  http://request.kenney.nl
+
+	Follow on Twitter for updates:
+	@KenneyNL

@@ -1,0 +1,22 @@
+Title: Metal Impact Sounds
+Author (OGA submitter): BMacZero
+Entry URL: https://opengameart.org/content/metal-impact-sounds
+Retrieved: 2026-10-27
+License(s) field on entry page: CC0
+License URL(s) linked from that field: http://creativecommons.org/publicdomain/zero/1.0/
+License field HTML (verbatim):
+<div class="field field-name-field-art-licenses field-type-taxonomy-term-reference field-label-above"><div class="field-label">License(s):&nbsp;</div><div class="field-items"><div class="field-item even"><div class='license-icon'><a href='http://creativecommons.org/publicdomain/zero/1.0/' target='_blank'><img src='https://opengameart.org/sites/default/files/license_images/cc0.png' alt='' title=''><div class='license-name'>CC0</div></a></div></div></div>
+
+Copyright/Attribution Notice field (verbatim): Optionally credit Brian MacIntosh.
+
+Description (verbatim, tags stripped):
+A small variety of metallic impact sounds.
+
+Files downloaded:
+  bing1.wav  <- https://opengameart.org/sites/default/files/bing1.wav  (63532 bytes)
+  bong1.wav  <- https://opengameart.org/sites/default/files/bong1.wav  (186412 bytes)
+  clink1.wav  <- https://opengameart.org/sites/default/files/clink1_0.wav  (27692 bytes)
+  clink2.wav  <- https://opengameart.org/sites/default/files/clink2.wav  (22572 bytes)
+  clink3.wav  <- https://opengameart.org/sites/default/files/clink3.wav  (25644 bytes)
+  thud2.wav  <- https://opengameart.org/sites/default/files/thud2.wav  (51244 bytes)
+  thud3.wav  <- https://opengameart.org/sites/default/files/thud3.wav  (36908 bytes)

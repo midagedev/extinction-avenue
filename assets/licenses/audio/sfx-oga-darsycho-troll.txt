@@ -1,0 +1,18 @@
+Title: Big scary troll sounds
+Author (OGA submitter): Darsycho
+Entry URL: https://opengameart.org/content/big-scary-troll-sounds
+Retrieved: 2026-10-27
+License(s) field on entry page: CC0
+License URL(s) linked from that field: http://creativecommons.org/publicdomain/zero/1.0/
+License field HTML (verbatim):
+<div class="field field-name-field-art-licenses field-type-taxonomy-term-reference field-label-above"><div class="field-label">License(s):&nbsp;</div><div class="field-items"><div class="field-item even"><div class='license-icon'><a href='http://creativecommons.org/publicdomain/zero/1.0/' target='_blank'><img src='https://opengameart.org/sites/default/files/license_images/cc0.png' alt='' title=''><div class='license-name'>CC0</div></a></div></div></div>
+
+Copyright/Attribution Notice field (verbatim): Feel free to use for whatever, credit is appreciated!
+
+Description (verbatim, tags stripped):
+Troll sounds I did for Mortila , a mod for Hexen.
+
+Files downloaded:
+  troll-roars.ogg  <- https://opengameart.org/sites/default/files/troll-roars_0.ogg  (126464 bytes)
+  troll-idle-noises.ogg  <- https://opengameart.org/sites/default/files/troll-idle-noises_0.ogg  (291562 bytes)
+  scrapped-troll-sounds.ogg  <- https://opengameart.org/sites/default/files/scrapped-troll-sounds.ogg  (116947 bytes)

@@ -1,0 +1,22 @@
+Title: Racing Game Finish & Jingle
+Author: MintoDog
+Page URL: https://opengameart.org/content/racing-game-finish-jingle
+Date retrieved: 2026-10-27
+License field as stated on page (verbatim text): License(s): CC0
+License field HTML: <div class="field-label">License(s):&nbsp;</div><div class="field-items"><div class="field-item even"><div class='license-icon'><a href='http://creativecommons.org/publicdomain/zero/1.0/' target='_blank'><img src='https://opengameart.org/sites/default/files/license_images/cc0.png' alt='' title=''><div class='license-name'>CC0</div></a>
+Tags: synth racing jingle finish
+Description: 1st preview : Race Finish Best -> Race Finish Good -> Race Finish Bad 2nd preview : Course Intro (Jingle) -> Start Grid (Jingle) -> Final Lap (Jingle) 3rd preview : Pure Raceway -> Fainal Lap (Jingle) -> Pure Raceway (Climax) Race Finish music & Jingle for racing game. File formats are mp3 and ogg. --Track list-- Race Finish Best (Jingle) Race Finish Best (Loop)_BPM132 Race Finish Good (Jingle) Race Finish Good (Loop)_BPM130 Race Finish Bad (Jingle) Race Finish Bad (Loop)_BPM100 Course Intro (Jingle) Start Grid (Jingle) Final Lap (Jingle)
+
+Downloaded files in this directory:
+  mp3_Racing Game Finish & Jingle/Course Intro (Jingle).mp3
+  mp3_Racing Game Finish & Jingle/Final Lap (Jingle).mp3
+  mp3_Racing Game Finish & Jingle/Race Finish Bad/Race Finish Bad (Jingle).mp3
+  mp3_Racing Game Finish & Jingle/Race Finish Bad/Race Finish Bad (Loop)_BPM100.mp3
+  mp3_Racing Game Finish & Jingle/Race Finish Best/Race Finish Best (Jingle).mp3
+  mp3_Racing Game Finish & Jingle/Race Finish Best/Race Finish Best (Loop)_BPM132.mp3
+  mp3_Racing Game Finish & Jingle/Race Finish Good/Race Finish Good (Jingle).mp3
+  mp3_Racing Game Finish & Jingle/Race Finish Good/Race Finish Good (Loop)_BPM130.mp3
+  mp3_Racing Game Finish & Jingle/Start Grid (Jingle).mp3
+  mp3_racing_game_finish_jingle.zip
+
+Saved copy of the entry page: page.html (fetched with curl on 2026-10-27)

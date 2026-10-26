@@ -1,0 +1,14 @@
+Title: Steam release sounds
+Author (OGA submitter): bart
+Entry URL: https://opengameart.org/content/steam-release-sounds
+Retrieved: 2026-10-27
+License(s) field on entry page: CC0
+License URL(s) linked from that field: http://creativecommons.org/publicdomain/zero/1.0/
+License field HTML (verbatim):
+<div class="field field-name-field-art-licenses field-type-taxonomy-term-reference field-label-above"><div class="field-label">License(s):&nbsp;</div><div class="field-items"><div class="field-item even"><div class='license-icon'><a href='http://creativecommons.org/publicdomain/zero/1.0/' target='_blank'><img src='https://opengameart.org/sites/default/files/license_images/cc0.png' alt='' title=''><div class='license-name'>CC0</div></a></div></div></div>
+
+Description (verbatim, tags stripped):
+Attribution appreciated :)
+
+Files downloaded:
+  steam_hisses.zip  <- https://opengameart.org/sites/default/files/steam_hisses.zip  (622313 bytes)

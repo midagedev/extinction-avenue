@@ -1,0 +1,15 @@
+Title: The Free Firearm Sound Library
+Author (OGA submitter): bart
+Original creators: The Free Firearm Sound Library team (Still North Media; Ben Jaszczak and Brian Nelson per related OGA entries)
+Entry URL: https://opengameart.org/content/the-free-firearm-sound-library
+Retrieved: 2026-10-27
+License(s) field on entry page: CC0
+License URL(s): http://creativecommons.org/publicdomain/zero/1.0/
+License field HTML (verbatim):
+<div class="field field-name-field-art-licenses field-type-taxonomy-term-reference field-label-above"><div class="field-label">License(s):&nbsp;</div><div class="field-items"><div class="field-item even"><div class='license-icon'><a href='http://creativecommons.org/publicdomain/zero/1.0/' target='_blank'><img src='https://opengameart.org/sites/default/files/license_images/cc0.png' alt='' title=''><div class='license-name'>CC0</div></a></div></div></div>
+
+Description (verbatim, tags stripped):
+From The Free Firearm Sound Library homepage : The firearm sound library was the brainchild of a team of college students with a mutual passion for the audio and visual arts. In November, 2013 we launched a Kickstarter campaign to develop an extensive open source firearm sound effects library, and on December 7, 2013 our project was funded by an incredible group of backers and we went into full tilt production. This website serves to connect our backers with our two libraries, as well as to give credit to the backers who made it all possible. Along with the availability of these sounds comes the need to understand their proper application. The metadata included in the sound files along with some instructional videos will help make these sounds serve you to their full potential. Our team holds CC0 NO RIGHTS RESERVED for this library. It may be used without royalty or credit (though we would love to hear how you've used our sounds) for any application, personal or professional. Have at it! Please note that OGA is not affiliated with this project, and as such, we encourage you to visit their site so as to make sure you're getting the latest version of the files: http://freefirearmsfx.com raw prepared Also note that their website includes instructions along with the raw versions of the sound effects, which are not archived here. Big thanks to their team and all of their Kickstarter supporters for this amazing collection!
+
+Files downloaded:
+  Prepared SFX Library.7z <- https://opengameart.org/sites/default/files/Prepared%20SFX%20Library.7z (193954738 bytes); extracted with py7zr (path-checked)

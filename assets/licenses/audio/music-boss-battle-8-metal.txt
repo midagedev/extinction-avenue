@@ -1,0 +1,14 @@
+Title: Boss Battle #8 Metal
+Author: nene
+Page URL: https://opengameart.org/content/boss-battle-8-metal
+Date retrieved: 2026-10-27
+License field as stated on page (verbatim text): License(s): CC0
+License field HTML: <div class="field-label">License(s):&nbsp;</div><div class="field-items"><div class="field-item even"><div class='license-icon'><a href='http://creativecommons.org/publicdomain/zero/1.0/' target='_blank'><img src='https://opengameart.org/sites/default/files/license_images/cc0.png' alt='' title=''><div class='license-name'>CC0</div></a>
+Tags: boss Battle metal guitars strings drums Bass electronic
+Description: New boss battle music. Metal version. "8-bit" version and midi coming soon.
+
+Downloaded files in this directory:
+  boss_battle_8_metal_loop.wav
+  boss_battle_8_metal_opening.wav
+
+Saved copy of the entry page: page.html (fetched with curl on 2026-10-27)

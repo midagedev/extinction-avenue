@@ -1,0 +1,29 @@
+Title: Electricity Game Sound Pack
+Author (OGA submitter): faxcorp
+Entry URL: https://opengameart.org/content/electricity-game-sound-pack
+Retrieved: 2026-10-27
+License(s) field on entry page: CC0
+License URL(s) linked from that field: http://creativecommons.org/publicdomain/zero/1.0/
+License field HTML (verbatim):
+<div class="field field-name-field-art-licenses field-type-taxonomy-term-reference field-label-above"><div class="field-label">License(s):&nbsp;</div><div class="field-items"><div class="field-item even"><div class='license-icon'><a href='http://creativecommons.org/publicdomain/zero/1.0/' target='_blank'><img src='https://opengameart.org/sites/default/files/license_images/cc0.png' alt='' title=''><div class='license-name'>CC0</div></a></div></div></div>
+
+Description (verbatim, tags stripped):
+Collection of sounds for an electricity-themed game. Some sounds would fit universally. Loops and one-shots (if name doesnt contail "Loop" doesn't mean its not looping lol) I have this pack in Unreal Engine format already here! Also check out my game that uses these sounds!
+
+Files downloaded:
+  charge.wav  <- https://opengameart.org/sites/default/files/charge.wav  (729164 bytes)
+  chargestart.wav  <- https://opengameart.org/sites/default/files/chargestart.wav  (713406 bytes)
+  crackleelectricityloop.wav  <- https://opengameart.org/sites/default/files/crackleelectricityloop.wav  (88300 bytes)
+  death.wav  <- https://opengameart.org/sites/default/files/death_1.wav  (307196 bytes)
+  deathboom.wav  <- https://opengameart.org/sites/default/files/deathboom.wav  (1221468 bytes)
+  groundhit.wav  <- https://opengameart.org/sites/default/files/groundhit.wav  (50304 bytes)
+  hit.wav  <- https://opengameart.org/sites/default/files/hit.wav  (389140 bytes)
+  killconfirmed.wav  <- https://opengameart.org/sites/default/files/killconfirmed.wav  (364960 bytes)
+  powerdown.wav  <- https://opengameart.org/sites/default/files/powerdown.wav  (353196 bytes)
+  powerup.wav  <- https://opengameart.org/sites/default/files/powerup.wav  (372180 bytes)
+  recharge.wav  <- https://opengameart.org/sites/default/files/recharge.wav  (1167048 bytes)
+  shieldhit.wav  <- https://opengameart.org/sites/default/files/shieldhit.wav  (137858 bytes)
+  shieldloop.wav  <- https://opengameart.org/sites/default/files/shieldloop.wav  (90224 bytes)
+  snaploop.wav  <- https://opengameart.org/sites/default/files/snaploop.wav  (435524 bytes)
+  teleport.wav  <- https://opengameart.org/sites/default/files/teleport_1.wav  (138768 bytes)
+  turbo.wav  <- https://opengameart.org/sites/default/files/turbo.wav  (1131448 bytes)

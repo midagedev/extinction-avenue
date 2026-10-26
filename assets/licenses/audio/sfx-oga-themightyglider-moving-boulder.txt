@@ -1,0 +1,15 @@
+Title: Moving Boulder
+Author (OGA submitter): themightyglider
+Entry URL: https://opengameart.org/content/moving-boulder
+Retrieved: 2026-10-27
+License(s) field on entry page: CC0
+License URL(s) linked from that field: http://creativecommons.org/publicdomain/zero/1.0/
+License field HTML (verbatim):
+<div class="field field-name-field-art-licenses field-type-taxonomy-term-reference field-label-above"><div class="field-label">License(s):&nbsp;</div><div class="field-items"><div class="field-item even"><div class='license-icon'><a href='http://creativecommons.org/publicdomain/zero/1.0/' target='_blank'><img src='https://opengameart.org/sites/default/files/license_images/cc0.png' alt='' title=''><div class='license-name'>CC0</div></a></div></div></div>
+
+Description (verbatim, tags stripped):
+Just two short sounds for moving around a boulder or any other object made of stone. Derivated from: https://freesound.org/people/IDLauncher/sounds/513236/ and https://freesound.org/people/magnuswaker/sounds/522099/
+
+Files downloaded:
+  boulder_drop.ogg  <- https://opengameart.org/sites/default/files/boulder_drop_0.ogg  (20708 bytes)
+  move_boulder.ogg  <- https://opengameart.org/sites/default/files/move_boulder_0.ogg  (8855 bytes)
