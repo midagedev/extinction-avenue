@@ -42,7 +42,32 @@ To host it, push the folder to GitHub Pages or any static host. Nothing needs co
 | Skyhammer air strike (charged by kills) | **Space** (lands where the crosshair meets the street) | SKYHAMMER button |
 | Level-up choice | Click a card or **1 / 2 / 3 / 4**, **R** rerolls | Tap |
 | Continue after a wreck | **Enter** / **Space** / click PRESS START | Tap |
-| Pause / mute / auto-fire | **Esc** or **P** / **M** / **F** (fires whenever the crosshair is on a dinosaur) | II button |
+| Pause / mute / auto-fire | **Esc** or **P** / **M** / **F** (fires whenever the crosshair is on a dinosaur) | II button (SOUND ON/OFF in the pause menu) |
+
+## Sound
+
+Music and sound start with your first click, tap or key press (browser autoplay rules). **Settings → AUDIO** has a
+mute toggle, master / music / effects volume and the arcade announcer voice. All of it is remembered in
+`localStorage`. **M** toggles mute in game.
+
+- **Music** (CC0 tracks from OpenGameArt + two original pieces, see [ASSETS.md §2.3](ASSETS.md)) is adaptive. The
+  title theme plays first. During a run a breather, the main combat track and a high-heat track crossfade on the bar
+  as the fight heats up, and an original percussion layer locked to the combat track's tempo fades in with combat heat.
+  The boss warning brings in an original sting. The T. rex fight changes track at each phase. After it come a victory
+  sting, a continue countdown loop, a game-over jingle and a results loop. Music dips under big moments (roars, the
+  boss name card, the announcer). The boss music loads lazily, about 1.5 minutes before the boss.
+- **Sound effects** (160 files, 71 groups) are designed from CC0 / public-domain recordings layered with synthesis:
+  - tail-gun shots with variation, plus shell casings and a street echo when you release the trigger
+  - reload foley, overheat steam, hit markers and headshot dings
+  - stone-crack shatters on kills, explosions and every support weapon
+  - cab damage, a DANGER alert, creature calls, footsteps and stampedes
+  - a layered T. rex roar (lion and grizzly pitched down, a CC0 monster roar, a synthetic formant growl, sub, reverb)
+  - Kenney's CC0 announcer voice
+  - Positioning: enemy sounds are in 3D (PannerNode + camera listener, distance attenuation, air absorption).
+  - Mixing: a voice cap with priority stealing keeps busy fights clean, and a glue compressor plus a limiter on the
+    master keep it from clipping.
+- Total audio: about 12 MB of MP3. About 1.4 MB loads at the title screen; the rest streams in behind the first run,
+  and the boss suite (2.2 MB) loads later.
 
 ## The game in one minute
 
@@ -113,14 +138,20 @@ js/game/              the game
   camera.js / gunner.js  first-person gunner camera (scripted swings) + tail-gun view model
   boss.js             GRIDLOCK                              weapons.js / upgrades.js   arsenal + level-up rules
   pickups.js          gene cores + power-ups                vfx.js / batches.js   pooled instanced VFX
-  player.js / route.js / input.js / hud.js / audio.js (procedural WebAudio SFX + music) / icons.js
+  audio.js            sound system: buses, limiter, voice pool, 3D panning, ducking, loading   audio-music.js   adaptive music
+  audio-recipes.js    procedural fallback voices (until samples decode)
+  player.js / route.js / input.js / hud.js / icons.js
 js/*.js               Slop New York city modules (mrdoob)
 sim.html              the original free-roam simulation
 docs/ART_PIPELINE.md  art bible, full asset list + specs, production routes
 docs/ROADMAP.md       stage 1 beat sheet, stage 2/3 boss sketches (Hudson Leviathan, Skyline), elites & mini-bosses
 ASSETS.md             asset & license register        assets/models, assets/licenses   CC0 models + evidence
+assets/audio/         music/ + sfx/ MP3s and manifest.json (generated)   assets/licenses/audio   per-source license excerpts
 tools/                headless test drivers (Playwright) and data tools
 tools/lab/            asset lab: rig the sculpt, refine Quaternius rigs, build the pterosaur (node tools/model-lab.mjs)
+tools/audio/          audio lab: music.js (CC0 track prep + original sting / heat layer), sfx.js (SFX design), synth.js,
+                      analyze.js / slices.js / sheet.js (tempo, events, waveform+spectrogram sheets); run through
+                      node tools/audio-build.mjs <script> (headless Chromium OfflineAudioContext → LAME/WASM MP3)
 ```
 
 ## Testing
@@ -138,6 +169,7 @@ node tools/e2e-touch.mjs ./shots all          # phone emulation (portrait + land
 node tools/e2e-gallery.mjs ./shots after-     # fixed creature framings; add '' '&procedural' (prefix before-) for the v2 rigs
 python3 -I tools/lab/compare.py ./shots ./cmp # BEFORE / AFTER side-by-sides
 node tools/perf-creatures.mjs                 # 40 animated dinosaurs: draw calls, triangles, CPU pose cost
+node tools/e2e-audio.mjs ./shots              # audio: gesture unlock, settings persistence, cue transitions (run/boss/victory/continue/game over), voice cap, master peak, no console errors
 ```
 
 All drivers open the page with `?test&webgl` (no animation loop; the sim is stepped through `window.__game.step()`)
@@ -152,7 +184,10 @@ renders through SwiftShader, so a frame takes seconds; that's why the loop is st
   Third-party data and dependencies keep their own licenses.
 - Rendering: [three.js](https://threejs.org/) (MIT), loaded from jsDelivr. Fonts: Bebas Neue, Chakra Petch and Inter
   from Google Fonts (SIL OFL).
-- Every model, icon, sound and piece of music in the game is generated procedurally in code, so no third-party art or
-  audio ships with it. See [ASSETS.md](ASSETS.md) and [docs/ART_PIPELINE.md](docs/ART_PIPELINE.md).
+- Models: CC0 (damik, Quaternius) plus original work. Music: CC0 tracks by Joth, vitalezzz, nene, cynicmusic,
+  CleytonKauffman and MintoDog (OpenGameArt) plus original pieces. Sound effects: designed in this repo from CC0 /
+  public-domain recordings (Kenney, OpenGameArt, BigSoundBank, US National Park Service via Wikimedia Commons). The
+  announcer is Kenney's CC0 Voiceover Pack. Every source, with URL and license, is in [ASSETS.md](ASSETS.md); see also
+  [docs/ART_PIPELINE.md](docs/ART_PIPELINE.md).
 - EXTINCTION AVENUE, Cretagen, Unit 77, GRIDLOCK and all creature names are original and fictional. The game isn't
   affiliated with any film franchise, and the storefronts and billboards in the city use fictional brands.

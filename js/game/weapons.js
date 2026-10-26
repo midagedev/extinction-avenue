@@ -179,7 +179,9 @@ class WeaponSystem {
   reload() {
     if (this.reloadT > 0 || this.ammo >= this.magSize || this.overdrive > 0) return false;
     this.reloadT = this.reloadDur;
-    this.game.audio.play('ui', { pitch: 0.6, volume: 0.6 });
+    if (this.ammo <= 0) this.game.audio.play('dry_fire');
+    this.game.audio.play('reload_out', { delay: this.ammo <= 0 ? 0.06 : 0 });
+    this.reloadInPlayed = false;
     return true;
   }
 
@@ -195,8 +197,16 @@ class WeaponSystem {
     if (this.overdrive > 0) { this.overdrive -= dt; this.ammo = this.magSize; this.reloadT = 0; }
     if (this.reloadT > 0) {
       this.reloadT -= dt;
-      if (this.reloadT <= 0) { this.reloadT = 0; this.ammo = this.magSize; g.audio.play('ui', { pitch: 1.4, volume: 0.7 }); g.onReloaded?.(); }
+      // Reload foley: belt out (on start) → new belt in (≈55 %) → charging handle (done)
+      if (!this.reloadInPlayed && this.reloadT < this.reloadDur * 0.45) { this.reloadInPlayed = true; g.audio.play('reload_in'); }
+      if (this.reloadT <= 0) { this.reloadT = 0; this.ammo = this.magSize; g.audio.play('bolt'); g.onReloaded?.(); }
     }
+    // Gun tail (the street echo) only when a burst ends, so sustained fire stays tight; steam hiss when the barrel
+    // runs hot
+    this.sinceShot = (this.sinceShot || 0) + dt;
+    if (this.burst && this.sinceShot > 0.13) { g.audio.play('gun_tail', { volume: Math.min(1, 0.45 + this.burst * 0.08) }); this.burst = 0; }
+    if (this.heat >= 0.98 && !this.hot) { this.hot = true; g.audio.play('overheat'); }
+    else if (this.heat < 0.55) this.hot = false;
     this.cd.main = (this.cd.main || 0) - dt;
     const wantFire = input.fire || (input.autoFire && this.aim.target);
     this.firing = false;
@@ -239,7 +249,7 @@ class WeaponSystem {
           const dmg = (storm ? 11 : 6 * (gl >= 2 ? 1.35 : 1) * (gl >= 4 ? 1.35 : 1)) * this.dmgMult;
           this.bullet(_pos.x, _pos.y, _pos.z, _dir.x, _dir.y, _dir.z, 110, dmg, { pierce: storm ? 3 : gl >= 5 ? 1 : 0, radius: 0.55, color: [7, 4.5, 1.2], width: 0.07, len: 2.4 });
           g.vfx.muzzle(_pos.x, _pos.y, _pos.z, _dir.x, _dir.y, _dir.z, 0.6);
-          g.audio.play('gatling', { volume: 0.32, pitch: 0.9 + Math.random() * 0.2 });
+          g.audio.play('gatling');
         }
       }
     }
@@ -265,7 +275,7 @@ class WeaponSystem {
         }
         g.vfx.muzzle(_pos.x, _pos.y, _pos.z, -p.fx, 0, -p.fz, 2.4, 8, dragon ? 2.5 : 4, dragon ? 0.4 : 1);
         g.vfx.light(_pos.x, _pos.y, _pos.z, 0xffaa44, 80, 14, 0.08);
-        g.audio.play('shotgun', { volume: 0.6 });
+        g.audio.play('shotgun');
         g.cam.addTrauma(0.06);
       }
     }
@@ -291,7 +301,7 @@ class WeaponSystem {
               radius: (cluster ? 4 : ml >= 5 ? 4.5 : 3.5) * this.areaMult, cluster, t: 0
             });
           }
-          g.audio.play('missile', { volume: 0.5 });
+          g.audio.play('missile');
         }
       }
     }
@@ -325,7 +335,7 @@ class WeaponSystem {
           cur = best;
         }
         if (hit.size) {
-          g.audio.play('tesla', { volume: 0.5 });
+          g.audio.play('tesla');
           g.vfx.light(_pos.x, _pos.y + 0.5, _pos.z, 0x66ccff, 60, 12, 0.1);
         }
         if (thunder) {
@@ -382,7 +392,7 @@ class WeaponSystem {
           p.toWorld(_pos.set((k - (count - 1) / 2) * 1.6, 0, -2.6), _pos);
           this.mines.push({ x: _pos.x, z: _pos.z, arm: 0.35, life: 14, nova, dmg: (nova ? 95 : 42 * (mnl >= 2 ? 1.4 : 1)) * this.dmgMult, radius: (nova ? 9 : 5 * (mnl >= 4 ? 1.3 : 1)) * this.areaMult, blink: Math.random() });
         }
-        g.audio.play('mine', { volume: 0.3 });
+        g.audio.play('mine');
       }
     }
 
@@ -409,7 +419,7 @@ class WeaponSystem {
           const tx = Math.cos(a), tz = -Math.sin(a); // tangential push
           g.enemies.damage(e, dmg * this._rollCrit(), { source: 'saw', kx: tx * (buzz ? 22 : 10), kz: tz * (buzz ? 22 : 10) });
           g.vfx.sparks(sx, 0.75, sz, 4, 9, 6, 3.5, 1);
-          g.audio.play('saw', { x: sx, z: sz, volume: 0.35 });
+          g.audio.play('saw', { x: sx, z: sz });
         }
       }
     }
@@ -481,7 +491,10 @@ class WeaponSystem {
     g.vfx.beam(_pos.x, _pos.y, _pos.z, ex, ey, ez, 0.035, 9, 5.5, 1.6, 0.045);
     this.bullet(_pos.x, _pos.y, _pos.z, ex - _pos.x, ey - _pos.y, ez - _pos.z, 1 / 0.07, 0, { visual: true, life: 0.07, color: [9, 6, 2], width: 0.06, len: 3.5 });
     g.gunner.fire(1);
-    g.audio.play('gun', { volume: 0.5, pitch: 0.9 + Math.random() * 0.12 });
+    // Long bursts ease off by up to −2 dB (with the variation rotation and pitch jitter: no machine-gun fatigue)
+    g.audio.play('gun', { volume: 1 - Math.min(0.22, (this.burst || 0) * 0.018) });
+    this.burst = (this.burst || 0) + 1;
+    this.sinceShot = 0;
     g.cam.kick += 0.0045;
     g.cam.addTrauma(0.012);
     this.shotsFired++;
@@ -517,8 +530,7 @@ class WeaponSystem {
     g.vfx.beam(_pos.x, _pos.y, _pos.z, hx, hy, hz, 0.02, 2, 2.6, 3, 0.08);
     if (endT < 199) g.vfx.hitSpark(hx, hy + 0.2, hz, 1, 3, 4);
     g.gunner.fire(1.6);
-    g.audio.play('gun', { volume: 0.8, pitch: 0.6 });
-    g.audio.play('tesla', { volume: 0.3 });
+    g.audio.play('rail');
     g.cam.kick += 0.02;
     g.cam.addTrauma(0.06);
     g.cam.fovKick -= 1.2;
@@ -712,7 +724,7 @@ class WeaponSystem {
     const dx = tx - p.x, dz = tz - p.z, d = Math.hypot(dx, dz) || 1;
     const k = Math.min(1, 60 / d);
     s.active = { t: 0, x: p.x + dx * k, z: p.z + dz * k, fx: dx / d, fz: dz / d, n: 0 };
-    g.audio.play('airstrike', { volume: 0.9 });
+    g.audio.play('airstrike');
     g.hud.callout('SKYHAMMER INBOUND!', 'special');
     return true;
   }
@@ -734,6 +746,7 @@ class WeaponSystem {
       const x = s.x + s.fx * k * 4.5 + (Math.random() - 0.5) * 5;
       const z = s.z + s.fz * k * 4.5 + (Math.random() - 0.5) * 5;
       this.blast(x, z, 9 * this.areaMult, 170 * this.dmgMult, 0, 'skyhammer');
+      if (s.n === 0) g.audio.play('explosion_big', { x: s.x, z: s.z });
       g.vfx.beam(x, 60, z, x, 0, z, 0.6, 8, 4, 1, 0.12);
       s.n++;
     }

@@ -313,6 +313,7 @@ class Director {
           this.miniboss = e;
           g.hud.banner(name, sub, 'miniboss');
           g.audio.play(type === 'trike' ? 'trike_bellow' : 'brute_growl', { volume: 1.2, pitch: 0.75 });
+          g.audio.duck(-6, 1.4);
           g.trackMiniboss(e);
         }
         break;
@@ -323,6 +324,9 @@ class Director {
       case 'warning':
         g.hud.warning('APEX SPECIMEN APPROACHING');
         g.audio.play('warning', { volume: 1 });
+        // The loop fades out under the boss-incoming sting; the boss theme starts with the reveal
+        g.audio.setMusic('prebos');
+        g.audio.play('vo_prepare', { delay: 2.2 });
         break;
     }
   }

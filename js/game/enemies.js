@@ -265,8 +265,38 @@ class EnemyManager {
     if (sp.gaps) e.slotGap = sp.gaps[0] + (sp.gaps[1] - sp.gaps[0]) * Math.random();
   }
 
+  /**
+   * Creature audio that isn't tied to an attack: a charging Hornwall drags a stampede loop along (follows it in 3D),
+   * heavy walkers thud when they're close, and pack hunters call to each other now and then.
+   */
+  _sounds(e, dt, p) {
+    const g = this.game;
+    const a = g.audio;
+    const sp = e.sp;
+    const charging = e.state === 'charge' && !!sp.charger;
+    if (charging !== !!e.stampede) {
+      e.stampede = charging;
+      if (charging) a.loopStart(e, 'stampede_loop', { follow: e, volume: 0.85, range: 120 });
+      else a.loopStop(e, 0.6);
+    }
+    const d = Math.hypot(p.x - e.x, p.z - e.z);
+    if (sp.mass >= 4 && !sp.flyer && !charging && d < 45 && e.state !== 'stagger') {
+      e.stepT = (e.stepT ?? Math.random()) - dt * (1.6 + Math.min(1.4, Math.abs(e.vs || p.speed || 0) * 0.06)) * (sp.mass > 10 ? 0.8 : 1);
+      if (e.stepT <= 0) { e.stepT = 1; a.play('footstep_heavy', { x: e.x, z: e.z, volume: sp.mass > 10 ? 1 : 0.75, pitch: sp.mass > 10 ? 0.85 : 1 }); }
+    }
+    if ((e.type === 'raptor' || e.type === 'compy') && e.state === 'run' && d < 60) {
+      e.callT = (e.callT ?? 2 + Math.random() * 6) - dt;
+      if (e.callT <= 0) {
+        e.callT = (e.type === 'raptor' ? 5 : 8) + Math.random() * 9;
+        a.play(e.type === 'raptor' ? 'raptor_call' : 'compy_chirp', { x: e.x, z: e.z, volume: e.type === 'raptor' ? 0.8 : 0.5 });
+      }
+    }
+  }
+
   _remove(i) {
     const e = this.list[i];
+    if (e.stampede) { e.stampede = false; this.game.audio.loopStop(e, 0.3); }
+    e.stepT = e.callT = undefined;
     if (e.token) { e.token = false; this.attackers--; }
     e.alive = false;
     this.countByType[e.type]--;
@@ -358,6 +388,7 @@ class EnemyManager {
     e.hp = 0;
     this._releaseToken(e);
     const g = this.game;
+    if (e.stampede) { e.stampede = false; g.audio.loopStop(e, 0.25); }
     if (opts.launch) {
       e.state = 'launched';
       e.vy = opts.vy ?? 9;
@@ -445,6 +476,7 @@ class EnemyManager {
       else if (e.kind === 'merge') this._updateMerge(e, dt, p);
       else this._updateChase(e, dt, p);
       if (!e.alive) continue;
+      this._sounds(e, dt, p);
 
       // Recycle stragglers that fell far behind (or got stuck off the road)
       if (e.spawnT > 3 && !e.boss) {

@@ -213,14 +213,30 @@ class Game {
     click('lu-reroll', () => this.reroll());
     click('btn-continue', () => this.doContinue());
     click('btn-giveup', () => this.giveUp());
-    for (const b of document.querySelectorAll('[data-close]')) b.addEventListener('click', () => { this.audio.play('ui'); b.closest('.screen').classList.remove('open'); });
+    for (const b of document.querySelectorAll('[data-close]')) b.addEventListener('click', () => { this.audio.play('ui_back'); b.closest('.screen').classList.remove('open'); });
     for (const b of document.querySelectorAll('.btn')) b.addEventListener('pointerenter', () => this.audio.play('ui_hover'));
     // Settings
     const s = this.settings;
     const save = () => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch { /* ignore */ } };
-    $('set-sound').checked = this.audio.enabled;
-    $('set-music').value = this.audio.volume.music;
-    $('set-sfx').value = this.audio.volume.sfx;
+    // Audio: mute toggle, master / music / effects volume (remembered by GameAudio in localStorage), announcer voice
+    const A = this.audio;
+    const pct = (id, v) => { $(id).textContent = `${Math.round(v * 100)}%`; };
+    for (const k of ['master', 'music', 'sfx']) {
+      $(`set-${k}`).value = A.volume[k];
+      pct(`set-${k}-v`, A.volume[k]);
+      $(`set-${k}`).addEventListener('input', (e) => {
+        A.unlock();
+        A.volume[k] = +e.target.value;
+        pct(`set-${k}-v`, A.volume[k]);
+        A.applyVolumes();
+        if (k === 'sfx') A.play('gun', { force: true });
+      });
+    }
+    $('set-announcer').checked = A.announcer;
+    $('set-announcer').addEventListener('change', (e) => { A.unlock(); A.setAnnouncer(e.target.checked); if (e.target.checked) A.play('vo_ready'); });
+    this._syncMute();
+    $('set-mute').addEventListener('click', () => { A.unlock(); A.setEnabled(!A.enabled); this._syncMute(); A.play('ui_click'); });
+    click('btn-pause-mute', () => { A.setEnabled(!A.enabled); this._syncMute(); });
     $('set-shake').value = String(s.shake);
     $('set-numbers').checked = s.numbers;
     $('set-autofire').checked = s.autoFire;
@@ -228,9 +244,6 @@ class Game {
     $('set-touchaim').value = s.touchAim;
     $('set-touchsens').value = String(s.touchSens);
     $('set-assist').checked = s.aimAssist;
-    $('set-sound').addEventListener('change', (e) => { this.audio.unlock(); this.audio.setEnabled(e.target.checked); });
-    $('set-music').addEventListener('input', (e) => { this.audio.volume.music = +e.target.value; this.audio.applyVolumes(); });
-    $('set-sfx').addEventListener('input', (e) => { this.audio.volume.sfx = +e.target.value; this.audio.applyVolumes(); this.audio.play('gun'); });
     $('set-shake').addEventListener('change', (e) => { s.shake = +e.target.value; this.cam.shakeScale = s.shake; save(); });
     $('set-numbers').addEventListener('change', (e) => { s.numbers = e.target.checked; this.vfx.showNumbers = s.numbers; save(); });
     $('set-autofire').addEventListener('change', (e) => { s.autoFire = e.target.checked; save(); });
@@ -238,10 +251,13 @@ class Game {
     $('set-touchsens').addEventListener('input', (e) => { s.touchSens = +e.target.value; this._applyTouchSettings(); save(); });
     $('set-assist').addEventListener('change', (e) => { s.aimAssist = e.target.checked; this._applyTouchSettings(); save(); });
     $('set-quality').addEventListener('change', (e) => { s.quality = e.target.value; save(); $('set-note').textContent = 'Graphics quality applies after a reload.'; });
-    // Unlock audio on the first gesture anywhere
-    const unlock = () => { this.audio.unlock(); if (this.state === 'title') this.audio.setMusic('title'); };
-    window.addEventListener('pointerdown', unlock, { once: true });
-    window.addEventListener('keydown', unlock, { once: true });
+    // Browsers only allow audio after a user gesture: unlock (and start the title theme) on the first one anywhere.
+    // touchend/click cover iOS Safari, which ignores pointerdown for this purpose.
+    const unlock = () => {
+      this.audio.unlock(); // builds the graph and starts whatever music state the game is in (title theme)
+      if (!this.audio.supported || this.audio.ctx?.state === 'running') for (const ev of ['pointerdown', 'keydown', 'touchend', 'click']) window.removeEventListener(ev, unlock, true);
+    };
+    for (const ev of ['pointerdown', 'keydown', 'touchend', 'click']) window.addEventListener(ev, unlock, true);
     const best = this._best();
     if (best.score) document.getElementById('best').innerHTML = `HI-SCORE <b>${best.score.toLocaleString('en-US')}</b>${best.boss ? ' · APEX DOWN' : ''}`;
   }
@@ -250,9 +266,20 @@ class Game {
     this.hud.open('s-settings');
   }
 
+  /** Mute button / pause-menu button / M key all show the same state */
+  _syncMute() {
+    const on = this.audio.enabled;
+    const b = document.getElementById('set-mute');
+    if (b) { b.setAttribute('aria-pressed', String(!on)); b.querySelector('b').textContent = on ? 'ON' : 'MUTED'; }
+    const p = document.getElementById('btn-pause-mute');
+    if (p) p.querySelector('b').textContent = on ? 'SOUND ON' : 'SOUND OFF';
+    const c = document.getElementById('set-sound');
+    if (c) c.checked = on;
+  }
+
   onAction(a) {
     const st = this.state;
-    if (a === 'mute') { this.audio.setEnabled(!this.audio.enabled); document.getElementById('set-sound').checked = this.audio.enabled; return; }
+    if (a === 'mute') { this.audio.unlock(); this.audio.setEnabled(!this.audio.enabled); this._syncMute(); this.hud.prompt(this.audio.enabled ? 'SOUND ON' : 'SOUND MUTED', ''); return; }
     if (a === 'autofire') { this.settings.autoFire = !this.settings.autoFire; document.getElementById('set-autofire').checked = this.settings.autoFire; this.hud.prompt(this.settings.autoFire ? 'AUTO-FIRE ON' : 'AUTO-FIRE OFF', ''); return; }
     if (st === 'levelup') {
       if (a.startsWith('pick')) { const i = +a.slice(4) - 1; if (i < this.choices.length) this.pick(i); }
@@ -323,6 +350,10 @@ class Game {
     this.cam.swingPitch = 0;
     this.enemies.attackGrace = 8;
     this.calloutT = {};
+    this.killHeat = 0;
+    this.quietT = 0;
+    this.bossMusicAsked = false;
+    this.audio.setBossPhase(1);
   }
 
   setupTitle() {
@@ -386,6 +417,7 @@ class Game {
     this.setState('playing');
     this.hud.callout('GO!', 'good');
     this.audio.play('bell');
+    this.audio.play('vo_go');
     this.hintStep = 0;
     this.hintT = 1.2;
   }
@@ -452,12 +484,31 @@ class Game {
     u.danger.value = this.boss.active ? 0.3 : 0;
     const c = this.cam.camera;
     c.getWorldDirection(_v);
-    this.audio.setListener(c.position.x, c.position.z, _v.x, _v.z);
+    this.audio.setListener(c.position.x, c.position.y, c.position.z, _v.x, _v.y, _v.z);
     this.audio.updateLoops(p.speed, false, this.weapons.flaming, simulating && st !== 'title' && p.alive);
+    this.audio.update(dt, st === 'playing' || st === 'intro' ? this._musicInfo(dt) : null);
     if (st !== 'loading' && st !== 'title') this.hud.update(dt);
     // Queued level-ups open as soon as the action allows
     if (this.state === 'playing' && (this.pendingLevels > 0 || this.pendingCrates > 0) && p.alive && this.cam.mode === 'gunner' && this.enemies.attackers === 0) this.openLevelUp();
     this._hints(dt);
+  }
+
+  /**
+   * Combat heat for the adaptive music (0–1): attackers, dinosaurs on screen, firing, recent kills, low hull, mini-bosses.
+   * calm → breather cue (quiet beats, cleared zones, an empty street); hot → the high-intensity cue.
+   */
+  _musicInfo(dt) {
+    const en = this.enemies, d = this.director, p = this.player;
+    const beat = d.beat?.id;
+    this.killHeat = Math.max(0, (this.killHeat || 0) - dt * 0.2);
+    const lowHp = p.alive && p.hp / p.maxHp < 0.3;
+    const heat = Math.min(1, en.attackers * 0.22 + en.threatCount / 18 + (this.weapons.firing ? 0.12 : 0) + this.killHeat + (lowHp ? 0.2 : 0) + (this.minibosses.length ? 0.35 : 0));
+    this.quietT = en.threatCount === 0 ? (this.quietT || 0) + dt : 0;
+    const calm = beat === 'calm' || beat === 'rollout' || (!!d.beat?.zone && d.zoneClear) || this.quietT > 4;
+    const hot = this.minibosses.length > 0 || beat === 'stampede' || beat === 'alpha' || beat === 'matriarch';
+    // Boss music is lazy: start fetching it ~1.5 minutes before GRIDLOCK is due
+    if (!this.bossMusicAsked && (d.time > d.bossTime - 100 || d.endless)) { this.bossMusicAsked = true; this.audio.loadMusic(['boss_sting', 'boss1', 'boss2_intro', 'boss2', 'boss3']); }
+    return { heat, calm, hot };
   }
 
   simulate(dt, realDt) {
@@ -616,7 +667,8 @@ class Game {
     if (this.realTime - (this.calloutT.danger || -9) > 3) {
       this.calloutT.danger = this.realTime;
       this.hud.callout('DANGER!', 'danger');
-      this.audio.play('ui', { pitch: 0.5, volume: 0.6 });
+      this.audio.play('danger');
+      if (this.realTime - (this.calloutT.lookout || -99) > 40) { this.calloutT.lookout = this.realTime; this.audio.play('vo_lookout', { delay: 0.15 }); }
     }
     void e;
   }
@@ -632,6 +684,9 @@ class Game {
 
   onGunHit(e, h, killed, x, y, z) {
     this.hud.hitmark(h.weak > 1, killed);
+    // Hit marker tick; a brighter "ding" for headshots / the collar (rate-limited in the mixer)
+    if (h.weak > 1 || h.head) this.audio.play('headshot', { pitch: killed ? 1.08 : 1 });
+    else this.audio.play('hitmarker', { pitch: killed ? 0.9 : 1 });
     if (h.head && killed && !e.boss) {
       this.stats.headshots++;
       this.vfx.number(x, y + 0.5, z, 'HEADSHOT', 1);
@@ -667,7 +722,7 @@ class Game {
         0.6 + Math.random() * 0.5, 0.12, 0.04, 2.4, 3.2, 3.6, { grav: 14, drag: 0.8, stretch: 0.02, bounce: 0.3 });
     }
     this.vfx.dust(x, z, 1.4, 5);
-    this.audio.play('shatter_big', { x, z, volume: 0.9, pitch: 1.6 });
+    this.audio.play('glass', { x, z, volume: 1 });
     this.cam.addTrauma(0.12);
   }
 
@@ -681,7 +736,7 @@ class Game {
     this.addScore(bonus);
     this.hud.banner('ZONE CLEAR', `+${bonus.toLocaleString('en-US')} · Moving out!`, 'good', true);
     this.hud.callout('GO! GO! GO!', 'good');
-    this.audio.play('bell');
+    this.audio.play('zone_clear');
     this.pickups.spawnFloating('repair', -12);
   }
 
@@ -700,7 +755,13 @@ class Game {
     this.comboT = 3.2;
     if (this.combo > this.maxCombo) this.maxCombo = this.combo;
     const callouts = { 10: 'NICE!', 20: 'GREAT!', 30: 'EXCELLENT!', 50: 'RAMPAGE!', 80: 'MASS EXTINCTION!', 120: 'K-PG BOUNDARY!' };
-    if (callouts[this.combo]) { this.hud.callout(callouts[this.combo], 'combo'); this.audio.play('combo', { pitch: 1 + this.combo / 200 }); }
+    if (callouts[this.combo]) {
+      this.hud.callout(callouts[this.combo], 'combo');
+      this.audio.play('combo', { pitch: 1 + this.combo / 200 });
+      if (this.combo === 20) this.audio.play('vo_combo', { delay: 0.1 });
+      else if (this.combo === 50 || this.combo === 120) this.audio.play('vo_multikill', { delay: 0.1 });
+    }
+    this.killHeat = Math.min(0.4, (this.killHeat || 0) + 0.03);
     const sc = e.sp.score * (e.elite ? 4 : 1) * (e.miniboss ? 5 : 1);
     const pts = Math.round(sc * this.comboMult());
     this.addScore(pts);
@@ -750,7 +811,8 @@ class Game {
         this.weapons.ammo = this.weapons.magSize;
         this.weapons.reloadT = 0;
         this.hud.banner('OVERDRIVE', 'Bottomless belt · +50% fire rate', 'special');
-        this.audio.play('nitro');
+        this.audio.play('overdrive');
+        this.audio.play('vo_powerup', { delay: 0.25 });
         break;
       case 'airstrike':
         this.weapons.special.charge = 1;
@@ -812,6 +874,8 @@ class Game {
     this.setState('levelup');
     this.input.mouse.down = false;
     this.audio.play(this.choices[0]?.kind === 'evolution' ? 'evolve' : 'levelup');
+    this.audio.play('card_show', { delay: 0.25 });
+    if (!crate && this.realTime - (this.calloutT.vlevel || -99) > 30) { this.calloutT.vlevel = this.realTime; this.audio.play('vo_levelup', { delay: 0.35 }); }
     this.audio.setMuffled(true);
     this._showChoices();
   }
@@ -829,7 +893,7 @@ class Game {
     if (this.state !== 'levelup' || this.rerolls <= 0) return;
     this.rerolls--;
     this.choices = rollChoices({ weapons: this.weapons.weapons, passives: this.weapons.passives, evolved: this.weapons.evolved, level: this.level }, this.choiceCrate ? 4 : 3);
-    this.audio.play('ui');
+    this.audio.play('reroll');
     this._showChoices();
   }
 
@@ -845,7 +909,7 @@ class Game {
       this.audio.play('evolve');
       this.hud.banner('EVOLVED', `${(c.id === 'railgun' ? 'Rail Lance' : this.weapons.buildList().find((b) => b.id === c.id)?.name) || ''}`, 'combo', true);
       this.flash(0.35);
-    } else this.audio.play('ui', { pitch: 1.3 });
+    } else this.audio.play('card_pick');
     if (this.choiceCrate) this.pendingCrates--; else this.pendingLevels--;
     this.hud.hideLevelUp();
     this.audio.setMuffled(false);
@@ -887,6 +951,8 @@ class Game {
       this.enemies.attackGrace = 2;
     });
     setTimeout(() => this.hud.nameCard('CRETAGEN APEX SPECIMEN T-01', 'GRIDLOCK', 'Tyrannosaurus rex · 9.6 m · Containment: FAILED'), this.testMode ? 0 : 500);
+    // The name card gets the stage: music dips under the reveal roar and the card
+    this.audio.duck(-10, 3.2, 1.5);
     this.hud.showBoss(e, 'GRIDLOCK', 'Cretagen Apex Specimen T-01 · Tyrannosaurus rex', false);
   }
 
@@ -896,7 +962,8 @@ class Game {
     this.stats.bossKilled = true;
     this.stats.bossKillTime = this.director.time - (this.bossStartT ?? this.director.time);
     this.flash(0.5);
-    this.audio.play('trex_roar', { volume: 1.2, pitch: 0.7, dur: 2.6 });
+    this.audio.play('trex_death', { volume: 1.2 });
+    this.audio.duck(-14, 3.5, 1.5);
     const fx = Math.sin(e.heading), fz = Math.cos(e.heading);
     this.gunner.setVisible(false);
     this.cam.swing(0, 0, 3, 0);
@@ -912,8 +979,9 @@ class Game {
     this.director.bossDone = true;
     this.addScore(50000);
     this.vfx.number(this.player.x, 4, this.player.z, '+50,000 APEX BONUS', 4);
-    this.audio.play('victory');
-    this.audio.setMusic('results');
+    // Victory sting (chains into the results loop) + the announcer
+    this.audio.setMusic('victory');
+    this.audio.play(this.stats.continues ? 'vo_mission' : 'vo_flawless', { delay: 1.2 });
     this.victoryT = 4;
   }
 
@@ -925,6 +993,7 @@ class Game {
     this.hitStop(0.15);
     this.vfx.explosion(p.x, 1, p.z, 3, 0);
     this.audio.play('death');
+    this.audio.duck(-10, 2, 1);
     this.cam.addTrauma(1);
     this.flash(0.4);
     this.gunner.setVisible(false);
@@ -937,7 +1006,8 @@ class Game {
   openContinue() {
     this.setState('continue');
     this.continueT = CONTINUE_SECONDS;
-    this.audio.setMuffled(true);
+    this.musicBeforeContinue = this.boss.active ? 'boss' : 'run';
+    this.audio.setMusic('continue');
     this.hud.showContinue(this.score, this.stats.continues);
     this.hud.continueCount(CONTINUE_SECONDS);
   }
@@ -946,7 +1016,11 @@ class Game {
     const before = Math.ceil(this.continueT);
     this.continueT -= dt;
     const n = Math.max(0, Math.ceil(this.continueT));
-    if (n !== before) { this.hud.continueCount(n); if (n > 0) this.audio.play('ui', { pitch: 0.8 + (10 - n) * 0.03 }); }
+    if (n !== before) {
+      this.hud.continueCount(n);
+      if (n > 0) this.audio.play('count_tick', { pitch: 0.85 + (10 - n) * 0.035 });
+      if (n === 3) this.audio.play('vo_hurry', { delay: 0.2 });
+    }
     if (this.continueT <= 0) this.giveUp();
   }
 
@@ -955,8 +1029,9 @@ class Game {
     if (this.state !== 'continue') return;
     this.stats.continues++;
     this.hud.hideContinue();
-    this.audio.setMuffled(false);
+    this.audio.setMusic(this.musicBeforeContinue || 'run');
     this.audio.play('levelup');
+    this.audio.play('vo_ready', { delay: 0.3 });
     const p = this.player;
     p.revive();
     this.combo = 0;
@@ -979,7 +1054,6 @@ class Game {
   giveUp() {
     if (this.state !== 'continue') return;
     this.hud.hideContinue();
-    this.audio.setMuffled(false);
     this.endRun(false);
   }
 
@@ -1003,7 +1077,10 @@ class Game {
     this.vfx.showNumbers = this.settings.numbers;
     this.gunner.setVisible(false);
     this.setState('results');
-    this.audio.setMusic('results');
+    this.audio.setMuffled(false);
+    // Game over: jingle + announcer, then the results loop (a win is already playing the victory sting)
+    if (!win && !quit) { this.audio.setMusic('gameover'); this.audio.play('vo_gameover', { delay: 0.4 }); } else this.audio.setMusic('results');
+    if (r.newBest && r.score > 0) this.audio.play('vo_highscore', { delay: win ? 3.2 : 2.4 });
     this.hud.hideBoss();
     this.hud.showResults(r);
   }

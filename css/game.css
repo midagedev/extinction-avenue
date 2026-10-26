@@ -340,6 +340,11 @@ body.s-loading #s-loading, body.s-title #s-title { display: flex; }
 .settings label { display: flex; justify-content: space-between; align-items: center; gap: 16px; font: 600 15px var(--ui); letter-spacing: 0.04em; }
 .settings input[type=range] { width: 170px; accent-color: var(--orange); }
 .settings input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--orange); }
+.settings .set-head { font: 700 12px var(--ui); letter-spacing: 0.28em; color: var(--cyan); border-bottom: 1px solid var(--line); padding: 6px 0 4px; margin-top: 4px; }
+.settings .set-range { display: flex; align-items: center; gap: 10px; }
+.settings output { font: 600 13px var(--ui); color: var(--text-2); width: 3.2em; text-align: right; font-variant-numeric: tabular-nums; }
+.settings .set-mute .btn { min-width: 96px; justify-content: center; }
+.settings .set-mute .btn[aria-pressed=true] { border-color: var(--red, #ff3b3b); color: #ffb3b3; }
 .settings select { font: 600 14px var(--ui); background: #10141f; color: #fff; border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px; }
 .note { color: var(--orange-2); font-size: 13px; min-height: 1em; }
 

@@ -132,7 +132,9 @@ class TRexBoss {
     for (let k = 0; k < 6; k++) g.vfx.dust(r.x + (Math.random() - 0.5) * 10, r.z + (Math.random() - 0.5) * 10, 3, 4);
     g.cam.addTrauma(0.8);
     g.audio.play('shatter_big', { volume: 1, pitch: 0.5 });
+    g.audio.play('explosion_big', { volume: 0.7, pitch: 0.7 });
     g.audio.play('trex_roar', { volume: 1.2, pitch: 0.92, dur: 3.0 });
+    g.audio.setBossPhase(1);
     g.audio.setMusic('boss');
     g.bossIntro(e);
   }
@@ -253,7 +255,7 @@ class TRexBoss {
         e.crouch = Math.min(1, e.stateT / T);
         e.jaw = 0.5;
         tele(T);
-        if (e.stateT > T) { this._set(e, 'lunge'); g.audio.play('trex_roar', { x: e.x, z: e.z, volume: 0.8, pitch: 1.3, dur: 0.8 }); }
+        if (e.stateT > T) { this._set(e, 'lunge'); g.audio.play('trex_roar', { x: e.x, z: e.z, follow: e, volume: 0.8, pitch: 1.3, dur: 0.8 }); }
         break;
       }
       case 'lunge': {
@@ -483,8 +485,8 @@ class TRexBoss {
     e.lastAttack = m;
     if (m === 'lunge') { this._set(e, 'lunge_tele'); g.hud.callout('DANGER!', 'danger'); g.audio.play('brute_growl', { x: e.x, z: e.z, pitch: 0.5, volume: 1 }); }
     else if (m === 'throw') this._set(e, 'throw');
-    else if (m === 'flank') { this._set(e, 'flank'); g.audio.play('trex_roar', { x: e.x, z: e.z, volume: 0.8, pitch: 1.15, dur: 1.2 }); }
-    else if (m === 'charge') { this._set(e, 'overtake'); g.audio.play('trex_roar', { x: e.x, z: e.z, volume: 0.9, pitch: 1.1, dur: 1.2 }); }
+    else if (m === 'flank') { this._set(e, 'flank'); g.audio.play('trex_roar', { x: e.x, z: e.z, follow: e, volume: 0.8, pitch: 1.15, dur: 1.2 }); }
+    else if (m === 'charge') { this._set(e, 'overtake'); g.audio.play('trex_roar', { x: e.x, z: e.z, follow: e, volume: 0.9, pitch: 1.1, dur: 1.2 }); }
     else { this._set(e, 'roar'); e.summoned = false; }
   }
 
@@ -501,6 +503,9 @@ class TRexBoss {
     g.vfx.sparks(this.collar.x, this.collar.y, this.collar.z, 40, 16, 1.5, 5, 7);
     g.audio.play('explosion', { x: e.x, z: e.z, volume: 1 });
     g.audio.play('trex_roar', { volume: 1.2, pitch: 0.85, dur: 2.4 });
+    // Music steps up a gear under the phase roar
+    g.audio.setBossPhase(n);
+    if (n === 3) g.audio.play('vo_finalround', { delay: 1.6 });
     g.hud.banner(n === 2 ? 'ENRAGED' : 'DESPERATE', n === 2 ? 'Collar breached — it calls the pack' : 'Collar overloading — hit the weak point!', 'boss');
     g.hud.setBossPhase(n);
     g.vfx.number(this.collar.x, this.collar.y + 2, this.collar.z, n === 2 ? 'PHASE 2' : 'PHASE 3', 4);
@@ -554,7 +559,7 @@ class TRexBoss {
     if (Math.abs(e.cd) < 2 && !e.roared) {
       e.roared = true;
       e.pauseT = 1.8;
-      g.audio.play('trex_roar', { x: e.rx, z: e.rz, volume: 1.3, pitch: 0.95, dur: 2.4, range: 300 });
+      g.audio.play('trex_roar', { x: e.rx, z: e.rz, follow: e, volume: 1.3, pitch: 0.95, dur: 2.4, range: 300 });
       g.cam.addTrauma(0.35);
       g.hud.banner('WHAT WAS THAT?!', 'Something big is loose in Midtown', 'cameo');
     }

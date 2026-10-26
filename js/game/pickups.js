@@ -126,7 +126,7 @@ class Pickups {
     const g = this.game;
     g.vfx.sparks(it.x, it.y + 0.5, it.z, 14, 9, ...POWERUPS[it.type].glow);
     g.vfx.shockwave(it.x, it.z, 3, ...POWERUPS[it.type].glow.map((c) => c * 0.4), 0.4);
-    g.audio.play('crate', { volume: 0.8 });
+    g.audio.play('pickup');
     g.onPickupShot?.(it);
   }
 
@@ -182,7 +182,7 @@ class Pickups {
       game.addXP(gained);
       this.pitchStep = Math.min(24, this.pitchStep + 1);
       this.pitchTimer = 0.5;
-      game.audio.play('gem', { volume: 0.4, pitch: Math.pow(2, this.pitchStep / 24) });
+      game.audio.play('xp', { pitch: Math.pow(2, this.pitchStep / 24) });
     }
 
     // Power-ups

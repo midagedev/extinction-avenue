@@ -725,6 +725,11 @@ uses only `currentColor` + black overlay (no ids/defs/clipPaths/gradients).
 
 ### 5.7 Audio
 
+> **v4 update (2026-10-27):** this section is the historical v1–v3 brief. The game now plays designed samples and
+> CC0 / original music (`assets/audio/`, built by `tools/audio/sfx.js` and `tools/audio/music.js`, register in
+> [ASSETS.md §2.3](../ASSETS.md), runtime in `js/game/audio.js` + `js/game/audio-music.js`, report in
+> [REPORT.md v4](REPORT.md)). The recipes below survive as fallback voices in `js/game/audio-recipes.js`.
+
 All audio is **synthesized at play time** with WebAudio (`audio.js`): oscillators, noise, filters, a waveshaper and a
 shared 2.2 s convolution reverb. Every SFX has a voice limit and a minimum retrigger gap. World sounds are panned
 and distance-attenuated relative to the camera (range 90 m).
@@ -1047,4 +1052,4 @@ These are observations only; this document doesn't change code.
    or the loader should read `socket_*` empties from the file (recommended future change).
 5. **Textures, roughness and metalness in GLBs are ignored** by design (vertex-color pipeline).
 6. **Color-language conflicts in the placeholders:** Skyreaver magenta tags vs the elite magenta rim (2.4).
-7. **No sample playback path in `audio.js` yet:** recorded audio needs the `SAMPLES` hook described in 5.7.
+7. ~~No sample playback path in `audio.js` yet~~: done in v4 (sample voices, manifest, lazy loading; see 5.7).
