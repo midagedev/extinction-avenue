@@ -1,6 +1,7 @@
-# EXTINCTION AVENUE — Report (v2: first-person rear gunner)
+# EXTINCTION AVENUE — Report (v2: first-person rear gunner · v3: rigged creatures & touch aiming)
 
-**Repo:** `/workspace/dino-game` (local git, never pushed) · **Screenshots:** `/workspace/dino-game-shots/v2/`
+**Repo:** `/workspace/dino-game` (local git, never pushed) · **Screenshots:** `/workspace/dino-game-shots/v2/`,
+`/workspace/dino-game-shots/v3/`
 **One-liner:** *Rush hour just went Cretaceous.* Cretagen's specimens are loose in Midtown and they're chasing your cab.
 Unit 77 drives itself down the real avenues; you ride the tail gun, facing backward, and shoot everything that runs
 you down. It ends with **GRIDLOCK**, a T. rex that chases the cab down the avenue, pulls up beside it, and finally
@@ -11,6 +12,83 @@ WebGPURenderer + TSL). The original free-roam sim still works at `sim.html`. The
 attribution and mrdoob's credit are kept in the README, on the title screen and in ASSETS.md.
 
 ---
+
+## v3: real creatures and touch aiming (2026-10-27)
+
+The owner's v2 feedback: *"The enemy quality is too low. They're low-poly."* and *"On touch, my finger covers the
+actual crosshair too much."* Screenshots: `/workspace/dino-game-shots/v3/` (close-ups, pack, pterosaur, chargers,
+T. rex hero / chase / lunge, seven BEFORE/AFTER side-by-sides, phone portrait + landscape, model line-ups).
+
+### Creatures
+
+| Species | Model | Triangles (LOD0 / LOD1) | Animation |
+|---|---|---|---|
+| Scuttler, Sicklejaw, Brute, **GRIDLOCK** | damik's CC0 sculpt (colour + normal maps), **rigged here** (27 bones) | 22,294 / 6,689 | procedural keyframes: run & walk (leg IK, planted feet), idle, crouch, pounce, bite, roar, throw, hit, death |
+| Hornwall | Quaternius CC0 Triceratops, refined (crease-aware Loop ×2) | 21,216 / 5,304 | its own 6 clips (run, walk, idle, attack, jump, death) |
+| Spiketail (was Clubtail) | Quaternius CC0 Stegosaurus, refined | 36,448 / 9,112 | its own 6 clips |
+| Skyreaver | procedural high-detail pterosaur (last resort, original CC0) | 17,508 | procedural fly, hover-screech, dive, hit, death |
+
+- **Why this mix.** The only CC0 rigged+animated dinosaurs are Quaternius' 1.2–2.3k-triangle flat-shaded pack — the
+  low-poly look the owner rejected. The only CC0 high-detail dinosaur (damik, 22k triangles, baked maps, modelled
+  teeth) has no rig. So I rigged the sculpt (skeleton placed from measured orthographic views, neighbour-limited
+  distance weights, geodesic jaw/skull split so the teeth follow the right jaw) and generated its clips; the
+  Quaternius rigs I refined into smooth meshes that keep their skeletons and clips. No CC0 rigged ankylosaur or
+  pterosaur exists: the armoured slot reuses the stegosaurus (renamed Spiketail, its tail-swing clip is the swipe), and
+  the flyer is procedural. Details and license evidence: `ASSETS.md`, `assets/licenses/`.
+- **One sculpt, four animals.** Bone-scale morphs baked through FK (non-inheriting scale, children re-attached at the
+  scaled offsets): the compy has a juvenile head, the brute a heavier body, and GRIDLOCK a ×1.48 head, short thick neck,
+  ×0.42 arms and a heavier body. Shader recolour by a luminance ramp keeps the sculpt's baked shading; rest-space
+  stripes, blotches and countershading differ per species; every individual gets a small brightness/hue and scale
+  variation so packs don't look cloned.
+- **Rendering: GPU-instanced skinning** (`skin-rig.js`). The CPU samples each individual's clips (two cross-fading
+  clips + a hit-flinch overlay + procedural head-look and jaw) into 3×4 bone matrices, one texture row per individual;
+  one instanced draw call per species and LOD skins them with texelFetch. LOD1 kicks in when an animal is small on
+  screen; off-screen individuals are skipped. PBR material: albedo + tangent-space normal map (sculpt) or a procedural
+  domed-scale bump that fades out below ~3 px per scale (no speckle), roughness from the albedo, a cool rim light for
+  silhouettes, separate white hit flash and red-hot attack-telegraph glow, elite rim, stone blend for the fossilise /
+  shatter death (unchanged, no gore).
+- **Hero T. rex.** Roars on the reveal and the summon, crouches on every telegraph, bites on lunges and door hits, swings
+  its head to throw cars, flinches on staggers, collapses on death; its head turns toward the gunner's camera in the
+  reveal, roars, telegraphs and the chase. The glowing collar (weak point) is a rigid attachment on the neck bone.
+- **Fallback.** `?procedural` (or a failed load) draws the v2 rigs.
+
+### Touch aiming
+
+- **Default: drag anywhere (trackpad).** The crosshair moves by the finger's delta (gain ×0.8–1.9 with speed, scaled to
+  the screen, slowed to ×0.62 over a target), stays where it is when the finger lifts, and the finger never sits on it
+  (measured minimum distance in the tests: 147–293 px).
+- **Firing: target-gated auto-fire while the finger is down.** It fires while the crosshair is on a dinosaur, a thrown
+  car or a supply drop (0.14 s grace). Why not a fire button: on a phone held in one hand (portrait) a second thumb
+  isn't free, and a fire button competes with RELOAD/SKYHAMMER for the same thumb zone; gating on targets means a
+  resting finger never wastes the belt.
+- **Offset mode** (Settings → Touch aim): the crosshair floats 96 px above the finger and fires while held.
+- **Mild aim assist (touch only):** a gentle pull toward the nearest head / collar / thrown car within ~10 % of the
+  screen, too weak to drag the crosshair off a target the player is tracking.
+- **Layout:** phones start in touch mode, the crosshair scales with the short side (62 px on a phone), portrait widens
+  the vertical FOV to keep ~52° across, the belt sits bottom-left, RELOAD / SKYHAMMER own the right thumb zone.
+
+### Measured
+
+- **Performance** (`tools/perf-creatures.mjs`, 40 animated dinosaurs on screen: 12 raptors, 12 compies, 4 brutes,
+  2 Hornwalls, 2 Spiketails, 8 pterosaurs): **8 creature draw calls** (v2 rigid parts: 54), ~0.75 M creature triangles
+  per frame (the city draws ~9 M), **0.10 ms/frame** CPU for animation sampling + bone upload (v2: 0.085 ms). GPU frame
+  time can't be measured headless (SwiftShader). Download: +6.7 MB of models/textures.
+- **Balance unchanged** (average-skill bot, seed 2, final build): GRIDLOCK reached at 6:38, killed at 8:01, 2 continues
+  during the boss, 20 hits taken (417 damage), 790 kills, 131 headshots, peak 19 on screen, 0 page errors.
+- **Touch:** `tools/e2e-touch.mjs` (Playwright, Pixel-class emulation, CDP touch events), 12 checks × portrait and
+  landscape, all pass. `node --test tests/`: 113/113.
+
+### v3 known issues
+
+- The sculpt was modelled with a half-open mouth; at the T. rex's widest bite/roar the mouth corners stretch.
+- The Spiketail is a stegosaurus stand-in, and the pterosaur is procedural — both because no CC0 rigged originals exist.
+- The procedural theropod clips are hand-authored curves, not motion capture; the quadrupeds' clips are Quaternius'
+  stylised ones (no hit-react clip, so their flinch is the root tilt only).
+- Real-device GPU cost is unmeasured: the creature triangle budget is high for low-end phones; `?procedural` and
+  `?quality=low` are the escape hatches. Touch aiming is emulator-tested, not yet tested on a physical phone.
+
+---
+
 
 ## 1. How to run
 
@@ -166,7 +244,7 @@ Other measured numbers: 790–1,000 kills per run, 12–20 % of kills were heads
 boss time is 7:17 and in practice it's 6:30–6:35, because combat zones and mini-boss beats end early when cleared.
 
 Key tuning values: hull 100 (+20 per Reinforced Chassis); Scuttler 18 HP / 3 dmg; Sicklejaw 55 / 6; Brute 260 / 11;
-Hornwall 650 / 15; Clubtail 800 (40 % armor except the head) / 12; Skyreaver 35 / 6; enemy HP ×(1 + t/520) and
+Hornwall 650 / 15; Clubtail (v3: Spiketail) 800 (40 % armor except the head) / 12; Skyreaver 35 / 6; enemy HP ×(1 + t/520) and
 damage ×(1 + t/700); windups scale from ×1.0 early to ×0.77 in the stampede (a raptor's 1.15 s → 0.9 s); Tail Gun 12 damage × 9 rounds/s, falloff to 55 % at
 55 m+; GRIDLOCK 30,000 HP.
 
@@ -202,7 +280,7 @@ damage ×(1 + t/700); windups scale from ×1.0 early to ×0.77 in the stampede (
 - **Real-GPU frame rate is unmeasured.** Headless SwiftShader renders at about 0.4 fps, so the real-time loop wasn't
   timed. The simulation is far cheaper than v1 (tens of dinosaurs instead of hundreds), and the city is unchanged.
   Phones will probably want `?quality=low`.
-- **Touch** (finger = crosshair, RELOAD / SKYHAMMER buttons) is implemented but untested on a real phone.
+- **Touch** was reworked in v3 (drag aiming, see above); still untested on a real phone.
 - **The view model is procedural low-poly** (gun + gloves + sleeves). It reads as a pintle MG, but a modelled gun and
   hands would be the single biggest visual upgrade (asset slots `tailGun` / `tailRail` / `hatchRim` in `assets.js`).
 - **Audio** reuses the v1 procedural set and hasn't been mixed on speakers. There's no dedicated reload or "danger"
