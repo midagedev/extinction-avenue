@@ -1,9 +1,10 @@
-# EXTINCTION AVENUE — Final Report
+# EXTINCTION AVENUE — Report (v2: first-person rear gunner)
 
-**Repo:** `/workspace/dino-game` (local git, never pushed) · **Screenshots:** `/workspace/dino-game-shots/`
-**One-liner:** *Rush hour just went Cretaceous.* Cretagen's specimens are loose in Midtown. You drive Unit 77, an
-armored cab, down real Manhattan avenues. Its weapons fire themselves, Vampire Survivors-style; you aim the roof
-cannon, dodge telegraphed attacks, evolve your build, and take down **GRIDLOCK**, a T. rex chasing you down 5th Avenue.
+**Repo:** `/workspace/dino-game` (local git, never pushed) · **Screenshots:** `/workspace/dino-game-shots/v2/`
+**One-liner:** *Rush hour just went Cretaceous.* Cretagen's specimens are loose in Midtown and they're chasing your cab.
+Unit 77 drives itself down the real avenues; you ride the tail gun, facing backward, and shoot everything that runs
+you down. It ends with **GRIDLOCK**, a T. rex that chases the cab down the avenue, pulls up beside it, and finally
+charges head-on.
 
 The game is built on mrdoob's MIT-licensed [Slop New York](https://github.com/mrdoob/slop-newyork) (three.js
 WebGPURenderer + TSL). The original free-roam sim still works at `sim.html`. The LICENSE, the OSM / NYC Open Data
@@ -19,149 +20,204 @@ python3 -m http.server 8123        # any static server works; file:// does not (
 # open http://localhost:8123/
 ```
 
-It's a pure static site with no build step, so it can go to GitHub Pages as is. three.js comes from jsDelivr and the
-fonts from Google Fonts. Useful URL parameters: `?quality=high|medium|low`, `?webgl`, `?boss` (start 12 s before the
-T. rex), `?t=360` (late-game swarm), `?god`, `?nointro`, `?test` (headless stepping). README.md has the full table,
-the controls and the test commands.
+It's a pure static site with no build step, so it works on GitHub Pages as is (all paths are relative). three.js
+loads from jsDelivr, **pinned to the dev-branch commit `3efcf0f` (2026-10-25)** instead of the moving `@dev` tag; see
+§5 for why it isn't the npm release. Useful URL parameters: `?quality=high|medium|low`, `?webgl`, `?boss` (start just
+before GRIDLOCK with a mid-game build), `?t=SECONDS` (skip ahead to a beat), `?god`, `?nointro`, `?test` (headless
+stepping). README.md has the full table, the controls and the test commands.
 
-## 2. Gameplay
+## 2. What v2 changed, and why
 
-**Core loop (10 minutes or so per run).** The cab rides a closed loop of real streets: 5th Ave ↓, W 34th ↓, 7th Ave ↑
-through Times Square, W 57th →. You steer across the full width of the roadway, boost with nitro or brake, aim the
-**Roof Cannon** with the mouse (hold left click), and call in the **Skyhammer** air strike (Space or right click)
-once kills have charged it. Everything else fires on its own.
+The owner's two notes on v1 were "you die almost immediately after starting" and "it doesn't feel like a first-person
+arcade game". The brief was an arcade-cabinet gun game (Time Crisis, House of the Dead, Let's Go Jungle). The owner's
+clarification asked for the player to be the **rear gunner**, with dinosaurs chasing the vehicle from behind, and for a
+readable number of enemies instead of a Vampire Survivors swarm. v2 rebuilds the play around that and keeps the city,
+the creatures, the VS upgrade layer and the T. rex.
 
-- **Arsenal (VS-style).** 8 weapons: Roof Cannon (aimed), Hood Gatlings, Hubcap Saws, Swarm Missiles, Tesla Coil,
-  Exhaust Flamer, Flare Mines, Bumper Buckshot. 8 passives: armor, hull, turbo, magnet, ram, fire rate, damage/crit,
-  area. Max a weapon and own its paired passive to unlock **8 evolutions** (Rail Lance, Storm Gatlings, Buzzsaw Halo,
-  Cluster Barrage, Thunderhead, Inferno Wake, Nova Mines, Dragon's Breath). There are 6 weapon slots and 6 passive
-  slots. Each level-up pauses and offers 3 cards (4 from supply crates), you get 3 rerolls, and evolutions take
-  priority. Owned weapons appear on the car body (hood guns, trunk missile pod, tesla spire, plow, armor plates,
-  rail turret), so builds show up in screenshots.
-- **Enemies.** Scuttlers (compy swarms), Sicklejaws (pouncing raptors), Brutes, Hornwalls (triceratops-style
-  chargers with red lane telegraphs that trample other dinosaurs), Clubtails (armored ankylosaur-style tanks with
-  tail-swipe rings), and Skyreavers (pterosaur dive-bombers with shadow telegraphs). Elites are bigger, glow magenta,
-  get special behaviors and drop crates.
-- **Pacing.** Scuttlers stampede at 0:04 and the first level-up arrives within seconds. At **0:48 GRIDLOCK makes a
-  cameo**, crossing the avenue ahead and roaring. After that come flocks, elites, two mini-bosses (Alpha Ravager at
-  2:50, Hornwall Matriarch at 4:40), mega swarms of 200+, a warning klaxon at 7:21 and the boss at 7:30. Defeat ends
-  in **CITY SAVED** with an option to keep driving in endless mode; dying ends in **FOSSILIZED**.
-- **Feel.** Ramming small dinos launches them. A combo multiplier goes up to x8 and halves when you get hit. There
-  are callouts (RAMPAGE, MASS EXTINCTION…), hit-stop on heavy kills, trauma-based screen shake, chromatic aberration
-  and a red edge when you're hurt, slow motion on big moments, aggregated damage numbers, off-screen threat arrows,
-  and a reticle that locks onto targets and shows WEAK POINT.
-- **No gore.** Dinosaurs *fossilize*: they turn to stone and shatter into shards and cyan "gene energy".
+| | v1 | v2 |
+|---|---|---|
+| View | Third-person chase cam above and behind the cab | First person in the roof hatch, looking back over the tail gun (`camera.js` gunner mode) |
+| Player's job | Steer, boost, brake, aim a roof cannon | Aim and shoot. The cab is fully on rails; the director sets speed and lane |
+| Main gun | Projectile cannon, reticle snapping | Hitscan heavy MG on the crosshair ray: 30-round belt, reload, heat bloom, recoil, muzzle flash, headshots ×1.6, range falloff, view model with the gunner's hands (`gunner.js`) |
+| Enemies | 140–580 on screen, contact damage | 5–20 normally, peaks 22–26 measured (cap 40), each worth shooting (HP ×2–3, bigger Scuttlers) |
+| Damage to you | Any touch = a bite (≈70 hits/min) | Only telegraphed attacks; attack tokens; must be on screen first; shooting during the windup staggers them |
+| Pacing | Endless spawn rate + timed events | Scripted beats: chases, combat zones (cab stops), storefront and side-street ambushes (view swings), pterosaur raids, mini-bosses, stampede, breather (`director.js`) |
+| Pickups | Drive over them | Gene cores stream into the cab; supply drops float behind the cab and you shoot them |
+| Boss | Lane dodging with steering | First-person chase: lunge (stagger it via the collar), thrown cars you shoot down, flank (view swings to it), head-on charge (view swings forward) |
+| Death | Results screen | **CONTINUE?** with a 10 s countdown; free, but resets the combo multiplier |
+| Title | START SHIFT | PRESS START · INSERT COIN · FREE PLAY |
 
-**GRIDLOCK, the headline boss.** A warning klaxon, then it bursts onto the avenue behind you. The reveal is a
-letterboxed, slow-motion, low-angle hero shot with a roar and a name card, after which the camera swings into a
-reverse "getaway" view: your cab in the foreground, the T. rex behind it.
+### The rear-gunner camera
+`GameCamera` gained a `gunner` mode: the eye sits 2.15 m up in the roof hatch, rigidly attached to the cab (no lag),
+looking back down the road with a slight downward pitch. The car heading is smoothed a little through corners (the
+turret has inertia), there's a speed-dependent road rumble, the view sways a few degrees toward the crosshair, and
+recoil kicks the pitch. Directors and the boss can **swing** the view: ±66° out the side for ambushes, toward the T. rex
+when it flanks, a full 180° when it charges head-on, a slight upward tilt for pterosaur raids and the boss chase. The
+transition from cinematics into the hatch is blended in car space, so it travels with the moving cab.
 
-- **Phase 1, Chase.** Lunge bites down a telegraphed lane (steer out), stomp shockwaves with a 26 m radius (a BOOST!
-  prompt; you outrun them with nitro), and hurled wrecked cars with landing circles.
-- **Phase 2, Enraged** (at 66%, with a stagger, a collar explosion and a banner). It overtakes you, turns, and charges
-  head-on down a red lane; the camera swings back to the chase view, and a near miss pays a bonus. It also roars up
-  raptor packs.
-- **Phase 3, Desperate.** Faster, with double lunges, and the collar weak point goes from ×2.5 to ×3.5.
-- **Weak points.** The glowing containment collar (the reticle snaps to it) and the thighs.
-- **Death.** Hit-stop, slow motion and an orbit camera. It staggers, topples onto its side, kicks up a dust ring,
-  turns to stone and shatters in a flash with a fountain of gene cores, followed by the APEX DOWN banner, a +50,000
-  bonus and the victory screen.
+### The aimed gun is the star
+`_updateAim()` casts a ray through the crosshair every tick; whatever is under it is the target, and the view-model
+gun swivels toward it. Each round is a hitscan along that ray (with spread that grows while the trigger is held)
+against two hit spheres per dinosaur (body + head, taken from each model's rest pose), the boss's weak-point spheres,
+thrown wrecks and floating supply drops. Hits flash the dinosaur white, make it flinch (the whole rig tilts back), knock
+it back along the road, and pop hit markers on the crosshair (gold for weak points, red on a kill). The belt holds 30
+rounds (45 at level 3) and reloads by itself when empty (1.25 s, RELOAD! callout); R or right click reloads early.
+The Tail Gun levels up like any VS weapon and evolves into the piercing **Rail Lance**. The support weapons now face
+the pursuers (rear-facing sentries, tailgate buckshot, saws whirling behind the cab), and the passives that made no
+sense on rails became Extended Mag, Stopping Power (stagger) and Gene Magnet (+XP).
 
-**Later bosses and the per-stage roadmap** are in `docs/ROADMAP.md`. Stage 2 is the **Hudson Leviathan** (a
-mosasaur-type that bursts out of the Hudson onto the West Side Highway). Stage 3 is **Skyline** (a sauropod-type
-rampaging through Central Park). Both stages get their own elites and mini-bosses.
+### Enemies and fair attacks
+Ground pursuers live in **route space** (arc length + lateral offset along the patrol loop), the same coordinate
+system the boss used in v1. They always run down the road behind the cab, face the gunner and fill the frame. Spawns
+from side streets and smashed storefronts first merge onto the road in world space (sliding along building walls).
+Pterosaurs fly around a hover point behind the cab and dive at the gunner's face.
 
-## 3. Design decisions (and why)
+Every attack follows the same rules:
+1. **Telegraph.** A windup (crouch / pawing with a red lane on the asphalt / screech), the rig pulsing red, and a red
+   ring drawn on screen around its head that shrinks onto it as the attack comes, plus a rate-limited **DANGER!**.
+2. **Attack tokens.** Only `maxAttackers` dinosaurs may be winding up or attacking at once: 0 during the 8 s opening
+   grace, 1 early, 2–3 later, 2 during the boss fight.
+3. **Shootable first.** A dinosaur may only start an attack after it has been on screen for 0.9 s and alive for 1.5 s.
+4. **Stagger.** Damage landed during the windup or lunge builds a stagger meter (anything for a Scuttler or raptor,
+   18–22 % of max HP for the big ones). Fill it and the attack is cancelled (STAGGER! +score).
+5. **No contact damage.** Touching the cab does nothing; the cab only takes damage when an attack lands.
 
-- **On rails with lateral steering, not free driving.** The game is about aiming, dodging and reading the swarm, not
-  navigating Manhattan's grid. Rails keep the car moving through the most photogenic streets (Times Square, 5th Ave
-  canyons) and let the camera be art-directed. They also let the T. rex **share the route as a coordinate system**
-  (arc length + lateral offset), so it can chase, overtake and charge head-on through corners without any
-  pathfinding. Steering stays meaningful because telegraphs are lanes and rings across the roadway.
-- **Auto weapons plus an aimed cannon.** Auto weapons give the bullet-heaven power fantasy and readable builds. The
-  mouse cannon is the strongest single-target damage and is the only practical way to hit the T. rex's collar for
-  crits, which keeps a light-gun skill element. Touch players get auto-fire with aim assist.
-- **"Neon Cretaceous" art direction.** Flat-shaded low-poly creatures carry emissive "containment tag" markings
-  (cyan gene energy, magenta elites, orange/red danger), set against mrdoob's realistic-but-stylized twilight
-  Manhattan with HDR bloom, fog and SSR wet roads. One consistent look that survives compression in clips.
-- **Rigid-part instanced rigs instead of skinned meshes.** Each body part of each species is one `InstancedMesh`, so a
-  500-dinosaur swarm costs roughly 70 draw calls, and poses are a few Euler angles per instance. Measured CPU cost
-  of the whole simulation (AI, spatial hash, weapons, VFX pools): **≈0.85 ms per 1/60 s tick with ~500 dinosaurs**
-  (headless Chromium). Every particle, projectile and pickup is a preallocated struct-of-arrays pool drawn through
-  instanced batches.
-- **One asset manifest** (`js/game/assets.js`). Every creature, prop, pickup and projectile loads through it, and
-  setting `url` swaps a procedural placeholder for a GLB with no code changes (node-name contract for rigs; vertex
-  colour/emissive baking for props). `docs/ART_PIPELINE.md` has the full asset list, specs and production routes.
-  All shipped art and audio is procedural (`ASSETS.md`).
-- **Procedural audio.** Every SFX, including the layered T. rex roar, is synthesized in WebAudio with voice limiting
-  and stereo/distance panning. There's an adaptive darksynth score (title / run / boss / results) that gets muffled
-  during level-ups and pause.
-- **IP hygiene.** The title, Cretagen, Unit 77, GRIDLOCK and all creature names are original. The creature designs are
-  generic real-dinosaur archetypes, and the T. rex's containment collar is our own motif. While testing I found
-  real-world brands on the inherited city's storefronts and billboards (a pharmacy chain, a stock exchange, a news
-  channel, a ticket booth, a newspaper quote, the MetLife crown sign). I replaced them with fictional ones, including
-  in-world jokes: a crashing Cretagen stock ticker in Times Square, and Cretagen on the Park Ave tower crown. The
-  player cab got its own "Animal Control · Dino Response" livery in place of the NYC T&LC decals.
+Hits on the player: camera shake, chromatic aberration, a red edge flash, a cracked-glass splat where the attacker
+was, a big red damage number, the hull bar shakes, and the combo resets. A short invulnerability window (0.45 s)
+prevents stacked hits.
 
-## 4. Verification done
+### Arcade structure
+`director.js` is a script of 13 beats (README and `docs/ROADMAP.md` list them). Each beat sets the cab's speed (0 in
+combat zones, up to 18 m/s in the avenue chase), the cap and minimum of pursuers in play, attack tokens and telegraph
+length, plus a small program of spawns and set pieces. Combat zones end when the area is cleared (ZONE CLEAR + a
+bonus that shrinks with time + a repair drop) or when they time out. A mercy rule floats a repair drop behind the cab
+when the hull falls below 40 % (at most once every 18 s). The T. rex cameo now crosses the street *behind* the cab,
+in full view.
 
-All of this was automated with Playwright + headless Chromium (SwiftShader), driven by `tools/`:
+### GRIDLOCK
+It still lives on the route at (arc length, lateral offset), now 22–27 m behind the cab, so it fills the rear view.
+- **Phase 1:** lunge at the tailgate (1.6 s telegraph, a danger ring with a gold stagger meter around the collar) and
+  wrecked cars thrown in high arcs that you can shoot out of the air (SHOT DOWN! +1500).
+- **Phase 2 (66 %):** adds flank runs, where it pulls up beside the cab and the gunner's view swings to face it before
+  the head-butt, and roars that call raptors.
+- **Phase 3 (33 %):** faster telegraphs, double lunges, the collar at ×3.5, and the head-on charge. It overtakes,
+  turns around ahead of the cab, the view swings forward over the hood, and it charges down a red lane.
 
-- **Full flow:** title → intro → run with waves and level-ups → T. rex cameo → boss reveal → three phases → death
-  sequence → results → Share on X. The tweet intent is generated correctly, for example
-  `https://twitter.com/intent/tweet?text=I put down GRIDLOCK the T. rex in …&url=…`. **0 page errors** on the WebGL2
-  path.
-- **Real-time loop (no test hooks):** title → click START → 60 s of play on the **WebGPU backend**, the desktop and
-  mobile (touch emulation) paths, and all 36 sound recipes played without throwing.
-- **Balance bot** (holds fire at the screen centre, weaves, never dodges or uses nitro on purpose): it survives about
-  3:50–4:00 at the current tuning. A human who dodges, boosts and aims should reach the 7:30 boss with a reasonable
-  build. This is still **bot tuning, not human playtesting** (see known issues).
-- **Screenshots** (`/workspace/dino-game-shots/`): title screen, first seconds, first-minute swarm (with the T. rex
-  cameo in the background), level-up choice (two), a 500-dinosaur swarm, T. rex reveal, boss chase, boss weak-point
-  fight, boss death, and the results screen with Share on X. `docs/og-image.png` is the social card.
+Any attack can be stopped by landing about 2.6–3 % of its max HP during the telegraph (in practice: hit the collar),
+which staggers it and opens a 2.2 s window of +50 % damage. The death sequence is unchanged (hit-stop, slow motion,
+orbit camera, topple, stone, shatter, APEX DOWN, +50,000).
 
-## 5. Known issues and limitations
+### Continue
+On a wreck the camera orbits the burning cab, then **CONTINUE?** counts down from 10 (click / Enter / Space). Continuing
+is free: full hull, every dinosaur near the cab is blasted away, a 4 s grace period, a fresh belt, and the boss (if it
+was up) drops back to chase distance. It resets the combo multiplier, and the results screen and share text show the
+number of continues ("with no continues" is a brag line).
 
-- **WebGPU support.** Best in current Chrome/Edge. Elsewhere three.js falls back to WebGL2 automatically, and
-  `?webgl` forces it. If the WebGPU device is lost, the game reloads on WebGL2. The first visit compiles a lot of
-  pipelines behind the loading screen: a few seconds on a real GPU, longer on weak laptops.
-- **Headless WebGPU renders black.** In the sandbox, SwiftShader's WebGPU adapter accepts frames but presents nothing
-  and logs `Instance dropped in popErrorScope`. The *original* `sim.html` behaves exactly the same, so it's an
-  environment limitation, not a game bug. All screenshots were therefore rendered through the WebGL2 backend. I
-  couldn't measure GPU frame rate on real hardware here, only CPU simulation cost.
-- **Performance on low-end GPUs is unknown.** The base city is heavy (SSR, shadows, 1.1 MB geodata). `?quality=low`
-  or Settings → Graphics drops SSR, shadows and resolution. Phones will probably need Low.
-- **Balance** was tuned with a bot. Kill counts and XP pace are high (VS-like). The combo multiplier tends to stay at
-  the cap under heavy fire, and boss HP (30k, scaling with time) may need adjusting after real playtests.
-- **Touch** was tested only in emulation, not on a real phone; there's no haptics yet.
-- **Audio** was only checked for runtime errors. Nobody has listened to the mix on speakers, so levels may need a pass.
-- **Placeholders.** All creatures and props are procedural low-poly. The T. rex reads well, while the small fry are
-  readable but simple. The `playerCar` GLB slot in the manifest isn't consumed yet (the cab is the city's procedural
-  taxi).
-- **Landmarks** are real NYC places by name (Empire State Building and so on). That's geography, not branding. Map
-  labels only appear in the free-roam sim.
-- The **X logo** icon is used only to label the Share on X button.
-- Debug flags (`?god`, `?boss`, `?t=`) are public. That's harmless and handy for creators recording clips.
+## 3. Why players died "almost immediately" in v1 (diagnosis)
 
-## 6. Next steps to make it more viral
+I reproduced it with real Playwright input before changing anything:
+- **The live Pages build was byte-identical to the local HEAD** (`.tools/live-diff.mjs`), so it wasn't a deploy
+  mismatch.
+- **There was no crash and no one-shot kill.** Stepping the simulation at 60 Hz with real DOM mouse/keyboard events,
+  I ran six newcomer profiles: mouse wiggler, idle, holding W like a gas pedal, holding S, mashing the arrows, and a
+  player who never fires and only picks passives. None died in the first minute. The real-time loop can't be timed in
+  this sandbox (SwiftShader renders about 0.4 fps), but it runs the same `tick()` with dt clamped to 50 ms, so it
+  behaves the same.
+- **What the player experienced instead** (`.tools/repro-visibility.mjs`, 60 s with the mouse held down):
+  - the first hit landed at **2.5 s**;
+  - **70 hits in the first minute**, every one with a red flash, shake, a −2 number and a hurt sound;
+  - **up to 215 dinosaurs on screen**, 1,740 kills in the first minute;
+  - a stampede of 45 at 0:04 and of 90 at 0:26;
+  - every hit was untelegraphed contact damage: a Scuttler touching the cab bit it.
 
-1. **Instant clip capture.** A `MediaRecorder` buffer of the last 15 s (canvas + WebAudio), saved on the boss kill or
-   with a hotkey, and exported as a ready-to-post vertical 9:16 MP4/WebM with the score burned in. Most viral game
-   clips are vertical.
-2. **Shareable seeded runs and daily challenges.** Put `?seed=` in the share URL ("beat my run on the same seed"), add
-   a daily seed with a lightweight leaderboard (a serverless KV), and use a share text like "#3 today on Extinction
-   Avenue".
-3. **Dynamic share card.** Render a results image (score, build icons, a frozen frame of the T. rex) to a canvas, offer
-   it as a download or Web Share API attachment, and serve per-run OG images so links unfurl with the player's own
-   moment.
-4. **Photo mode.** Pause, free camera, filters and a logo watermark. The city plus neon dinosaurs is screenshot bait.
-5. **Shorter time-to-T. rex for first sessions.** Consider a "Rex Rush" quick mode (a 3-minute run straight to
-   GRIDLOCK), since the cameo and the boss are the hook.
-6. **Swap in hero art first:** the T. rex, the raptor and the cab. Follow the `docs/ART_PIPELINE.md` priorities:
-   CC0 bases plus a commissioned hero rex.
-7. **Stages 2 and 3** (Hudson Leviathan, Skyline). Each new boss is a new trailer moment, and each unlock gives
-   players something to post.
-8. **Creator hooks:** a clean `?clip` mode (no HUD, god mode, cinematic camera on boss events) and a press kit with
-   GIFs.
-9. **Performance on mobile:** a dedicated lightweight city LOD for phones, since a smooth mobile experience is what
-   lets a share link convert.
+  The hull bar visibly drained from the second second while the screen flashed red, and the cause was buried in a
+  swarm. A player who didn't realize they had to *hold* the button (clicking does very little) and picked passives
+  died at **1:54**, inside the first raptor stampede. That's what "you die almost immediately" describes.
+
+**The fix is structural, not a number tweak.**
+- Nothing damages the cab by contact any more.
+- Every attack is telegraphed, gated by attack tokens, needs the attacker to have been on screen first, and can be
+  cancelled by shooting it.
+- An 8 s grace period at the start and 4 s after a continue.
+- The first minute runs with one attacker at a time and the longest telegraphs (1.15–1.25 s windups).
+- Low early damage: Scuttlers deal 3, raptors 6.
+- Health comes from shootable repair drops, including a mercy drop when the hull falls below 40 %.
+- Readable enemy counts.
+
+## 4. Balance numbers (measured)
+
+All runs: `tools/e2e-v2.mjs`, headless Chromium, real Playwright mouse events, sim stepped at 30 Hz, seeded RNG.
+The bot picks the most urgent on-screen threat (attackers first, then thrown cars, then the closest, supply drops when
+calm). It reacts to a new target after a human delay, moves the mouse at a capped speed, aims with drifting Gaussian
+noise, and only holds the trigger when the crosshair is near the target. It picks upgrades as a player would
+(evolution > Tail Gun > new weapon > passive) by clicking the cards.
+
+| Profile | Reaction | Mouse speed | Aim noise σ | Reached GRIDLOCK | Boss fight | Deaths | Hits taken (dmg) | Peak on screen |
+|---|---|---|---|---|---|---|---|---|
+| Idle (never touches anything) | — | — | — | — (wrecked at **62.8 s**) | — | 1 | first hit at 11–16 s | 20 |
+| Weak (skill 0.35, seed 6) | 0.37–0.64 s | 1,065 px/s | 40 px | **6:35** | 81 s | 1 (at 7:17, mid-boss; continued and won) | 23 (416) | 19 |
+| Average (skill 0.6, seed 4) | 0.28–0.49 s | 1,394 px/s | 23 px | **6:34** | 75 s | 0 (lowest hull 6) | 14 (265) | 26 |
+| Attentive (skill 1, seed 5) | 0.22–0.38 s | 1,800 px/s | 14 px | **6:35** | 43 s | 0 | 3 (64) | 15 |
+| Attentive (skill 1, seed 3, boss HP 21k) | 0.22–0.38 s | 1,800 px/s | 14 px | 6:35 | 45 s | 0 | 8 (185) | 22 |
+
+Other measured numbers: 790–1,000 kills per run, 12–20 % of kills were headshots, 10–44 staggers per run, level
+19–25 by the boss. For comparison, the v1 bot died at about 4:00 and never reached the 7:30 boss. Now the nominal
+boss time is 7:17 and in practice it's 6:30–6:35, because combat zones and mini-boss beats end early when cleared.
+
+Key tuning values: hull 100 (+20 per Reinforced Chassis); Scuttler 18 HP / 3 dmg; Sicklejaw 55 / 6; Brute 260 / 11;
+Hornwall 650 / 15; Clubtail 800 (40 % armor except the head) / 12; Skyreaver 35 / 6; enemy HP ×(1 + t/520) and
+damage ×(1 + t/700); windups scale from ×1.0 early to ×0.77 in the stampede (a raptor's 1.15 s → 0.9 s); Tail Gun 12 damage × 9 rounds/s, falloff to 55 % at
+55 m+; GRIDLOCK 30,000 HP.
+
+## 5. Verification
+
+- **Screenshots** (`/workspace/dino-game-shots/v2/`, produced by `node tools/e2e-v2.mjs shots`):
+  - `00` title (PRESS START / INSERT COIN)
+  - `01` first-person view with crosshair, gun and a danger ring
+  - `02` combat zone with an ambush
+  - `03` level-up cards
+  - `04` pterosaur diving at the gunner
+  - `05` side-street ambush with the swung view
+  - `06` CONTINUE? countdown
+  - `07` T. rex reveal
+  - `08` T. rex chase in first person
+  - `09` lunge telegraph with the stagger meter
+  - `10` flank (view swung to the side)
+  - `11` phase 3 head-on charge (view forward over the hood)
+  - `12` death
+  - `13` results
+- **0 page errors** in every v2 run (smoke, idle, bots, shots).
+- **`node --test tests/`: 113/113 pass** (the original sim's unit tests, `sim.html` unchanged apart from the pin).
+- **three.js pin.** I first pinned to the npm release 0.186.1, which has every API the game imports, but the city's TSL
+  materials then fail to compile on WebGL2 (`nodeAttribute… undeclared identifier`). Pinning to the exact dev-branch
+  commit (`3efcf0f`, byte-identical to what `@dev` served on 2026-10-26) keeps the tested code and stops future dev
+  pushes from breaking the live game. Both `index.html` and `sim.html` use it.
+
+## 6. Known issues and limitations
+
+- **Bot-tuned, not human-tuned.** The bots have human-like limits, but a real first-time player is still the real test.
+  If players find it too easy, lower `wind` (telegraph length) and raise `atk` (attack tokens) per beat in
+  `director.js`; the boss HP is one number in `boss.js`.
+- **Real-GPU frame rate is unmeasured.** Headless SwiftShader renders at about 0.4 fps, so the real-time loop wasn't
+  timed. The simulation is far cheaper than v1 (tens of dinosaurs instead of hundreds), and the city is unchanged.
+  Phones will probably want `?quality=low`.
+- **Touch** (finger = crosshair, RELOAD / SKYHAMMER buttons) is implemented but untested on a real phone.
+- **The view model is procedural low-poly** (gun + gloves + sleeves). It reads as a pintle MG, but a modelled gun and
+  hands would be the single biggest visual upgrade (asset slots `tailGun` / `tailRail` / `hatchRim` in `assets.js`).
+- **Audio** reuses the v1 procedural set and hasn't been mixed on speakers. There's no dedicated reload or "danger"
+  sound yet (reused UI blips).
+- **Hit spheres** come from the rest pose plus flinch and lift, not from the animated parts, so a lunging raptor's
+  head sphere can be off by a few dozen centimetres. It's generous enough not to feel unfair.
+- Corners: pursuers in route space follow the road around corners; the camera turns with the cab, so a pack can be
+  out of view for a second after a turn (they can't attack while off screen).
+- Debug flags (`?god`, `?boss`, `?t=`) stay public; they're handy for creators recording clips.
+
+## 7. Next steps
+
+1. **A human playtest pass:** five new players, one run each. Watch where they first take damage and whether they
+   notice the red ring.
+2. **Hero art:** the gun view model and gloves, then the T. rex (see `docs/ART_PIPELINE.md`).
+3. **Light-gun polish:** a reload-by-shooting-offscreen option (true arcade style), recoil patterns per weapon,
+   per-species death reactions, dedicated SFX for DANGER! and reload.
+4. **Clip tools:** a `MediaRecorder` buffer of the last 15 s, saved on the boss kill.
+5. **Stages 2 and 3** (`docs/ROADMAP.md`) fit the beat director as new beat lists and routes.

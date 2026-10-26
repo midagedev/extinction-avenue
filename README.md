@@ -61,7 +61,7 @@ To host it, push the folder to GitHub Pages or any static host. Nothing needs co
   multiplier (up to x8), score popping off every kill, and arcade callouts.
 - **Arcade structure.** Beats instead of an endless spawn: OUTBREAK → STOREFRONT → pterosaurs → COMBAT ZONE → AVENUE
   CHASE → ALPHA RAVAGER → Times Square COMBAT ZONE → CROSSFIRE → SKY RAID → HORNWALL MATRIARCH → STAMPEDE → quiet →
-  WARNING → GRIDLOCK (about 6:30 in). Supply drops float behind the cab (repair, overdrive, Skyhammer): shoot them to
+  WARNING → GRIDLOCK (6:30–7:15 in). Supply drops float behind the cab (repair, overdrive, Skyhammer): shoot them to
   grab them.
 - **Survivors layer.** Gene cores stream into the cab. Level-ups offer 3 cards: support weapons (Sentry Guns, Swarm
   Missiles, Tesla Coil, Exhaust Flamer, Flare Mines, Hubcap Saws, Tailgate Buckshot), passives (Hollow Points,

@@ -508,13 +508,14 @@ class WeaponSystem {
       const x = ray.origin.x + ray.direction.x * h.t, y = ray.origin.y + ray.direction.y * h.t, z = ray.origin.z + ray.direction.z * h.t;
       const crit = this._rollCrit(h.weak > 1 ? h.weak * 1.4 : 1);
       const killed = g.enemies.damage(h.e, dmg * crit, { source: 'rail', crit: crit > 1, head: h.head, stagger: 2, kx: ray.direction.x * 10, kz: ray.direction.z * 10 });
-      g.vfx.hitSpark(x, y, z, 2, 6, 9);
+      g.vfx.hitSpark(x, y, z, 1, 3, 4);
       g.onGunHit(h.e, h, killed, x, y, z);
     }
     const hx = ray.origin.x + ray.direction.x * endT, hy = ray.origin.y + ray.direction.y * endT, hz = ray.origin.z + ray.direction.z * endT;
-    g.vfx.beam(_pos.x, _pos.y, _pos.z, hx, hy, hz, 0.16, 2, 7, 9, 0.16);
-    g.vfx.beam(_pos.x, _pos.y, _pos.z, hx, hy, hz, 0.05, 8, 10, 12, 0.1);
-    if (endT < 199) g.vfx.hitSpark(hx, hy + 0.2, hz, 2, 6, 9);
+    // Kept dim: an HDR beam from right under the camera blooms over half the screen
+    g.vfx.beam(_pos.x, _pos.y, _pos.z, hx, hy, hz, 0.07, 0.5, 1.8, 2.4, 0.12);
+    g.vfx.beam(_pos.x, _pos.y, _pos.z, hx, hy, hz, 0.02, 2, 2.6, 3, 0.08);
+    if (endT < 199) g.vfx.hitSpark(hx, hy + 0.2, hz, 1, 3, 4);
     g.gunner.fire(1.6);
     g.audio.play('gun', { volume: 0.8, pitch: 0.6 });
     g.audio.play('tesla', { volume: 0.3 });

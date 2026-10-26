@@ -4,7 +4,8 @@
 // long their telegraphs last, and runs a little program of spawns and set pieces (pursuers pouring down the road behind
 // you, raptors smashing out of storefronts, side-street ambushes that swing the gunner's view, pterosaur raids, mini-
 // bosses, supply drops). Normal beats keep 5–20 dinosaurs on screen; the stampede peaks briefly around 35. After the
-// last beat comes the warning klaxon and GRIDLOCK (≈6:20 into a run, the fight itself takes a minute or two).
+// last beat comes the warning klaxon and GRIDLOCK (≈6:30–7:15 into a run depending on how fast the combat zones and
+// mini-bosses are cleared; the fight itself takes a minute or two).
 //
 // Fairness: a grace period at the start (and after a continue), one attacker at a time early on, long telegraphs that
 // shorten as the run goes on, a mercy repair drop when the hull runs low.
@@ -93,7 +94,7 @@ const BEATS = [
 
 const BOSS_BEAT = BEATS.length; // index of the boss "beat"
 const ENDLESS_LOOP = ['chase1', 'zone1', 'broadway', 'sky2', 'zone2', 'stampede', 'alpha', 'matriarch'];
-// Nominal length of a beat (zones and mini-boss beats usually end early) and the nominal boss time (≈6:20)
+// Nominal length of a beat (zones and mini-boss beats usually end early) and the nominal boss time (≈7:17)
 const nominal = (b) => (b.zone ? b.dur * 0.85 : b.boss ? b.dur * 0.8 : b.dur);
 const BOSS_TIME = Math.round(BEATS.reduce((a, b) => a + nominal(b), 0));
 

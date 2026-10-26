@@ -1,28 +1,34 @@
 # EXTINCTION AVENUE — Stage & Boss Roadmap
 
-Stage 1 is what ships today. Stages 2 and 3 are design sketches. Each stage is one 10–12 minute run on its own
-on-rails loop of real Manhattan streets, which `route.js` builds from a list of corner points. Every stage keeps the
-same structure: an instant swarm opening, a boss cameo around 0:45, an elite or mini-boss every 2–3 minutes, a warning
-klaxon, then the headline boss.
+Stage 1 is what ships today. Stages 2 and 3 are design sketches. Since v2 the game is a first-person arcade rail
+shooter: the cab drives itself along an on-rails loop of real Manhattan streets (`route.js` builds it from a list of
+corner points) and the player is the rear gunner. Each stage is one 6–8 minute run scripted as BEATS (`director.js`):
+chases where pursuers pour down the road behind the cab, combat zones where the cab stops, storefront and side-street
+ambushes that swing the view, pterosaur raids, two mini-bosses, a stampede peak, a breather, a warning klaxon, then the
+headline boss. Normal beats keep 5–20 dinosaurs in play; peaks reach 30–40 for a few seconds.
 
 ## Stage 1 — MIDTOWN MELTDOWN (shipped)
 
-Loop: 5th Ave ↓ → W 34th St ← → 7th Ave ↑ (Times Square) → W 57th St →. Twilight.
+Loop: 5th Ave ↓ → W 34th St ← → 7th Ave ↑ (Times Square) → W 57th St →. Twilight. Times below are nominal; combat
+zones and mini-boss beats end early when cleared.
 
 | Time | Beat |
 |---|---|
-| 0:04 | Outbreak stampede (Scuttlers) |
-| 0:48 | **GRIDLOCK cameo**: the T. rex crosses the avenue ahead and roars, then leaves |
-| 1:15 | Pterosaur flock · 1:45 Sicklejaw stampede out of a side street |
-| 2:05 | Elite: Sicklejaw Alpha (faster pounces, drops a supply crate) |
-| 2:50 | **Mini-boss: ALPHA RAVAGER**. An elite Brute that roars up Sicklejaw packs and speeds them up |
-| 3:35 | Mega Scuttler swarm |
-| 4:40 | **Mini-boss: HORNWALL MATRIARCH**. Triple telegraphed lane charges that trample other dinosaurs |
-| 5:50 | Elite: Clubtail Bulwark (armored, tail-swipe rings) |
-| 6:15 | 200-Scuttler mega swarm, then an elite Skyreaver flock and a Ravager |
-| 7:21 | WARNING klaxon |
-| 7:30 | **BOSS: GRIDLOCK**. Three phases: chase / enraged / desperate. Weak points are the collar and the thighs |
-| after | Victory, then results, or continue in endless mode (scaling waves) |
+| 0:00 | ROLL OUT: grace period, nobody may attack for 8 s; two Scuttlers appear down the road |
+| 0:10 | OUTBREAK: Scuttlers + the first Sicklejaws chase the cab, 1 attacker at a time, the longest telegraphs; first supply drop (overdrive) |
+| 0:50 | STOREFRONT: raptors smash out of shop windows on both sides; **GRIDLOCK cameo**: it crosses the street behind the cab and roars |
+| 1:18 | INCOMING FROM ABOVE: first pterosaur dives at the gunner (the view tilts up) |
+| 1:34 | **COMBAT ZONE**: the cab stops at an intersection; ambush left, ambush right (the view swings), first Brute |
+| 2:21 | AVENUE CHASE at 18 m/s: raptor packs, pterosaurs, a Brute; repair drop |
+| 3:06 | **Mini-boss: ALPHA RAVAGER**, an elite Brute that howls up Sicklejaws |
+| 3:46 | **COMBAT ZONE**, Times Square: a Hornwall charges down a red lane, Clubtail, storefront raptors, a Scuttler pack from a side street |
+| 4:35 | CROSSFIRE: side-street ambushes from both flanks |
+| 5:07 | SKY RAID: a pterosaur flock including an elite |
+| 5:41 | **Mini-boss: HORNWALL MATRIARCH**, repeated lane charges (shoot her face to stagger her) |
+| 6:20 | STAMPEDE: the 30–40 peak, then it dries up |
+| 7:02 | …QUIET: repair drop, WARNING klaxon |
+| ≈6:30–7:17 | **BOSS: GRIDLOCK**. Chase / enraged (flank runs) / desperate (head-on charge). Collar ×2.5 (×3.5 in phase 3) |
+| after | Victory, then results, or continue in endless mode (beats loop with rising HP and damage) |
 
 ## Stage 2 — WEST SIDE TIDE (sketch)
 

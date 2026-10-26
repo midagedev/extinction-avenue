@@ -693,11 +693,12 @@ class EnemyManager {
         g.audio.play('ptero_cry', { x: e.x, z: e.z, volume: 0.9 });
       }
     } else if (e.state === 'windup') {
-      // Rear up in the air, screeching (danger ring drawn by the overlay)
+      // Hang in the air screeching, dropping toward eye level so it stays in the gunner's view
+      // (danger ring drawn by the overlay)
       e.vx += (p.vx - e.vx) * Math.min(1, dt * 3);
       e.vz += (p.vz - e.vz) * Math.min(1, dt * 3);
       e.x += e.vx * dt; e.z += e.vz * dt;
-      e.y += (e.hoverY + 2 - e.y) * Math.min(1, dt * 2);
+      e.y += (Math.min(e.hoverY, eye.y + 3.5) - e.y) * Math.min(1, dt * 2.5);
       e.heading = Math.atan2(eye.x - e.x, eye.z - e.z);
       e.pitch = -0.35 - e.flinch * 0.3;
       e.jaw = 0.6;
@@ -708,16 +709,26 @@ class EnemyManager {
         e.staggerAcc *= 0.5;
       }
     } else if (e.state === 'dive') {
-      // Swoop straight at the gunner's face (relative to the moving cab)
-      const T = 0.75;
+      // Swoop down to eye level ~8 m behind the cab, then straight at the gunner's face (relative to the moving cab):
+      // it grows in the middle of the screen instead of leaving through the top edge
+      const T = 0.9;
       const u = Math.min(1, e.stateT / T);
-      const ease = u * u;
       const ex = eye.x - p.x, ey = eye.y, ez = eye.z - p.z;
-      const nx = p.x + e.sx0 + (ex - e.sx0) * ease, ny = e.sy0 + (ey - 0.3 - e.sy0) * ease, nz = p.z + e.sz0 + (ez - e.sz0) * ease;
+      const wx = ex - p.fx * 8, wz = ez - p.fz * 8; // waypoint 8 m behind the eye
+      const wy = ey + 0.4;
+      let nx, ny, nz;
+      if (u < 0.5) {
+        const k = u / 0.5, ek = 1 - (1 - k) * (1 - k);
+        nx = e.sx0 + (wx - e.sx0) * ek; ny = e.sy0 + (wy - e.sy0) * ek; nz = e.sz0 + (wz - e.sz0) * ek;
+      } else {
+        const k = (u - 0.5) / 0.5, ek = k * k;
+        nx = wx + (ex - wx) * ek; ny = wy + (ey - 0.25 - wy) * ek; nz = wz + (ez - wz) * ek;
+      }
+      nx += p.x; nz += p.z;
       e.vx = (nx - e.x) / Math.max(dt, 1e-3); e.vz = (nz - e.z) / Math.max(dt, 1e-3);
       e.x = nx; e.y = ny; e.z = nz;
       e.heading = Math.atan2(eye.x - e.x, eye.z - e.z);
-      e.pitch = 0.25;
+      e.pitch = u < 0.5 ? 0.35 : 0.05;
       e.jaw = 1;
       if (u >= 1) {
         this._land(e, 'dive');

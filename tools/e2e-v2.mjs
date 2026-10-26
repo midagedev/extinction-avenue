@@ -20,7 +20,27 @@ const { chromium } = await import(process.env.PLAYWRIGHT || (fs.existsSync(local
 const mode = process.argv[2] || 'smoke';
 const out = process.argv[3] || './.tools/shots-v2';
 const extra = process.argv[4] || '';
-const base = process.env.BASE_URL || 'http://127.0.0.1:8123/';
+// Serve the repo from inside the test (no separate server needed); BASE_URL overrides (e.g. the live Pages site)
+let base = process.env.BASE_URL;
+if (!base) {
+  const http = await import('node:http');
+  const path = await import('node:path');
+  const root = new URL('..', import.meta.url).pathname;
+  const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml' };
+  const server = http.createServer((req, res) => {
+    const u = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+    const f = path.join(root, u.endsWith('/') ? u + 'index.html' : u);
+    if (!f.startsWith(root)) { res.writeHead(403); res.end(); return; }
+    fs.readFile(f, (err, data) => {
+      if (err) { res.writeHead(404); res.end(); return; }
+      res.writeHead(200, { 'Content-Type': types[path.extname(f)] || 'application/octet-stream' });
+      res.end(data);
+    });
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  base = `http://127.0.0.1:${server.address().port}/`;
+  server.unref();
+}
 const seed = +(process.env.SEED || process.argv[5] || 1);
 fs.mkdirSync(out, { recursive: true });
 
@@ -163,7 +183,10 @@ if (mode === 'smoke' || mode === 'shots') {
   await page.evaluate(() => new Promise((res) => setTimeout(res, 700)));
   await shot('03-level-up');
   await pickCard();
-  // Pterosaur at the windshield: stage one dive straight at the gunner (camera facing back, nothing else attacking)
+  // Pterosaur at the windshield: stage one dive straight at the gunner (camera facing back, nothing else attacking,
+  // trigger released so it isn't shot apart before the screenshot)
+  await page.mouse.up();
+  bot.down = false;
   await page.evaluate(() => {
     const g = window.__game.game;
     for (let i = g.enemies.list.length - 1; i >= 0; i--) if (!g.enemies.list[i].boss) g.enemies._remove(i);
@@ -178,7 +201,7 @@ if (mode === 'smoke' || mode === 'shots') {
   for (let i = 0; i < 400 && !found; i++) {
     const r2 = await slice(1 / 30);
     if (r2.s.state === 'levelup') { await pickCard(); continue; }
-    found = await page.evaluate(() => window.__game.game.enemies.list.some((e) => e.type === 'ptero' && e.state === 'dive' && e.stateT > 0.42));
+    found = await page.evaluate(() => window.__game.game.enemies.list.some((e) => e.type === 'ptero' && e.state === 'dive' && e.stateT > 0.66));
   }
   log('ptero dive found', found);
   await shot('04-pterosaur-dive');
@@ -229,6 +252,37 @@ if (mode === 'smoke' || mode === 'shots') {
   console.log('share:', await page.evaluate(() => window.__game.game.shareURL()));
   await browser.close();
   console.log('errors:', errors.length);
+  process.exit(0);
+}
+
+if (mode === 'ptero') {
+  // Just the pterosaur-at-the-gunner shot, with its state logged
+  await startRun();
+  await playFor(26);
+  await page.mouse.up();
+  bot.down = false;
+  await page.evaluate(() => {
+    const g = window.__game.game;
+    for (let i = g.enemies.list.length - 1; i >= 0; i--) if (!g.enemies.list[i].boss) g.enemies._remove(i);
+    g.enemies.attackers = 0;
+    g.enemies.attackGrace = 0;
+    g.enemies.maxAttackers = 3;
+    const p = g.player;
+    const e = g.enemies.spawn('ptero', p.x - p.fx * 15, p.z - p.fz * 15, { y: 9, elite: true });
+    e.seenT = 5; e.spawnT = 5; e.attackCd = 0; e.hoverGap = -15; e.hoverD = 0;
+    g.director.speedOverride = 0;
+  });
+  let found = false;
+  for (let i = 0; i < 300 && !found; i++) {
+    const r2 = await slice(1 / 30);
+    if (r2.s.state === 'levelup') { await pickCard(); continue; }
+    const st = await page.evaluate(() => { const g = window.__game.game; const e = g.enemies.list.find((o) => o.type === 'ptero'); g.enemies.maxAttackers = 3; return e ? { s: e.state, t: +e.stateT.toFixed(2), on: e.onScreen, seen: +e.seenT.toFixed(1), cd: +e.attackCd.toFixed(1), atk: g.enemies.attackers, y: +e.y.toFixed(1) } : null; });
+    if (i % 15 === 0) log(JSON.stringify(st), r2.s.state);
+    found = st && st.s === 'dive' && st.t > 0.66;
+  }
+  log('dive found', found);
+  await shot('04-pterosaur-dive');
+  await browser.close();
   process.exit(0);
 }
 
