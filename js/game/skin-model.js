@@ -49,7 +49,7 @@ function normMatrix(skin) {
  * vertex colour when the file has no textures), bone list, bind-pose joint positions, inverse bind matrices.
  */
 async function rawSkin(url, skin) {
-  const key = `${url}|${skin.rotY || 0}|${skin.importScale || 1}`;
+  const key = `${url}|${skin.rotY || 0}|${skin.importScale || 1}|${skin.ground !== false}`;
   if (geoCache.has(key)) return geoCache.get(key);
   const p = (async () => {
     const gltf = await loadGLTF(url);
@@ -82,8 +82,11 @@ async function rawSkin(url, skin) {
         const mat = Array.isArray(m.material) ? m.material[0] : m.material;
         if (!mat.map) {
           const c = mat.color || new THREE.Color(1, 1, 1);
+          const vc = g.getAttribute('color');
           const col = new Float32Array(g.getAttribute('position').count * 3);
-          for (let i = 0; i < col.length; i += 3) { col[i] = c.r; col[i + 1] = c.g; col[i + 2] = c.b; }
+          for (let i = 0; i < col.length / 3; i++) {
+            col[i * 3] = c.r * (vc ? vc.getX(i) : 1); col[i * 3 + 1] = c.g * (vc ? vc.getY(i) : 1); col[i * 3 + 2] = c.b * (vc ? vc.getZ(i) : 1);
+          }
           g.setAttribute('color', new THREE.BufferAttribute(col, 3));
         }
         for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv', 'skinIndex', 'skinWeight', 'color'].includes(k)) g.deleteAttribute(k);
@@ -97,7 +100,7 @@ async function rawSkin(url, skin) {
     const box = new THREE.Box3();
     geometries[0].computeBoundingBox();
     box.copy(geometries[0].boundingBox);
-    const shift = new THREE.Vector3(-(box.min.x + box.max.x) / 2, -box.min.y, 0);
+    const shift = skin.ground === false ? new THREE.Vector3() : new THREE.Vector3(-(box.min.x + box.max.x) / 2, -box.min.y, 0);
     for (const g of geometries) { g.translate(shift.x, shift.y, shift.z); g.computeBoundingBox(); g.computeBoundingSphere(); }
     const T = new THREE.Matrix4().makeTranslation(shift.x, shift.y, shift.z).multiply(N);
     const names = bones.map((b) => b.name.replace(/[.:]/g, '_'));
@@ -279,13 +282,14 @@ async function loadSkinnedModel(id, def, clipLib) {
   const size = clips.length ? posedBox(raw.geometries[raw.geometries.length - 1], clips[ci], n) : raw.geometries[0].boundingBox.getSize(new THREE.Vector3());
   const maxY = size.y;
   // gameplay height target (keeps hit boxes, spawn spacing and framing of the v2 creatures)
-  if (skin.targetHeight) { bs = skin.targetHeight / maxY; size.multiplyScalar(1); }
+  if (skin.targetHeight) bs = skin.targetHeight / maxY;
+  else if (skin.targetWidth) bs = skin.targetWidth / size.x;
   return {
     id, kind: 'skinned', def, geometries: raw.geometries, baseScale: bs,
     // rest: morphed joints (clip authoring); bind: geometry-space joints (what the skinning matrices transform)
     bones: { names: raw.names, parent: raw.parent, rest, bind: raw.rest, index: idx },
     clips, clipIndex: new Map(clips.map((c, i) => [c.name, i])),
-    length: +(size.z * bs).toFixed(2), height: +(maxY * bs).toFixed(2), width: +(size.x * bs).toFixed(2),
+    length: +(size.z * bs).toFixed(2), height: skin.height ?? +(maxY * bs).toFixed(2), width: +(size.x * bs).toFixed(2),
     radius: skin.radius ?? Math.max(size.x, size.z * 0.35) * bs,
     triangles: raw.geometries.map((g) => (g.index ? g.index.count : g.getAttribute('position').count) / 3)
   };

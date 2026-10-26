@@ -266,6 +266,76 @@ function theropod(sk, opts = {}) {
   return [run, walk, idle, crouch, pounce, bite, roar, swipe, hit, death];
 }
 
-const CLIP_LIBRARY = { theropod };
+/** Pterosaur (Skyreaver) — bone names from tools/lab/build-ptero.js; wings: +z on the left raises it, −z on the right */
+function pterosaur(sk) {
+  const add = (rot, n, x, y = 0, z = 0) => { const i = sk.index.get(n); if (i === undefined) return; rot[i * 3] += x; rot[i * 3 + 1] += y; rot[i * 3 + 2] += z; };
+  const wing = (rot, s, raise, sweep, foreUp, finger, fold = 0) => {
+    const k = s === 'L' ? 1 : -1;
+    add(rot, `arm${s}`, 0, k * sweep, k * raise);
+    add(rot, `fore${s}`, 0, k * fold * 0.6, k * foreUp);
+    add(rot, `hand${s}`, 0, k * fold * 0.4, 0);
+    add(rot, `finger1${s}`, 0, k * fold * 0.5, k * finger);
+    add(rot, `finger2${s}`, 0, k * fold * 0.3, k * finger * 0.6);
+  };
+  const legs = (rot, x) => { for (const s of ['L', 'R']) { add(rot, `thigh${s}`, x, 0, 0); add(rot, `shin${s}`, x * 0.3); } };
+  function flap(name, T, amp, opt) {
+    return {
+      name, loop: true, duration: T, speed: 0,
+      frame(t, rot, off) {
+        const a = (t / T) * TAU, f = Math.sin(a);
+        off.set(0, -0.07 * f * opt.bob, 0);
+        add(rot, 'root', opt.pitch + 0.05 * Math.cos(a), 0, 0);
+        for (const s of ['L', 'R']) wing(rot, s, amp * f + opt.dihedral, opt.sweep + 0.12 * Math.max(0, Math.cos(a)), amp * 0.45 * Math.sin(a - 0.6), amp * 0.55 * Math.sin(a - 1.0), 0.25 * Math.max(0, -Math.cos(a)) * opt.fold);
+        add(rot, 'neck', opt.neck - 0.05 * Math.cos(a));
+        add(rot, 'head', opt.head + 0.05 * Math.cos(a - 0.4), 0.06 * Math.sin(t * 1.3));
+        add(rot, 'jaw', opt.jaw + opt.jawWag * Math.max(0, Math.sin(a * 2)));
+        add(rot, 'tail', 0.1 * Math.sin(a - 1.2));
+        legs(rot, opt.legs + 0.08 * Math.sin(a - 0.8));
+      }
+    };
+  }
+  const fly = flap('fly', 0.95, 0.5, { bob: 1, pitch: 0.0, dihedral: 0.08, sweep: 0.0, fold: 1, neck: -0.05, head: 0.08, jaw: 0.05, jawWag: 0.02, legs: 0.15 });
+  const idle = { ...flap('idle', 0.95, 0.5, { bob: 1, pitch: 0.0, dihedral: 0.08, sweep: 0.0, fold: 1, neck: -0.05, head: 0.08, jaw: 0.05, jawWag: 0.02, legs: 0.15 }) };
+  const hover = flap('hover', 0.42, 0.72, { bob: 1.4, pitch: -0.35, dihedral: 0.1, sweep: -0.1, fold: 1.4, neck: 0.3, head: 0.3, jaw: 0.55, jawWag: 0.25, legs: -0.7 });
+  const dive = {
+    name: 'dive', loop: true, duration: 0.5, speed: 0,
+    frame(t, rot, off) {
+      const v = Math.sin((t / 0.5) * TAU * 3) * 0.03;
+      off.set(0, 0, 0);
+      for (const s of ['L', 'R']) wing(rot, s, -0.12 + v, 0.85, 0.15, 0.25, 1.2);
+      add(rot, 'neck', 0.12);
+      add(rot, 'head', 0.06);
+      add(rot, 'jaw', 0.85);
+      legs(rot, 0.35);
+    }
+  };
+  const hit = {
+    name: 'hit', loop: false, duration: 0.4, speed: 0,
+    frame(t, rot, off) {
+      const e = Math.pow(Math.sin(Math.PI * Math.min(1, t / 0.4)), 0.7);
+      off.set(0, 0.1 * e, 0);
+      add(rot, 'root', -0.25 * e, 0.2 * e, 0.4 * e);
+      for (const s of ['L', 'R']) wing(rot, s, 0.55 * e, -0.1 * e, -0.3 * e, 0.4 * e, 0.3 * e);
+      add(rot, 'neck', -0.45 * e, 0.3 * e);
+      add(rot, 'head', -0.2 * e);
+      add(rot, 'jaw', 0.6 * e);
+    }
+  };
+  const death = {
+    name: 'death', loop: false, duration: 1.0, speed: 0,
+    frame(t, rot, off) {
+      const c = sm(0, 0.6, t);
+      add(rot, 'root', 0.4 * c, 0, 1.1 * c);
+      for (const s of ['L', 'R']) wing(rot, s, -0.6 * c, 0.6 * c, 0.7 * c, 0.9 * c, 0.8 * c);
+      add(rot, 'neck', 0.6 * c, 0.3 * c);
+      add(rot, 'head', 0.4 * c);
+      add(rot, 'jaw', 0.7 * c);
+      legs(rot, -0.5 * c);
+    }
+  };
+  return [idle, fly, hover, dive, hit, death];
+}
+
+const CLIP_LIBRARY = { theropod, pterosaur };
 
 export { CLIP_LIBRARY };

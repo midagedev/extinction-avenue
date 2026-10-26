@@ -28,7 +28,7 @@ const SPECIES = {
   raptor: { name: 'Sicklejaw', size: 1.35, hp: 55, close: 7.5, dmg: 6, radius: 0.95, height: 1.7, xp: 5, score: 250, mass: 1, stride: 1.6, wind: 1.15, gaps: [-10, -20], leap: true, headR: 0.34, sound: 'raptor_screech' },
   brute: { name: 'Brute Raptor', hp: 260, close: 5.5, dmg: 11, radius: 1.5, height: 2.8, xp: 16, score: 800, mass: 4, stride: 1.15, wind: 1.35, gaps: [-12, -22], leap: true, headR: 0.5, stagger: 0.18, sound: 'brute_growl' },
   trike: { name: 'Hornwall', hp: 650, close: 4.5, dmg: 15, radius: 2.4, height: 3, xp: 35, score: 1500, mass: 12, stride: 0.75, wind: 1.7, gaps: [-24, -32], charger: true, headR: 1.0, stagger: 0.22, sound: 'trike_bellow' },
-  ankylo: { name: 'Clubtail', hp: 800, close: 3.2, dmg: 12, radius: 2.2, height: 2, xp: 40, score: 2000, mass: 14, stride: 0.7, wind: 1.4, gaps: [-8, -12], armor: 0.4, swipe: true, headR: 0.6, stagger: 0.2, sound: 'ankylo_grunt' },
+  ankylo: { name: 'Spiketail', hp: 800, close: 3.2, dmg: 12, radius: 2.2, height: 2, xp: 40, score: 2000, mass: 14, stride: 0.7, wind: 1.4, gaps: [-8, -12], armor: 0.4, swipe: true, headR: 0.6, stagger: 0.2, sound: 'ankylo_grunt' },
   ptero: { name: 'Skyreaver', hp: 35, close: 9, dmg: 6, radius: 1.3, height: 1, xp: 6, score: 300, mass: 0.5, flyer: true, stride: 1, wind: 1.1, gaps: [-14, -24], headR: 0.35, sound: 'ptero_cry' },
   // The boss: driven entirely by its controller (boss.js)
   trex: { name: 'GRIDLOCK', hp: 16000, close: 8, dmg: 15, radius: 3.2, height: 6.4, xp: 0, score: 50000, mass: 80, stride: 0.5, sound: 'trex_roar', custom: true }
@@ -848,13 +848,13 @@ class EnemyManager {
       if (rig.skinned) {
         if (e.ctrl) {
           const lift = e.ctrl.animate(e, rig, time);
-          rig.add(e.rx, lift * e.scale, e.rz, e.heading, e.scale, e.anim, e.flash, e.stone, 0, e.pitch, e.roll, e.tint);
+          rig.add(e.rx, lift * e.scale, e.rz, e.heading, e.scale, e.anim, e.flash, e.stone, 0, e.pitch, e.roll, e.tint, (e.teleK || 0) * (0.5 + 0.5 * Math.sin(time * 24)));
           e.ctrl.afterAdd(rig);
           continue;
         }
         animateCreature(e, rig, time, cam?.position);
-        const tele = e.state === 'windup' ? 0.22 + 0.22 * Math.sin(time * 30) : 0;
-        rig.add(e.x, e.y, e.z, e.heading, e.scale, e.anim, Math.max(e.flash, tele), e.stone, e.elite ? 1 : 0, e.pitch, e.roll, e.tint);
+        const tele = e.state === 'windup' ? 0.55 + 0.45 * Math.sin(time * 30) : 0;
+        rig.add(e.x, e.y, e.z, e.heading, e.scale, e.anim, e.flash, e.stone, e.elite ? 1 : 0, e.pitch, e.roll, e.tint, tele);
         continue;
       }
       if (e.ctrl) {

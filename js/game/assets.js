@@ -62,9 +62,31 @@ const ASSET_MANIFEST = {
     morph: { root: [1.16, 1.1, 1], spine: [1.2, 1.14, 1], chest: [1.2, 1.14, 1], neck1: [1.18, 1.12, 1], neck2: [1.14, 1.08, 1], head: 1.16, jaw: 1.16, thighL: [1.14, 1.04, 1.14], thighR: [1.14, 1.04, 1.14], tail1: [1.12, 1.1, 1] },
     look: { ramp: [[0.02, 0.025, 0.04], [0.19, 0.24, 0.3], [0.68, 0.72, 0.76]], blotch: [1.6, 0.55], blotchColor: [0.35, 0.36, 0.45], belly: [1.5, 1.45, 1.4], roughness: 0.78 }
   }) },
-  trike: { kind: 'rig', url: null, placeholder: 'trike', capacity: 24 },
-  ankylo: { kind: 'rig', url: null, placeholder: 'ankylo', capacity: 16 },
-  ptero: { kind: 'rig', url: null, placeholder: 'ptero', capacity: 40 },
+  // Hornwall: Quaternius' CC0 Triceratops (rig + 6 clips), refined by tools/lab/refine-quaternius.js (crease-aware
+  // Loop subdivision ×2, 1.3k → 21k triangles, LOD1 5.3k); procedural hide detail in the shader
+  trike: { kind: 'rig', url: 'assets/models/triceratops.glb', placeholder: 'trike', capacity: 24, skin: {
+    targetHeight: 3.27, radius: 1.5, patternScale: 1.8, feet: [],
+    clips: { run: 'Triceratops_Run', walk: 'Triceratops_Walk', idle: 'Triceratops_Idle', bite: 'Triceratops_Attack', paw: 'Triceratops_Attack', pounce: 'Triceratops_Jump', death: 'Triceratops_Death' },
+    once: ['bite', 'pounce', 'death'], speeds: { run: 24, walk: 7 },
+    aliases: { body: 'Body', head: 'Head', neck: 'Neck', jaw: '_none' }, headCenter: [0, 0.6, 1.4],
+    look: { tint: [1.7, 1.6, 1.45], blotch: [1.5, 0.5], blotchColor: [0.55, 0.5, 0.42], stripes: [2.2, 0.4], stripeColor: [0.55, 0.48, 0.38], belly: [1.9, 1.75, 1.45], scaleFreq: 5, scaleBump: 0.06, roughness: 0.82 }
+  } },
+  // Spiketail (id kept as 'ankylo'): no CC0 rigged ankylosaur exists, so Quaternius' CC0 Stegosaurus stands in —
+  // refined like the Triceratops (2.3k → 36k triangles, LOD1 9k); its tail-swing clip is the telegraphed swipe
+  ankylo: { kind: 'rig', url: 'assets/models/stegosaurus.glb', placeholder: 'ankylo', capacity: 16, skin: {
+    targetHeight: 2.75, radius: 2.0, patternScale: 1.8, feet: [],
+    clips: { run: 'Stegosaurus_Run', walk: 'Stegosaurus_Walk', idle: 'Stegosaurus_Idle', bite: 'Stegosaurus_Attack', paw: 'Stegosaurus_Attack', pounce: 'Stegosaurus_Jump', death: 'Stegosaurus_Death' },
+    once: ['bite', 'pounce', 'death'], speeds: { run: 26, walk: 7 },
+    aliases: { body: 'Body', head: 'Head', neck: 'Neck', jaw: '_none' }, headCenter: [0, 0.3, 1.0],
+    look: { tint: [1.35, 1.3, 1.25], blotch: [1.3, 0.5], blotchColor: [0.5, 0.42, 0.34], stripes: [3, 0.35], stripeColor: [0.55, 0.45, 0.38], belly: [1.8, 1.7, 1.45], scaleFreq: 6, scaleBump: 0.06, roughness: 0.82 }
+  } },
+  // Skyreaver: no CC0 rigged pterosaur exists — a high-detail procedural model (tools/lab/build-ptero.js, 17.5k
+  // triangles, smooth lofted body / beak / crest, membrane wings) with procedural flight clips
+  ptero: { kind: 'rig', url: 'assets/models/pterosaur.glb', placeholder: 'ptero', capacity: 40, skin: {
+    clips: 'pterosaur', ground: false, targetWidth: 6.4, height: 0.86, radius: 1.2, feet: [], lodK: 1e9,
+    aliases: { body: 'root' }, headCenter: [0, -0.02, 0.3],
+    look: { tint: [1.2, 1.15, 1.25], stripes: [18, 0.4], stripeColor: [0.45, 0.3, 0.42], blotch: [3, 0.4], blotchColor: [0.6, 0.45, 0.6], belly: [2.2, 1.9, 2.1], scaleFreq: 14, scaleBump: 0.005, roughness: 0.66, rim: [0.16, 0.1, 0.2] }
+  } },
   // GRIDLOCK: the same sculpt as a T. rex — huge head, short thick neck, tiny arms, heavier body, dark olive hide
   trex: { kind: 'rig', url: THEROPOD, placeholder: 'trex', capacity: 1, skin: theropod({
     targetHeight: 5.23, radius: 3.2, lodK: 1e9, collar: [[0, 3.62, 1.8], [0, 0.53, 0.35], 0.44],

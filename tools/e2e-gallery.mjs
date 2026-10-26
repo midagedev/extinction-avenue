@@ -70,6 +70,8 @@ const shot = async (name) => {
   log('shot', name);
 };
 const want = (n) => !only || only.split(',').includes(n);
+// let the opening banner clear before the first framing
+await step(3);
 
 if (want('raptor-closeup')) {
   await page.evaluate(() => { window.__clear(); window.__place('raptor', -7.5, -0.8); window.__place('raptor', -12, 2.4); });

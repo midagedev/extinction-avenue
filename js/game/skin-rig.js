@@ -158,7 +158,10 @@ class SkinnedCrowd {
     const rim = pow(float(1).sub(max(dot(normalWorld, viewDir), 0)), 3.0);
     const rimC = U(look.rim || [0.1, 0.14, 0.21]).mul(rim).mul(float(1).sub(stone));
     const eliteC = U([3.2, 0.5, 2.2]).mul(elite).mul(rim.mul(2.0).add(0.1));
-    mat.emissiveNode = rimC.add(vec3(1.0, 0.82, 0.68).mul(flash.mul(0.8))).add(eliteC);
+    // attack telegraph (iTint.w): a pulsing red-hot rim + glow, separate from the white hit flash
+    const tele = iTint.w;
+    const teleC = vec3(1.0, 0.16, 0.06).mul(tele).mul(rim.mul(2.5).add(0.18));
+    mat.emissiveNode = rimC.add(vec3(1.0, 0.82, 0.68).mul(flash.mul(0.55))).add(eliteC).add(teleC);
     return mat;
   }
 
@@ -293,7 +296,7 @@ class SkinnedCrowd {
    * Adds one individual. anim: animation state (creature-anim.js) or null (first frame of the first clip).
    * tint: [r, g, b] per-individual colour variation. Returns the row index (or -1 when full).
    */
-  add(x, y, z, heading, scale, anim, flash = 0, stone = 0, elite = 0, pitch = 0, roll = 0, tint = null) {
+  add(x, y, z, heading, scale, anim, flash = 0, stone = 0, elite = 0, pitch = 0, roll = 0, tint = null, tele = 0) {
     if (this.count >= this.capacity) return -1;
     const row = this.count++;
     const s = scale * this.model.baseScale;
@@ -321,16 +324,16 @@ class SkinnedCrowd {
     }
     this.texData.set(F, row * nb * 12);
     const lod = this.lods.length > 1 && dist > h * this.lodK ? this.lods[1] : this.lods[0];
-    this._inst(lod, row, flash, stone, elite, tint);
-    if (this.attach) this._inst(this.attach, row, flash, stone, elite, tint);
+    this._inst(lod, row, flash, stone, elite, tint, tele);
+    if (this.attach) this._inst(this.attach, row, flash, stone, elite, tint, tele);
     return row;
   }
 
-  _inst(l, row, flash, stone, elite, tint) {
+  _inst(l, row, flash, stone, elite, tint, tele = 0) {
     const k = l.n++;
     const d = l.iData.array, t = l.iTint.array;
     d[k * 4] = row; d[k * 4 + 1] = flash; d[k * 4 + 2] = stone; d[k * 4 + 3] = elite;
-    t[k * 4] = tint ? tint[0] : 1; t[k * 4 + 1] = tint ? tint[1] : 1; t[k * 4 + 2] = tint ? tint[2] : 1; t[k * 4 + 3] = 0;
+    t[k * 4] = tint ? tint[0] : 1; t[k * 4 + 1] = tint ? tint[1] : 1; t[k * 4 + 2] = tint ? tint[2] : 1; t[k * 4 + 3] = tele;
   }
 
   /** World position of a bone of the LAST added individual; local = offset from the joint in geometry (bind-pose)

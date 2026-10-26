@@ -282,7 +282,7 @@ class Director {
           g.audio.play('ptero_cry', { volume: 1 });
           if (!this._pteroIntro) { this._pteroIntro = true; g.hud.callout('PTEROSAURS!', 'danger'); }
         } else this.spawnGroup(type, n, where, opts);
-        if (type === 'brute' || type === 'trike' || type === 'ankylo') g.hud.callout(type === 'trike' ? 'HORNWALL!' : type === 'ankylo' ? 'CLUBTAIL!' : 'BRUTE!', 'danger');
+        if (type === 'brute' || type === 'trike' || type === 'ankylo') g.hud.callout(type === 'trike' ? 'HORNWALL!' : type === 'ankylo' ? 'SPIKETAIL!' : 'BRUTE!', 'danger');
         break;
       }
       case 'ambush': {
