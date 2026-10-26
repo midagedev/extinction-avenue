@@ -283,7 +283,7 @@ class WeaponSystem {
         if (_tmp.length) {
           for (let k = 0; k < count; k++) {
             const t = _tmp[k % Math.min(_tmp.length, Math.max(3, count))];
-            p.toWorld(_pos.set((k % 2 ? 0.2 : -0.2) - 0.42, 1.2, 1.55), _pos);
+            p.toWorld(_pos.set((k % 2 ? 0.15 : -0.15) - 0.66, 1.1, 1.95), _pos);
             const a = p.heading + Math.PI + (k - (count - 1) / 2) * 0.35;
             this.missiles.push({
               x: _pos.x, y: _pos.y, z: _pos.z, vx: Math.sin(a) * 8 + p.vx, vy: 9 + Math.random() * 3, vz: Math.cos(a) * 8 + p.vz,
@@ -302,7 +302,7 @@ class WeaponSystem {
       const thunder = E('thunder');
       const period = thunder ? 0.7 : tl >= 4 ? 1.0 : 1.3;
       if (this._ready('tesla', period)) {
-        p.toWorld(_pos.set(0.45, 1.82, 1.55), _pos);
+        p.toWorld(_pos.set(0.7, 1.5, 1.95), _pos);
         const chains = thunder ? 14 : 2 + (tl >= 2) + (tl >= 4) * 2 + (tl >= 5) * 2;
         const dmg = (thunder ? 34 : 20 * (tl >= 3 ? 1.35 : 1) * (tl >= 5 ? 1.4 : 1)) * this.dmgMult;
         let cur = g.enemies.nearest(p.x - p.fx * 10, p.z - p.fz * 10, 22);

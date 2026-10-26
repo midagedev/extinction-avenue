@@ -67,9 +67,11 @@ const pickCard = async () => {
 
 // --------------------------------------------------------------------------------------------------------------------
 // Human-like bot
+// skill (6th arg, default 1): 1 = attentive player; 0.6 ≈ an average newcomer (more aim noise, slower mouse, slower reactions)
+const skill = +(process.env.BOT_SKILL || process.argv[6] || 1);
 const bot = {
   x: W / 2, y: H * 0.45, target: null, pendingKey: null, reactT: 0, down: false, noiseX: 0, noiseY: 0, noiseT: 0,
-  speed: +(process.env.BOT_SPEED || 1800), react: [0.22, 0.38], skill: +(process.env.BOT_SKILL || 1)
+  speed: 1800 * Math.sqrt(skill), react: [0.22 / Math.sqrt(skill), 0.38 / Math.sqrt(skill)], skill
 };
 const gauss = () => { let u = 0, v = 0; while (!u) u = Math.random(); while (!v) v = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
 const keyOf = (t) => t ? `${t.type}:${Math.round(t.dist)}` : null;
@@ -164,7 +166,7 @@ if (mode === 'smoke' || mode === 'shots') {
   // Pterosaur at the windshield: stage one dive straight at the gunner (camera facing back, nothing else attacking)
   await page.evaluate(() => {
     const g = window.__game.game;
-    for (const e of g.enemies.list) if (!e.boss) g.enemies.kill(e, 'debug', {});
+    for (let i = g.enemies.list.length - 1; i >= 0; i--) if (!g.enemies.list[i].boss) g.enemies._remove(i);
     g.cam.swing(0, 0, 20, 0);
     g.enemies.attackers = 0;
     g.enemies.attackGrace = 0;
@@ -172,10 +174,10 @@ if (mode === 'smoke' || mode === 'shots') {
     const e = g.enemies.spawn('ptero', p.x - p.fx * 15, p.z - p.fz * 15, { y: 9, elite: true });
     e.seenT = 5; e.spawnT = 5; e.attackCd = 0; e.hoverGap = -15; e.hoverD = 0;
   });
-  for (let i = 0; i < 40; i++) await slice(0.05);
   let found = false;
-  for (let i = 0; i < 160 && !found; i++) {
-    await slice(1 / 30);
+  for (let i = 0; i < 400 && !found; i++) {
+    const r2 = await slice(1 / 30);
+    if (r2.s.state === 'levelup') { await pickCard(); continue; }
     found = await page.evaluate(() => window.__game.game.enemies.list.some((e) => e.type === 'ptero' && e.state === 'dive' && e.stateT > 0.42));
   }
   log('ptero dive found', found);

@@ -41,8 +41,8 @@ class Player {
     // Build attachments (hidden until acquired), placed to face the pursuers behind the cab
     this.attachments = {
       gatling: [mk('attGatling', chassis, 0.84, 1.0, -1.85, Math.PI), mk('attGatling', chassis, -0.84, 1.0, -1.85, Math.PI)],
-      missiles: [mk('attMissiles', chassis, -0.42, 0.92, 1.55, Math.PI, 0.8)],
-      tesla: [mk('attTesla', chassis, 0.45, 0.92, 1.55)],
+      missiles: [mk('attMissiles', chassis, -0.66, 0.84, 1.95, Math.PI, 0.6)],
+      tesla: [mk('attTesla', chassis, 0.7, 0.84, 1.95, 0, 0.7)],
       flamer: [mk('attFlamer', chassis, 0, 0.42, -2.3)],
       shotgun: [mk('attShotgun', chassis, 0, 0.55, -2.32, Math.PI)],
       ram: [mk('attPlow', chassis, 0, 0, 2.25)],

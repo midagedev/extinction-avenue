@@ -135,7 +135,8 @@ class Pickups {
     const p = game.player;
     this.time += dt;
     const G = this.g;
-        const collect = 2.2;
+        // Collected well before reaching the gunner's eye (they'd fill the screen), aimed low at the cab body
+        const collect = 6;
     let gained = 0;
     this.pitchTimer -= dt;
     if (this.pitchTimer <= 0) this.pitchStep = 0;
@@ -150,7 +151,7 @@ class Pickups {
         const sp = 18 + p.speed * 1.2 + G.t[i] * 6;
         G.vx[i] += (p.vx + dx / d * sp - G.vx[i]) * Math.min(1, dt * 10);
         G.vz[i] += (p.vz + dz / d * sp - G.vz[i]) * Math.min(1, dt * 10);
-        G.vy[i] = (1.8 - G.y[i]) * 6;
+        G.vy[i] = (0.7 - G.y[i]) * 4;
         if (d < collect) {
           gained += G.v[i];
           const j = --G.n;
@@ -207,13 +208,13 @@ class Pickups {
       } else {
         if (!it.pull && it.t > (it.auto ? 0.5 : 0.4)) it.pull = true;
         if (it.pull) {
-          const dx = p.x - it.x, dy = 2 - it.y, dz = p.z - it.z;
+          const dx = p.x - it.x, dy = 0.8 - it.y, dz = p.z - it.z;
           const d = Math.hypot(dx, dy, dz) || 1e-3;
           const sp = 16 + p.speed + it.t * 10;
           it.vx += (p.vx + dx / d * sp - it.vx) * Math.min(1, dt * 8);
           it.vy += (dy / d * sp - it.vy) * Math.min(1, dt * 8);
           it.vz += (p.vz + dz / d * sp - it.vz) * Math.min(1, dt * 8);
-          if (d < 2.2 && p.alive) {
+          if (d < 5.5 && p.alive) {
             game.collectItem(it.type, it.x, it.z);
             this.items.splice(i, 1);
             continue;

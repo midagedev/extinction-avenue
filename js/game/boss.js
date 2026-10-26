@@ -105,7 +105,7 @@ class TRexBoss {
     const e = g.enemies.spawn('trex', r.x, r.z, { boss: true, scale: SCALE, ctrl: this, heading: r.heading, hpMult: 1 });
     if (!e) return;
     e.scale = SCALE;
-    e.maxHp = e.hp = 21000 * (1 + Math.max(0, g.director.time - g.director.bossTime) / 900);
+    e.maxHp = e.hp = 30000 * (1 + Math.max(0, g.director.time - g.director.bossTime) / 900);
     e.mode = 'intro';
     e.bs = bs;
     e.bd = 0;
@@ -219,7 +219,7 @@ class TRexBoss {
     else if (e.phase === 2 && hp < 0.33) this._phase(e, 3);
     const P = e.phase;
     const fast = P === 3 ? 1.25 : P === 2 ? 1.1 : 1;
-    let desiredGap = P === 1 ? -21 : P === 2 ? -18 : -16;
+    let desiredGap = P === 1 ? -27 : P === 2 ? -24 : -22;
     let lateralTarget = Math.sin(e.animT * 0.35) * 2.5;
     let speedOverride = null;
     let turn = 0;
@@ -234,11 +234,11 @@ class TRexBoss {
         if (e.stateT > 1.4) { this._set(e, 'chase'); e.atkCd = 2.5; }
         break;
       case 'chase':
-        if (e.atkCd <= 0 && gap < -12 && gap > -40 && g.enemies.attackGrace <= 0) this._chooseAttack(e);
+        if (e.atkCd <= 0 && gap < -12 && gap > -45 && g.enemies.attackGrace <= 0) this._chooseAttack(e);
         break;
       case 'lunge_tele': {
         const T = P === 3 ? 1.15 : P === 2 ? 1.35 : 1.6;
-        desiredGap = -12;
+        desiredGap = -16;
         lateralTarget = p.d;
         e.crouch = Math.min(1, e.stateT / T);
         e.jaw = 0.5;
@@ -401,6 +401,8 @@ class TRexBoss {
     }
     if (turn) e.turnAmt = 1;
     else if (e.mode !== 'turn' && e.mode !== 'turnback') e.turnAmt = 0;
+    const behind = ['chase', 'lunge_tele', 'lunge', 'throw', 'roar', 'stagger', 'fallback', 'intro'].includes(e.mode) && !e.staggerAhead;
+    if (behind && g.state === 'playing') g.cam.swing(0, 0.12, 2.5, 0);
 
     // Movement along the route: close the gap to the desired one
     const err = desiredGap - gap;
@@ -439,7 +441,7 @@ class TRexBoss {
 
   _clearView() {
     const g = this.game;
-    g.cam.swing(0, 0, 2.5, 0);
+    g.cam.swing(0, 0.12, 2.5, 0);
     g.player.laneTarget = 0;
   }
 

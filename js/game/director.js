@@ -217,7 +217,7 @@ class Director {
     if (b.min && (!b.zone || scriptRunning) && (!b.minUntil || this.beatT < b.minUntil) && this.beatT > 1.5) {
       this.minT = (this.minT || 0) - dt;
       if (this.minT <= 0 && en.threatCount < b.min) {
-        this.minT = 0.7;
+        this.minT = 1.1;
         const r = Math.random();
         const type = r < 0.55 ? 'compy' : r < 0.92 || this.time < 60 ? 'raptor' : 'brute';
         this.spawnGroup(type, type === 'compy' ? 2 : 1, Math.random() < 0.75 ? 'behind' : Math.random() < 0.5 ? 'left' : 'right');
