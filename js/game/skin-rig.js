@@ -3,7 +3,7 @@ import {
   Fn, texture, ivec2, int, attribute, vec4, vec3, dot, normalLocal, positionGeometry, normalGeometry, float, uniform,
   mix, normalize, cameraPosition, positionWorld, normalWorld, positionView, normalView, pow, max, varying, luminance,
   smoothstep, sin, cross, abs, sign, instancedDynamicBufferAttribute, mx_worley_noise_float, mx_noise_float, normalMap,
-  uv
+  uv, length, fwidth
 } from 'three/tsl';
 
 // js/game/skin-rig.js
@@ -62,7 +62,7 @@ class SkinnedCrowd {
     this.lods = model.geometries.map((g, k) => this._makeLOD(g, look, k));
     if (opts.attachments?.length) this.attach = this._makeAttachment(opts.attachments);
     const h = model.height || 2;
-    this.lodK = model.def.skin.lodK ?? 14; // LOD1 beyond lodK × body height
+    this.lodK = model.def.skin.lodK ?? 10; // LOD1 beyond lodK × body height
     this.cullR = Math.max(model.length, h) * 0.65;
     this.camPos = new THREE.Vector3();
     this.useFrustum = false;
@@ -143,8 +143,11 @@ class SkinnedCrowd {
       mat.normalNode = normalMap(texture(tx.normalTex, uv()), vec3(look.normalScale ?? 1.0).xy);
     } else if (look.scales !== false) {
       const freq = look.scaleFreq ?? 9;
-      const cell = mx_worley_noise_float(vRest.mul(scaleK.mul(freq)));
-      const h = smoothstep(0.0, 0.55, cell).mul(look.scaleBump ?? 0.035).add(mx_noise_float(vRest.mul(scaleK.mul(2.2))).mul(0.02));
+      const sp = vRest.mul(scaleK.mul(freq));
+      const cell = mx_worley_noise_float(sp);
+      // fade the scales out where a cell covers less than ~3 pixels (no sub-pixel speckle)
+      const fade = float(1).sub(smoothstep(0.12, 0.35, length(fwidth(sp))));
+      const h = float(1).sub(smoothstep(0.0, 0.5, cell)).mul(look.scaleBump ?? 0.03).mul(fade).add(mx_noise_float(vRest.mul(scaleK.mul(2.2))).mul(0.02));
       const dpx = positionView.dFdx(), dpy = positionView.dFdy();
       const dhx = h.dFdx(), dhy = h.dFdy();
       const N = normalView;
@@ -160,7 +163,7 @@ class SkinnedCrowd {
     const eliteC = U([3.2, 0.5, 2.2]).mul(elite).mul(rim.mul(2.0).add(0.1));
     // attack telegraph (iTint.w): a pulsing red-hot rim + glow, separate from the white hit flash
     const tele = iTint.w;
-    const teleC = vec3(1.0, 0.16, 0.06).mul(tele).mul(rim.mul(2.5).add(0.18));
+    const teleC = vec3(1.0, 0.16, 0.06).mul(tele).mul(rim.mul(2.4).add(0.05));
     mat.emissiveNode = rimC.add(vec3(1.0, 0.82, 0.68).mul(flash.mul(0.55))).add(eliteC).add(teleC);
     return mat;
   }

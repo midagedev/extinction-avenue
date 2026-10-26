@@ -167,7 +167,10 @@ export default async function refine(lab, args) {
     if (!g) continue;
     const sm = new THREE.SkinnedMesh(g, mat);
     sm.name = name;
+    // keep the original mesh node transform: GLTFLoader rebuilds bindMatrix from the node's world matrix
+    sm.position.copy(meshes[0].position); sm.quaternion.copy(meshes[0].quaternion); sm.scale.copy(meshes[0].scale);
     parent.add(sm);
+    sm.updateMatrixWorld(true);
     sm.bind(skeleton, bindMatrix);
     out.push(sm);
   }

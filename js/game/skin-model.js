@@ -62,6 +62,11 @@ async function rawSkin(url, skin) {
     const bones = skeleton.bones;
     const boneIndex = new Map(bones.map((b, i) => [b, i]));
     const N = normMatrix(skin);
+    // Bind-time armature transform: FBX-converted packs keep the mesh in tiny mesh-local units (with an axis swap) and
+    // the skeleton in world units, so boneWorld · boneInverse ≠ I at rest. Folding A into the geometry makes the rest
+    // pose the identity for every model (sockets, head-look axes and rest-space patterns then live in model space).
+    const A = bones[0].matrixWorld.clone().multiply(skeleton.boneInverses[0]);
+    const Ainv = A.clone().invert();
     // Group meshes into LODs by name suffix (_LOD1), everything else is LOD0
     const lods = [[], []];
     for (const m of meshes) lods[/LOD1$/i.test(m.name) ? 1 : 0].push(m);
@@ -71,7 +76,7 @@ async function rawSkin(url, skin) {
       if (!list.length) continue;
       const parts = list.map((m) => {
         let g = m.geometry.clone();
-        const M = N.clone().multiply(m.bindMatrix);
+        const M = N.clone().multiply(A).multiply(m.bindMatrix);
         g.applyMatrix4(M);
         // remap joint indices to the shared skeleton
         const si = g.getAttribute('skinIndex');
@@ -103,12 +108,14 @@ async function rawSkin(url, skin) {
     const shift = skin.ground === false ? new THREE.Vector3() : new THREE.Vector3(-(box.min.x + box.max.x) / 2, -box.min.y, 0);
     for (const g of geometries) { g.translate(shift.x, shift.y, shift.z); g.computeBoundingBox(); g.computeBoundingSphere(); }
     const T = new THREE.Matrix4().makeTranslation(shift.x, shift.y, shift.z).multiply(N);
+    const Tg = T.clone().multiply(A); // bind world → model space
     const names = bones.map((b) => b.name.replace(/[.:]/g, '_'));
     const parent = new Int16Array(bones.map((b) => (boneIndex.has(b.parent) ? boneIndex.get(b.parent) : -1)));
     const rest = new Float32Array(bones.length * 3);
     const tmp = new THREE.Matrix4(), v = new THREE.Vector3();
-    bones.forEach((b, i) => { tmp.copy(skeleton.boneInverses[i]).invert(); v.setFromMatrixPosition(tmp).applyMatrix4(T); rest.set([v.x, v.y, v.z], i * 3); });
-    return { gltf, skeleton, bones, names, parent, rest, T, Tinv: T.clone().invert(), geometries };
+    bones.forEach((b, i) => { tmp.copy(skeleton.boneInverses[i]).invert(); v.setFromMatrixPosition(tmp).applyMatrix4(Tg); rest.set([v.x, v.y, v.z], i * 3); });
+    void Ainv;
+    return { gltf, skeleton, bones, names, parent, rest, T, TgInv: Tg.clone().invert(), geometries };
   })();
   geoCache.set(key, p);
   return p;
@@ -142,7 +149,7 @@ function writeRows(out, o, m) {
 
 /** Samples a GLB animation clip into skinning matrices (model space), removing horizontal root drift on loops */
 function bakeGLBClip(raw, clip, { name, loop = true, speed = 0 }) {
-  const { gltf, skeleton, bones, T, Tinv } = raw;
+  const { gltf, skeleton, bones, T, TgInv } = raw;
   const mixer = new THREE.AnimationMixer(gltf.scene);
   const action = mixer.clipAction(clip);
   action.play();
@@ -158,7 +165,7 @@ function bakeGLBClip(raw, clip, { name, loop = true, speed = 0 }) {
     gltf.scene.updateMatrixWorld(true);
     for (let i = 0; i < n; i++) {
       _m.multiplyMatrices(bones[i].matrixWorld, skeleton.boneInverses[i]);
-      _m2.multiplyMatrices(T, _m).multiply(Tinv);
+      _m2.multiplyMatrices(T, _m).multiply(TgInv);
       writeRows(data, (f * n + i) * 12, _m2);
     }
     v.setFromMatrixPosition(bones[0].matrixWorld).applyMatrix4(T);

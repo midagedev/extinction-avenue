@@ -68,8 +68,8 @@ const ASSET_MANIFEST = {
     targetHeight: 3.27, radius: 1.5, patternScale: 1.8, feet: [],
     clips: { run: 'Triceratops_Run', walk: 'Triceratops_Walk', idle: 'Triceratops_Idle', bite: 'Triceratops_Attack', paw: 'Triceratops_Attack', pounce: 'Triceratops_Jump', death: 'Triceratops_Death' },
     once: ['bite', 'pounce', 'death'], speeds: { run: 24, walk: 7 },
-    aliases: { body: 'Body', head: 'Head', neck: 'Neck', jaw: '_none' }, headCenter: [0, 0.6, 1.4],
-    look: { tint: [1.7, 1.6, 1.45], blotch: [1.5, 0.5], blotchColor: [0.55, 0.5, 0.42], stripes: [2.2, 0.4], stripeColor: [0.55, 0.48, 0.38], belly: [1.9, 1.75, 1.45], scaleFreq: 5, scaleBump: 0.06, roughness: 0.82 }
+    aliases: { body: 'Body', head: 'Head', neck: 'Neck', jaw: '_none' }, headCenter: [0, -0.5, 1.3],
+    look: { tint: [2.3, 2.15, 1.8], blotch: [1.5, 0.5], blotchColor: [0.55, 0.5, 0.42], stripes: [2.2, 0.4], stripeColor: [0.55, 0.48, 0.38], belly: [1.9, 1.75, 1.45], scaleFreq: 7, scaleBump: 0.03, roughness: 0.82 }
   } },
   // Spiketail (id kept as 'ankylo'): no CC0 rigged ankylosaur exists, so Quaternius' CC0 Stegosaurus stands in —
   // refined like the Triceratops (2.3k → 36k triangles, LOD1 9k); its tail-swing clip is the telegraphed swipe
@@ -77,8 +77,8 @@ const ASSET_MANIFEST = {
     targetHeight: 2.75, radius: 2.0, patternScale: 1.8, feet: [],
     clips: { run: 'Stegosaurus_Run', walk: 'Stegosaurus_Walk', idle: 'Stegosaurus_Idle', bite: 'Stegosaurus_Attack', paw: 'Stegosaurus_Attack', pounce: 'Stegosaurus_Jump', death: 'Stegosaurus_Death' },
     once: ['bite', 'pounce', 'death'], speeds: { run: 26, walk: 7 },
-    aliases: { body: 'Body', head: 'Head', neck: 'Neck', jaw: '_none' }, headCenter: [0, 0.3, 1.0],
-    look: { tint: [1.35, 1.3, 1.25], blotch: [1.3, 0.5], blotchColor: [0.5, 0.42, 0.34], stripes: [3, 0.35], stripeColor: [0.55, 0.45, 0.38], belly: [1.8, 1.7, 1.45], scaleFreq: 6, scaleBump: 0.06, roughness: 0.82 }
+    aliases: { body: 'Body', head: 'Head', neck: 'Neck', jaw: '_none' }, headCenter: [0, -0.2, 0.7],
+    look: { tint: [1.35, 1.3, 1.25], blotch: [1.3, 0.5], blotchColor: [0.5, 0.42, 0.34], stripes: [3, 0.35], stripeColor: [0.55, 0.45, 0.38], belly: [1.8, 1.7, 1.45], scaleFreq: 8, scaleBump: 0.03, roughness: 0.82 }
   } },
   // Skyreaver: no CC0 rigged pterosaur exists — a high-detail procedural model (tools/lab/build-ptero.js, 17.5k
   // triangles, smooth lofted body / beak / crest, membrane wings) with procedural flight clips
@@ -115,6 +115,9 @@ const ASSET_MANIFEST = {
   boulder: { kind: 'prop', url: null, placeholder: 'boulder' },
   wreck: { kind: 'prop', url: null, placeholder: 'wreck' }
 };
+
+// ?procedural: draw the v2 procedural creature rigs instead of the rigged models (comparison / very old devices)
+const NO_SKIN = typeof location !== 'undefined' && new URLSearchParams(location.search).has('procedural');
 
 let gltfLoaderPromise = null;
 function getGLTFLoader() {
@@ -205,12 +208,12 @@ async function loadAssets(manifest = ASSET_MANIFEST, onProgress = null) {
     const def = manifest[id];
     let entry = null;
     try {
-      if (def.kind === 'rig' && def.skin && def.url) {
+      if (def.kind === 'rig' && def.skin && def.url && !NO_SKIN) {
         entry = { kind: 'rig', def, model: await loadSkinnedModel(id, def, CLIP_LIBRARY) };
         if (def.skin.collar) entry.attachments = [{ geometry: buildCollar(...def.skin.collar), bone: def.skin.collarBone || 'neck1' }];
       } else if (def.kind === 'rig') {
         const placeholder = buildDinoModel(def.placeholder);
-        entry = { kind: 'rig', def, model: def.url ? await loadRigGLB(def.url, placeholder) : placeholder };
+        entry = { kind: 'rig', def, model: def.url && !def.skin ? await loadRigGLB(def.url, placeholder) : placeholder };
       } else if (def.kind === 'prop') {
         entry = { kind: 'prop', def, geometry: def.url ? await mergeGLB(def.url) : buildPropGeometry(def.placeholder) };
       } else if (def.kind === 'car') {
