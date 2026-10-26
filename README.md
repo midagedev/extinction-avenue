@@ -165,11 +165,12 @@ node tools/e2e-v2.mjs smoke  ./shots          # title → start → 20 s of bot 
 node tools/e2e-v2.mjs idle   ./shots          # a player who never touches anything: how long does the cab last?
 node tools/e2e-v2.mjs bot    ./shots '' 3     # a human-like bot (reaction delay, capped mouse speed, aim noise) plays a whole run, seed 3
 node tools/e2e-v2.mjs shots  ./shots          # screenshot set (title, first person, combat zone, level-up, pterosaur, T. rex, continue, results)
-node tools/e2e-touch.mjs ./shots all          # phone emulation (portrait + landscape) with CDP touch events: 24 touch-aim / HUD checks
+node tools/e2e-touch.mjs ./shots all          # phone emulation (portrait + landscape) with CDP touch events: 32 touch-aim / HUD / audio-unlock checks
 node tools/e2e-gallery.mjs ./shots after-     # fixed creature framings; add '' '&procedural' (prefix before-) for the v2 rigs
 python3 -I tools/lab/compare.py ./shots ./cmp # BEFORE / AFTER side-by-sides
 node tools/perf-creatures.mjs                 # 40 animated dinosaurs: draw calls, triangles, CPU pose cost
-node tools/e2e-audio.mjs ./shots              # audio: gesture unlock, settings persistence, cue transitions (run/boss/victory/continue/game over), voice cap, master peak, no console errors
+node tools/e2e-audio.mjs ./shots              # audio (30 checks): gesture-only AudioContext, settings persistence across reloads, cue transitions (run/boss/victory/continue/game over), phone memory budget, voice cap, master peak, no console errors / autoplay warnings
+node tools/shots-v4.mjs ./shots [phone]       # v4 screenshot set: combat, boss, audio settings + pause sound toggle (desktop and phone)
 ```
 
 All drivers open the page with `?test&webgl` (no animation loop; the sim is stepped through `window.__game.step()`)

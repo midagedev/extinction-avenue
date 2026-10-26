@@ -83,6 +83,14 @@ How the tracks were prepared (`tools/audio/music.js`):
 - **Lazy loading.** About 1.4 MB loads for the title screen: the theme plus UI clicks. The run cues and every SFX
   stream in behind it. The boss suite (2.2 MB) is requested about 100 s before GRIDLOCK is due, and the e2e checks that
   it isn't loaded up front. If a boss cue isn't ready yet, `combat_hi` covers until it is.
+- **Memory budget.** Decoded music is stereo float PCM, about 21 MB a minute; all 14 cues come to about 310 MB.
+  Decoded cues therefore live under a budget: 140 MB on phones, 320 MB on desktop.
+  - When a decode goes over the budget, the least recently used long cue is dropped. A dropped cue is never one that
+    is playing, wanted, the heat layer under `combat`, a boss cue during the boss, or `results` after a sting.
+  - Dropped cues are decoded again from their kept MP3 bytes (about 10 MB in total) when they're wanted. The run
+    logic already waits for a cue to be ready, so this only delays a transition.
+  - On phones, the rarer long cues (`combat_hi`, `results`) decode on demand instead of in the background.
+  - A failed fetch or decode is retried after 10 s.
 
 ### Sound effects
 
@@ -117,7 +125,7 @@ stingers ─────────────────────→ musi
   - Each sound has its own voice limit and minimum retrigger gap.
   - Weapons steal their own oldest voice instead of dropping the new shot.
   - A global cap (44 voices on desktop, 26 on mobile) steals the oldest, lowest-priority voice first.
-  - The e2e bot run peaked at 23 simultaneous voices.
+  - The e2e bot runs peaked at 17–23 simultaneous voices.
 - **3D positioning.** Enemy sounds use a PannerNode, and the listener follows the camera's position and forward
   vector. On top of that come a tuned distance curve, an air-absorption low-pass beyond 14 m, and a reverb send that
   grows with distance. Long voices (boss roars, the stampede loop) follow their source.
@@ -131,27 +139,65 @@ stingers ─────────────────────→ musi
 - **Other mute controls.** **M** toggles mute in game, and the pause menu has a SOUND ON/OFF button for touch.
 - **Unlocking.**
   - No AudioContext exists before the first gesture.
-  - The game listens for pointerdown, keydown, touchend and click; touchend and click cover iOS.
-  - A silent buffer is played inside the gesture.
-- **Background tabs.** The context is suspended while the tab is hidden, which saves battery on phones.
+  - `GameAudio.armGesture()` listens for mouse pointerdown, pointerup, keydown, touchend and click.
+  - A touch pointerdown is ignored: it isn't a user activation, so Chrome would refuse the context and warn
+    "The AudioContext was not allowed to start".
+  - The context is only created while `navigator.userActivation.isActive` (where supported).
+  - A silent buffer is played inside the gesture (iOS).
+- **Background tabs.** The context is suspended while the tab is hidden, which saves battery on phones. When the tab
+  comes back, or the OS suspends or interrupts the context (e.g. an iOS app switch), the next tap resumes it.
 
 ### Measured
 
-`node tools/e2e-audio.mjs`: **25/25 checks pass**, with no console or page errors. Headless Chromium runs WebAudio on a
-fake output device, and the meter is an AnalyserNode after the limiter.
+All suites run headless in Chromium with audio live and the default autoplay policy. Headless Chromium runs WebAudio
+on a fake output device, and the meter is an AnalyserNode after the limiter.
+
+| Suite | Result |
+|---|---|
+| `node --test tests/` | 113/113 |
+| `node tools/e2e-v2.mjs smoke` | pass, 0 page/console errors |
+| `node tools/e2e-touch.mjs <dir> all` | 32/32 (16 per orientation, including 4 new audio checks) |
+| `node tools/e2e-audio.mjs` | **30/30**, no console errors, page errors or autoplay warnings |
+
+`e2e-audio` in detail:
 
 | Check | Result |
 |---|---|
-| AudioContext before the first gesture | none; the first click gives `running` and the title theme |
-| Settings persistence | mute, master 0.8 / music 0.45 / effects 0.9 and the announcer survive a reload |
+| AudioContext before the first gesture | none after 3 s idle on the title. The constructor is wrapped, so this covers every code path. The first click gives one context, created under user activation, `running`, playing the title theme |
+| Settings persistence | after a reload, mute comes back (and still no AudioContext). After another reload, the engine values and the slider positions are master 0.8 / music 0.45 / effects 0.9, and the announcer setting is kept |
 | Load at the title | all 71 SFX groups and the run cues decode; the boss cues stay unloaded (lazy) |
-| 150 s bot run | cues seen: breather → combat → combat_hi → combat; heat layer 0 → 0.95; up to 19 simultaneous voices (cap 44) |
-| Master peak, run | 0.71 linear (−3.0 dBFS); before the safety clipper also 0.71, so the clipper never engaged |
-| Boss | warning → sting state → `boss1` → `boss2` (after its intro) → `boss3`; peak 0.66; kill → victory sting (peak 0.74) → `results` loop |
-| Death | `continue` loop (peak 0.73) → give up → game-over jingle → `results` loop |
-| Unit tests | `node --test tests/` 113/113 |
+| 150 s bot run | cues seen: breather → combat → combat_hi; heat layer 0 → 0.95; up to 17 simultaneous voices (cap 44) |
+| Master peak, run | 0.725 linear (−2.8 dBFS); also 0.725 before the safety clipper, so the clipper never engaged |
+| Phone memory budget (`?musicbudget=140`) | decoded music peaked at 137 MB; breather → combat still switched (combat had been dropped and was decoded again), no silent samples |
+| Boss | warning → sting state → `boss1` → `boss2` (after its intro) → `boss3`; peak 0.635; kill → victory sting (peak 0.736) → `results` loop |
+| Death | `continue` loop (peak 0.72) → give up → game-over jingle → `results` loop; starting a new run cuts a jingle that is still playing |
+
+`e2e-touch` now runs without `--autoplay-policy=no-user-gesture-required`. The audio checks are:
+- no AudioContext before the first tap
+- the tap on PLAY unlocks a `running` context
+- the phone budget holds (137 MB with `combat` playing)
+- no console errors
 
 Sizes: music 10.2 MB (boss suite 2.2 MB of it, lazy), SFX 1.76 MB (160 files), license excerpts 260 KB.
+
+### Fixed in the v4 review (resume session)
+
+- **Memory.** Every decoded cue used to stay in memory (about 310 MB), which risks iOS tab kills. Fixed by the memory
+  budget above.
+- **Touch unlock.** A touch `pointerdown` built the AudioContext before a real activation (Android Chrome warning).
+  The context is now created only on activation, and the unlock is re-armed after OS interruptions.
+- **Stingers.** Stingers weren't tracked. A victory sting or game-over jingle kept playing over the next run's music
+  if the player pressed "Again" quickly. A new state now fades them out.
+- **Music fades.**
+  - A cue still waiting for its bar is dropped when a transition must happen at once.
+  - Fades scheduled for a later bar are brought forward.
+  - Fade-outs start from the real level of the ramp. The old `gain.value || 1` could cause a blip.
+- **Stampede loop.** It kept playing during pause, level-up, continue and results. It now falls silent whenever the
+  game is frozen.
+- **Smaller fixes.**
+  - A shallower duck inside a deeper one now pushes the release back.
+  - Failed loads can be retried.
+  - Saved volumes are validated and clamped.
 
 ### v4 known issues
 
@@ -171,6 +217,8 @@ Sizes: music 10.2 MB (boss suite 2.2 MB of it, lazy), SFX 1.76 MB (160 files), l
   arrives.
 - **Download size.** The full set is about 12 MB of MP3 (music 10.2 MB, SFX 1.8 MB). The 96 kbps music is the bulk;
   dropping to 80 kbps would save about 1.7 MB.
+- **Re-decoding on phones.** A cue that the memory budget dropped takes a moment to decode again; the music
+  transition waits for it (the e2e budget run never caught the music silent). Re-decoding costs some CPU on low-end phones.
 - **Safari is untested.** The audio path uses only standard WebAudio. MP3 was chosen over OGG for Safari, but iOS
   Safari wasn't tested on a device.
 
