@@ -21,7 +21,7 @@ const mode = process.argv[2] || 'smoke';
 const out = process.argv[3] || './.tools/shots-v2';
 const extra = process.argv[4] || '';
 const base = process.env.BASE_URL || 'http://127.0.0.1:8123/';
-const seed = +(process.env.SEED || 1);
+const seed = +(process.env.SEED || process.argv[5] || 1);
 fs.mkdirSync(out, { recursive: true });
 
 const W = 1280, H = 720;
@@ -112,7 +112,7 @@ async function botStep(dt, threats, enabled = true) {
 }
 
 // One simulation slice + threats snapshot
-const slice = (s) => page.evaluate((s) => { const g = window.__game; g.step(s, 1 / 30); return { s: g.summary(), t: g.threats() }; }, s);
+const slice = (s, dt = 1 / 30) => page.evaluate(([s, dt]) => { const g = window.__game; g.step(s, dt); return { s: g.summary(), t: g.threats() }; }, [s, dt]);
 
 async function startRun() {
   await page.click('#btn-play', { timeout: 5000 }).catch(() => page.evaluate(() => document.getElementById('btn-play').click()));
@@ -146,32 +146,103 @@ if (mode === 'smoke' || mode === 'shots') {
   if (mode === 'shots') await shot('00-title');
   await startRun();
   let r = await playFor(mode === 'smoke' ? 20 : 12);
+  // Wait for a moment with several pursuers on screen (and one of them winding up, if possible)
+  if (mode === 'shots') r = await playFor(40, { stopAt: (x) => x.t.filter((o) => !o.type.startsWith('pickup')).length >= 4 && x.t.some((o) => o.attacking) });
   log('t', r.s.time, JSON.stringify(r.s));
   await shot(mode === 'smoke' ? 'smoke-fp' : '01-first-person');
   if (mode === 'smoke') { console.log('errors:', errors.length); await browser.close(); process.exit(errors.length ? 1 : 0); }
-  // Combat zone: play until zone1 is busy
-  r = await playFor(200, { stopAt: (x) => x.s.beat === 'zone1' && x.s.enemies >= 6 });
-  r = await playFor(4);
+  // Combat zone: play until zone1 is busy on screen
+  r = await playFor(220, { stopAt: (x) => x.s.beat === 'zone1' && x.t.filter((o) => !o.type.startsWith('pickup')).length >= 6 });
   log('zone', JSON.stringify(r.s));
   await shot('02-combat-zone');
   // Level-up: force one and screenshot the cards
-  await page.evaluate(() => { window.__game.game.pendingLevels++; });
-  await slice(0.1);
-  await page.evaluate(() => new Promise((res) => setTimeout(res, 600)));
+  await page.evaluate(() => { window.__game.game.pendingLevels++; window.__game.game.enemies.attackers = 0; });
+  for (let i = 0; i < 10; i++) { const s = await slice(0.05); if (s.s.state === 'levelup') break; }
+  await page.evaluate(() => new Promise((res) => setTimeout(res, 700)));
   await shot('03-level-up');
   await pickCard();
-  // Pterosaur at the windshield: wait for a dive in progress
-  await page.evaluate(() => { const g = window.__game.game; g.director.spawnChaser('ptero', 'sky'); g.director.spawnChaser('ptero', 'sky'); });
+  // Pterosaur at the windshield: stage one dive straight at the gunner (camera facing back, nothing else attacking)
+  await page.evaluate(() => {
+    const g = window.__game.game;
+    for (const e of g.enemies.list) if (!e.boss) g.enemies.kill(e, 'debug', {});
+    g.cam.swing(0, 0, 20, 0);
+    g.enemies.attackers = 0;
+    g.enemies.attackGrace = 0;
+    const p = g.player;
+    const e = g.enemies.spawn('ptero', p.x - p.fx * 15, p.z - p.fz * 15, { y: 9, elite: true });
+    e.seenT = 5; e.spawnT = 5; e.attackCd = 0; e.hoverGap = -15; e.hoverD = 0;
+  });
+  for (let i = 0; i < 40; i++) await slice(0.05);
   let found = false;
-  for (let i = 0; i < 300 && !found; i++) {
-    const r2 = await slice(1 / 30);
-    found = await page.evaluate(() => window.__game.game.enemies.list.some((e) => e.type === 'ptero' && e.state === 'dive' && e.stateT > 0.45));
-    if (r2.s.state === 'levelup') await pickCard();
-    await botStep(1 / 30, [], false);
+  for (let i = 0; i < 160 && !found; i++) {
+    await slice(1 / 30);
+    found = await page.evaluate(() => window.__game.game.enemies.list.some((e) => e.type === 'ptero' && e.state === 'dive' && e.stateT > 0.42));
   }
+  log('ptero dive found', found);
   await shot('04-pterosaur-dive');
+  // Side-street ambush: the view swings out to the side
+  await page.evaluate(() => { const g = window.__game.game; g.director._run([0, 'ambush', 'right', [['raptor', 4], ['compy', 3]]]); });
+  r = await playFor(2.2);
+  await shot('05-ambush-swing');
+  // Wreck → CONTINUE? countdown
+  await page.mouse.up();
+  await page.evaluate(() => { const g = window.__game.game; g.player.invuln = 0; g.hurtPlayer(9999, g.player.x, g.player.z, 'debug'); });
+  for (let i = 0; i < 40; i++) { const s = await slice(0.1); if (s.s.state === 'continue') break; }
+  await slice(1.6);
+  await page.evaluate(() => new Promise((res) => setTimeout(res, 500)));
+  await shot('06-continue');
+
+  // ---- T. rex: a second load with ?boss&god (starts just before GRIDLOCK with a mid-game build)
+  await page.goto(`${base}?test&webgl&quality=low&boss&god${extra}`);
+  await page.waitForFunction(() => window.__game?.game?.state === 'playing' || window.__game?.game?.state === 'intro', null, { timeout: 900000 });
+  await page.mouse.move(W / 2, H * 0.45);
+  r = await playFor(30, { stopAt: (x) => x.s.state === 'bossintro' });
+  await page.evaluate(() => document.getElementById('warning').classList.remove('on'));
+  await slice(1.2, 1 / 60);
+  await shot('07-trex-reveal');
+  r = await playFor(20, { stopAt: (x) => x.s.state === 'playing' });
+  r = await playFor(6);
+  await shot('08-trex-chase');
+  // Lunge telegraph (danger ring + stagger meter)
+  await page.evaluate(() => { const g = window.__game.game; const b = g.boss; b.e.atkCd = 99; b._set(b.e, 'lunge_tele'); });
+  await playFor(0.9, { botOn: false });
+  await shot('09-trex-lunge-telegraph');
+  // Flank: it pulls up beside the cab and the view swings to face it
+  await page.evaluate(() => { const g = window.__game.game; const b = g.boss; b.e.flankSide = 1; b._set(b.e, 'flank'); });
+  r = await playFor(6, { botOn: true, stopAt: (x) => x.s.boss?.mode === 'flank_tele' });
+  await playFor(0.5);
+  await shot('10-trex-flank');
+  // Phase 3 head-on charge: it turns around ahead of the cab and the view swings forward
+  await page.evaluate(() => { const g = window.__game.game; const e = g.boss.e; e.hp = e.maxHp * 0.3; e.phase = 3; g.hud.setBossPhase(3); g.boss._set(e, 'overtake'); });
+  r = await playFor(14, { botOn: false, stopAt: (x) => x.s.boss?.mode === 'charge_tele' });
+  await playFor(0.8, { botOn: false });
+  await shot('11-trex-head-on');
+  // Death: drop it to 1 HP and finish it
+  await page.evaluate(() => { const g = window.__game.game; const e = g.boss.e; g.boss._clearView(); g.boss._set(e, 'chase'); e.hp = 1; g.enemies.damage(e, 50, {}); });
+  await slice(2.4, 1 / 30);
+  await shot('12-trex-death');
+  for (let i = 0; i < 40; i++) { const s = await slice(0.5); if (s.s.state === 'levelup') await pickCard(); if (s.s.state === 'results') break; }
+  await page.evaluate(() => new Promise((res) => setTimeout(res, 1700)));
+  await shot('13-results');
+  console.log('share:', await page.evaluate(() => window.__game.game.shareURL()));
   await browser.close();
   console.log('errors:', errors.length);
+  process.exit(0);
+}
+
+if (mode === 'probe') {
+  // Debug: where are the pursuers (route gap, lateral, kind/state, on screen)?
+  await startRun();
+  for (let k = 0; k < 8; k++) {
+    await playFor(15);
+    const d = await page.evaluate(() => {
+      const g = window.__game.game;
+      return { t: g.director.time.toFixed(0), beat: g.director.beat?.id, swing: g.cam.swingYaw.toFixed(2), speed: g.player.speed.toFixed(1),
+        list: g.enemies.list.filter((e) => !e.boss).map((e) => `${e.type}/${e.kind}/${e.state} gap=${(e.gap ?? 0).toFixed(0)} d=${(e.d ?? 0).toFixed(1)} y=${e.y.toFixed(1)} on=${e.onScreen ? 1 : 0} seen=${e.seenT.toFixed(1)} t=${e.spawnT.toFixed(0)}`) };
+    });
+    console.log(JSON.stringify(d, null, 1));
+  }
+  await browser.close();
   process.exit(0);
 }
 

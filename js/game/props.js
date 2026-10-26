@@ -133,17 +133,23 @@ const BUILDERS = {
       prim(cyl(0.072, 0.072, 0.05, 7), C.yellow, [0.5, 0.35, 0.02], { p: [s * 0.16, -0.06, -0.44], r: [X - 0.45, 0, s * 0.25] })
     ])
   ]),
+  // Roof-hatch coaming seen at the bottom corners of the gunner's view: a hazard-striped rim, bolted plate and a grab
+  // handle. Bar along +x, centred, origin at its middle.
+  hatchRim: () => merge([
+    ...Array.from({ length: 10 }, (_, i) => prim(box(0.12, 0.07, 0.09), i % 2 ? C.black : C.yellow, null, { p: [-0.54 + i * 0.12, 0, 0] })),
+    prim(box(1.24, 0.03, 0.16), C.gunmetal, null, { p: [0, -0.05, 0.02] }),
+    prim(box(1.24, 0.14, 0.03), C.gunmetal, null, { p: [0, -0.1, 0.09] }),
+    ...[-0.45, -0.15, 0.15, 0.45].map((x) => prim(cyl(0.012, 0.012, 0.01, 6), C.steel, null, { p: [x, -0.035, 0.05] })),
+    prim(cyl(0.015, 0.015, 0.3, 6), C.steel, null, { p: [0.2, 0.06, -0.02], r: [0, 0, X] }),
+    prim(box(0.03, 0.02, 0.03), C.dark, C.orangeGlow, { p: [-0.55, 0.045, 0] })
+  ]),
   // Rear deck gun mount (the ring the tail gun sits on), origin on the car roof
   tailMount: () => merge([
     prim(box(1.5, 0.12, 0.9), C.gunmetal, null, { p: [0, 0.06, 0] }),
     prim(box(1.52, 0.05, 0.2), C.yellow, null, { p: [0, 0.13, -0.38] }),
     ...[-0.6, -0.2, 0.2, 0.6].map((x, i) => prim(box(0.2, 0.051, 0.2), i % 2 ? C.black : C.yellow, null, { p: [x, 0.135, -0.38] })),
     prim(cyl(0.3, 0.34, 0.14, 12), C.steel, null, { p: [0, 0.2, 0] }),
-    prim(cyl(0.31, 0.31, 0.02, 12), C.dark, C.cyanGlow, { p: [0, 0.28, 0] }),
-    // roll bar the gunner braces against
-    prim(cyl(0.04, 0.04, 1.4, 6), C.steel, null, { p: [0, 0.75, 0.45], r: [0, 0, X] }),
-    prim(cyl(0.04, 0.04, 0.7, 6), C.steel, null, { p: [0.7, 0.4, 0.45] }),
-    prim(cyl(0.04, 0.04, 0.7, 6), C.steel, null, { p: [-0.7, 0.4, 0.45] })
+    prim(cyl(0.31, 0.31, 0.02, 12), C.dark, C.cyanGlow, { p: [0, 0.28, 0] })
   ]),
   // Hood gun pod (one side); origin at its mount, barrels along +z
   attGatling: () => merge([

@@ -40,16 +40,16 @@ class Player {
     this.tailGun = mk('turretGun', chassis, 0, 1.92, -0.75, Math.PI, 0.9);
     // Build attachments (hidden until acquired), placed to face the pursuers behind the cab
     this.attachments = {
-      gatling: [mk('attGatling', chassis, 0.72, 1.36, -0.95, Math.PI), mk('attGatling', chassis, -0.72, 1.36, -0.95, Math.PI)],
-      missiles: [mk('attMissiles', chassis, -0.48, 0.98, -1.75, Math.PI, 0.8)],
-      tesla: [mk('attTesla', chassis, 0.52, 0.98, -1.75)],
+      gatling: [mk('attGatling', chassis, 0.84, 1.0, -1.85, Math.PI), mk('attGatling', chassis, -0.84, 1.0, -1.85, Math.PI)],
+      missiles: [mk('attMissiles', chassis, -0.42, 0.92, 1.55, Math.PI, 0.8)],
+      tesla: [mk('attTesla', chassis, 0.45, 0.92, 1.55)],
       flamer: [mk('attFlamer', chassis, 0, 0.42, -2.3)],
       shotgun: [mk('attShotgun', chassis, 0, 0.55, -2.32, Math.PI)],
       ram: [mk('attPlow', chassis, 0, 0, 2.25)],
       armor: [mk('attArmor', chassis, 0, 0, 0)]
     };
     for (const list of Object.values(this.attachments)) for (const m of list) m.visible = false;
-    this.gatlingMuzzles = [new THREE.Vector3(0.72, 1.46, -1.5), new THREE.Vector3(-0.72, 1.46, -1.5)];
+    this.gatlingMuzzles = [new THREE.Vector3(0.84, 1.1, -2.4), new THREE.Vector3(-0.84, 1.1, -2.4)];
     this.sample = {};
     this.reset(0);
   }

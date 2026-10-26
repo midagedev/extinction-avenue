@@ -19,22 +19,22 @@ const BEATS = [
     prog: [[1.5, 'spawn', 'compy', 2, 'behind'], [5, 'spawn', 'compy', 2, 'behind']]
   },
   {
-    id: 'outbreak', dur: 35, speed: 13, cap: 7, atk: 1, wind: 1.55, label: ['OUTBREAK', 'They\'re chasing the cab — shoot them before they jump'],
+    id: 'outbreak', dur: 40, speed: 13, cap: 8, min: 3, atk: 1, wind: 1.55, label: ['OUTBREAK', 'They\'re chasing the cab — shoot them before they jump'],
     trickle: { compy: 0.45 },
     prog: [[4, 'spawn', 'raptor', 1, 'behind'], [14, 'drop', 'overdrive'], [17, 'spawn', 'raptor', 1, 'behind'], [26, 'spawn', 'compy', 3, 'behind']]
   },
   {
-    id: 'storefront', dur: 25, speed: 9, cap: 9, atk: 1, wind: 1.5, label: ['STOREFRONT', 'Something in the shop windows…'],
+    id: 'storefront', dur: 28, speed: 9, cap: 10, min: 4, atk: 1, wind: 1.5, label: ['STOREFRONT', 'Something in the shop windows…'],
     trickle: { compy: 0.25 },
     prog: [[2, 'spawn', 'raptor', 3, 'storeL'], [3, 'spawn', 'compy', 2, 'storeL'], [11, 'spawn', 'raptor', 2, 'storeR'], [14, 'cameo'], [20, 'spawn', 'compy', 3, 'right']]
   },
   {
-    id: 'sky1', dur: 15, speed: 12, cap: 9, atk: 1, wind: 1.45, label: ['INCOMING FROM ABOVE', 'Pterosaurs — shoot them out of the sky'],
+    id: 'sky1', dur: 16, speed: 12, cap: 10, min: 3, atk: 1, wind: 1.45, label: ['INCOMING FROM ABOVE', 'Pterosaurs — shoot them out of the sky'],
     trickle: { compy: 0.2 },
     prog: [[0.5, 'spawn', 'ptero', 2, 'sky'], [0.5, 'look', 0, 0.22, 4]]
   },
   {
-    id: 'zone1', dur: 50, minDur: 26, zone: true, speed: 0, cap: 14, atk: 2, wind: 1.4, label: ['COMBAT ZONE', 'Hold the intersection'],
+    id: 'zone1', dur: 55, minDur: 32, zone: true, speed: 0, cap: 15, min: 6, atk: 2, wind: 1.4, label: ['COMBAT ZONE', 'Hold the intersection'],
     prog: [
       [1, 'spawn', 'compy', 4, 'behind'], [1.5, 'spawn', 'raptor', 2, 'behind'],
       [7, 'ambush', 'left', [['raptor', 3], ['compy', 2]]],
@@ -43,17 +43,17 @@ const BEATS = [
     ]
   },
   {
-    id: 'chase1', dur: 38, speed: 18, cap: 12, atk: 2, wind: 1.35, label: ['AVENUE CHASE', 'Floor it!'],
-    trickle: { raptor: 0.32, compy: 0.3 },
+    id: 'chase1', dur: 45, speed: 18, cap: 13, min: 7, atk: 2, wind: 1.35, label: ['AVENUE CHASE', 'Floor it!'],
+    trickle: { raptor: 0.4, compy: 0.45 },
     prog: [[8, 'drop', 'repair'], [18, 'spawn', 'ptero', 2, 'sky'], [26, 'spawn', 'brute', 1, 'behind']]
   },
   {
-    id: 'alpha', dur: 45, minDur: 8, boss: true, speed: 15, cap: 12, atk: 2, wind: 1.3, label: null,
+    id: 'alpha', dur: 50, minDur: 28, boss: true, speed: 15, cap: 12, min: 5, atk: 2, wind: 1.3, label: null,
     trickle: { raptor: 0.2, compy: 0.2 },
     prog: [[0.5, 'miniboss', 'brute', 'alpha', 'ALPHA RAVAGER', 'Pack leader · howls up Sicklejaws'], [1, 'spawn', 'raptor', 2, 'behind']]
   },
   {
-    id: 'zone2', dur: 52, minDur: 32, zone: true, speed: 0, cap: 26, atk: 3, wind: 1.3, label: ['COMBAT ZONE', 'Times Square — they\'re everywhere'],
+    id: 'zone2', dur: 58, minDur: 38, zone: true, speed: 0, cap: 26, min: 9, atk: 3, wind: 1.3, label: ['COMBAT ZONE', 'Times Square — they\'re everywhere'],
     prog: [
       [1, 'spawn', 'trike', 1, 'behind'], [2, 'spawn', 'compy', 4, 'behind'],
       [9, 'spawn', 'raptor', 3, 'storeL'], [10, 'spawn', 'raptor', 2, 'storeR'],
@@ -63,38 +63,39 @@ const BEATS = [
     ]
   },
   {
-    id: 'sky2', dur: 30, speed: 16, cap: 14, atk: 3, wind: 1.25, label: ['SKY RAID', 'A whole flock'],
+    id: 'broadway', dur: 32, speed: 15, cap: 14, min: 6, atk: 3, wind: 1.28, label: ['CROSSFIRE', 'Side streets — watch both flanks'],
+    trickle: { raptor: 0.3, compy: 0.35 },
+    prog: [[3, 'ambush', 'left', [['raptor', 3], ['compy', 3]]], [10, 'spawn', 'raptor', 3, 'storeR'], [15, 'ambush', 'right', [['raptor', 3], ['brute', 1]]], [22, 'spawn', 'ptero', 2, 'sky']]
+  },
+  {
+    id: 'sky2', dur: 34, speed: 16, cap: 14, min: 6, atk: 3, wind: 1.25, label: ['SKY RAID', 'A whole flock'],
     trickle: { compy: 0.2 },
     prog: [[0.5, 'spawn', 'ptero', 5, 'sky'], [0.5, 'look', 0, 0.2, 7], [6, 'drop', 'repair'], [12, 'spawn', 'ptero', 1, 'sky', { elite: true }]]
   },
   {
-    id: 'matriarch', dur: 42, minDur: 8, boss: true, speed: 17, cap: 12, atk: 3, wind: 1.25, label: null,
+    id: 'matriarch', dur: 48, minDur: 28, boss: true, speed: 17, cap: 12, min: 5, atk: 3, wind: 1.25, label: null,
     trickle: { raptor: 0.25, compy: 0.15 },
     prog: [[0.5, 'miniboss', 'trike', null, 'HORNWALL MATRIARCH', 'Charges down the lane · shoot her face to stop her']]
   },
   {
-    id: 'stampede', dur: 38, speed: 14, cap: 40, atk: 3, wind: 1.2, label: ['STAMPEDE', 'Everything in Midtown is behind you'],
-    trickle: { compy: 0.6, raptor: 0.3 }, trickleUntil: 24,
+    id: 'stampede', dur: 42, speed: 14, cap: 40, min: 14, atk: 3, wind: 1.2, label: ['STAMPEDE', 'Everything in Midtown is behind you'],
+    trickle: { compy: 1.1, raptor: 0.5 }, trickleUntil: 26, minUntil: 26,
     prog: [
-      [2, 'spawn', 'compy', 10, 'behind'], [3, 'spawn', 'raptor', 4, 'behind'], [5, 'ambush', 'left', [['compy', 6], ['raptor', 2]]],
-      [9, 'spawn', 'brute', 1, 'behind'], [12, 'ambush', 'right', [['compy', 6], ['raptor', 2]]], [16, 'drop', 'overdrive'], [20, 'spawn', 'trike', 1, 'behind']
+      [2, 'spawn', 'compy', 12, 'behind'], [3, 'spawn', 'raptor', 5, 'behind'], [5, 'ambush', 'left', [['compy', 8], ['raptor', 3]]],
+      [9, 'spawn', 'brute', 1, 'behind'], [12, 'ambush', 'right', [['compy', 8], ['raptor', 3]]], [16, 'drop', 'overdrive'], [20, 'spawn', 'trike', 1, 'behind']
     ]
   },
   {
-    id: 'calm', dur: 16, speed: 12, cap: 6, atk: 1, wind: 1.3, label: ['…QUIET', 'Too quiet'],
+    id: 'calm', dur: 16, speed: 12, cap: 6, min: 0, atk: 1, wind: 1.3, label: ['…QUIET', 'Too quiet'],
     prog: [[2, 'drop', 'repair'], [6, 'warning']]
   }
 ];
 
 const BOSS_BEAT = BEATS.length; // index of the boss "beat"
-const ENDLESS_LOOP = ['chase1', 'zone1', 'sky2', 'zone2', 'stampede', 'alpha', 'matriarch'];
-// Nominal start time of every beat (zones that are cleared early bring the boss sooner)
-const BEAT_START = [];
-{
-  let t = 0;
-  for (const b of BEATS) { BEAT_START.push(t); t += b.minDur && !b.zone ? b.dur * 0.8 : b.dur * 0.85; }
-}
-const BOSS_TIME = Math.round(BEATS.reduce((a, b) => a + (b.zone ? b.dur * 0.85 : b.boss ? b.dur * 0.8 : b.dur), 0));
+const ENDLESS_LOOP = ['chase1', 'zone1', 'broadway', 'sky2', 'zone2', 'stampede', 'alpha', 'matriarch'];
+// Nominal length of a beat (zones and mini-boss beats usually end early) and the nominal boss time (≈6:20)
+const nominal = (b) => (b.zone ? b.dur * 0.85 : b.boss ? b.dur * 0.8 : b.dur);
+const BOSS_TIME = Math.round(BEATS.reduce((a, b) => a + nominal(b), 0));
 
 class Director {
   constructor(game) {
@@ -122,7 +123,7 @@ class Director {
     if (startTime > 0) {
       let t = 0;
       let i = 0;
-      while (i < BEATS.length && t + BEATS[i].dur * 0.85 <= startTime) { t += BEATS[i].dur * 0.85; i++; }
+      while (i < BEATS.length && t + nominal(BEATS[i]) <= startTime) { t += nominal(BEATS[i]); i++; }
       this.beatIdx = i;
       this.time = startTime;
       this.beatT = Math.max(0, startTime - t);
@@ -209,6 +210,17 @@ class Director {
           this.acc[type] -= 1;
           if (en.threatCount < b.cap) this.spawnGroup(type, type === 'compy' ? 2 : 1, Math.random() < 0.8 ? 'behind' : Math.random() < 0.5 ? 'left' : 'right');
         }
+      }
+    }
+    // Minimum pressure: keep at least `min` pursuers in play (zones stop topping up once their script is done)
+    const scriptRunning = this.progIdx < b.prog.length;
+    if (b.min && (!b.zone || scriptRunning) && (!b.minUntil || this.beatT < b.minUntil) && this.beatT > 1.5) {
+      this.minT = (this.minT || 0) - dt;
+      if (this.minT <= 0 && en.threatCount < b.min) {
+        this.minT = 0.7;
+        const r = Math.random();
+        const type = r < 0.55 ? 'compy' : r < 0.92 || this.time < 60 ? 'raptor' : 'brute';
+        this.spawnGroup(type, type === 'compy' ? 2 : 1, Math.random() < 0.75 ? 'behind' : Math.random() < 0.5 ? 'left' : 'right');
       }
     }
     this._mercy();
@@ -333,7 +345,7 @@ class Director {
     }
     if (where === 'behind') {
       for (let tries = 0; tries < 6; tries++) {
-        const gap = -(48 + Math.random() * 18 + k * 1.5);
+        const gap = -(30 + Math.random() * 12 + k * 1.2);
         const r = g.route.sample(p.s + gap, _s);
         const lat = (Math.random() * 2 - 1) * (r.halfWidth - 1.5);
         const x = r.x + r.rx * lat, z = r.z + r.rz * lat;
@@ -398,4 +410,4 @@ class Director {
   }
 }
 
-export { Director, BOSS_TIME, BEATS, BEAT_START };
+export { Director, BOSS_TIME, BEATS };

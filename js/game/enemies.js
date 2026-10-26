@@ -21,8 +21,8 @@ import { poseCreature } from './poses.js';
 
 const SPECIES = {
   //          hp: base HP · close: closing speed on the cab (m/s) · dmg: per landed attack · wind: telegraph seconds
-  compy: { name: 'Scuttler', size: 1.6, hp: 18, close: 6.5, dmg: 3, radius: 0.55, height: 0.8, xp: 2, score: 100, mass: 0.3, stride: 2.6, wind: 1.25, gaps: [-9, -17], leap: true, headR: 0.22, sound: 'compy_chirp' },
-  raptor: { name: 'Sicklejaw', size: 1.2, hp: 55, close: 7.5, dmg: 6, radius: 0.95, height: 1.7, xp: 5, score: 250, mass: 1, stride: 1.6, wind: 1.15, gaps: [-10, -20], leap: true, headR: 0.34, sound: 'raptor_screech' },
+  compy: { name: 'Scuttler', size: 2.0, hp: 18, close: 6.5, dmg: 3, radius: 0.55, height: 0.8, xp: 2, score: 100, mass: 0.3, stride: 2.6, wind: 1.25, gaps: [-9, -17], leap: true, headR: 0.22, sound: 'compy_chirp' },
+  raptor: { name: 'Sicklejaw', size: 1.35, hp: 55, close: 7.5, dmg: 6, radius: 0.95, height: 1.7, xp: 5, score: 250, mass: 1, stride: 1.6, wind: 1.15, gaps: [-10, -20], leap: true, headR: 0.34, sound: 'raptor_screech' },
   brute: { name: 'Brute Raptor', hp: 260, close: 5.5, dmg: 11, radius: 1.5, height: 2.8, xp: 16, score: 800, mass: 4, stride: 1.15, wind: 1.35, gaps: [-12, -22], leap: true, headR: 0.5, stagger: 0.18, sound: 'brute_growl' },
   trike: { name: 'Hornwall', hp: 650, close: 4.5, dmg: 15, radius: 2.4, height: 3, xp: 35, score: 1500, mass: 12, stride: 0.75, wind: 1.7, gaps: [-24, -32], charger: true, headR: 1.0, stagger: 0.22, sound: 'trike_bellow' },
   ankylo: { name: 'Clubtail', hp: 800, close: 3.2, dmg: 12, radius: 2.2, height: 2, xp: 40, score: 2000, mass: 14, stride: 0.7, wind: 1.4, gaps: [-8, -12], armor: 0.4, swipe: true, headR: 0.6, stagger: 0.2, sound: 'ankylo_grunt' },
@@ -506,7 +506,8 @@ class EnemyManager {
     switch (e.state) {
       case 'run': {
         const err = targetGap - gap;
-        rel = THREE.MathUtils.clamp(err * 1.1, -6, e.speed * slow);
+        // Sprint in from far back, then settle into the slot
+        rel = THREE.MathUtils.clamp(err * 1.1, -6, e.speed * slow * (err > 10 ? 1.8 : 1));
         if (e.attackCd <= 0 && Math.abs(err) < 6 && this._canAttack(e)) {
           this._takeToken(e);
           e.state = 'windup';

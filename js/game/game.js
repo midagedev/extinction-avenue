@@ -324,8 +324,11 @@ class Game {
     this.player.update(0.016, 0);
     this.player.speed = 0;
     this.gunner.setVisible(false);
-    this.cam.orbit(this.player, 14, 4.2, 0.12, 2.6, 46);
-    this.cam.orbitState.lookY = 1.6;
+    // Attract shot: slow orbit around a point behind the parked cab, so the cab and the pack lined up behind it share
+    // the frame
+    const tp = this.player;
+    this.cam.orbit({ x: tp.x - tp.fx * 9, z: tp.z - tp.fz * 9, y: 0 }, 21, 3.4, 0.07, tp.heading + 0.5, 50);
+    this.cam.orbitState.lookY = 1.4;
     this.cam.snap = true;
     // A pack lined up behind the parked cab, a brute and a Hornwall waiting further back, pterosaurs circling
     const p = this.player;

@@ -283,7 +283,7 @@ class WeaponSystem {
         if (_tmp.length) {
           for (let k = 0; k < count; k++) {
             const t = _tmp[k % Math.min(_tmp.length, Math.max(3, count))];
-            p.toWorld(_pos.set((k % 2 ? 0.25 : -0.25) - 0.35, 1.25, -1.9), _pos);
+            p.toWorld(_pos.set((k % 2 ? 0.2 : -0.2) - 0.42, 1.2, 1.55), _pos);
             const a = p.heading + Math.PI + (k - (count - 1) / 2) * 0.35;
             this.missiles.push({
               x: _pos.x, y: _pos.y, z: _pos.z, vx: Math.sin(a) * 8 + p.vx, vy: 9 + Math.random() * 3, vz: Math.cos(a) * 8 + p.vz,
@@ -302,7 +302,7 @@ class WeaponSystem {
       const thunder = E('thunder');
       const period = thunder ? 0.7 : tl >= 4 ? 1.0 : 1.3;
       if (this._ready('tesla', period)) {
-        p.toWorld(_pos.set(0.52, 1.88, -1.75), _pos);
+        p.toWorld(_pos.set(0.45, 1.82, 1.55), _pos);
         const chains = thunder ? 14 : 2 + (tl >= 2) + (tl >= 4) * 2 + (tl >= 5) * 2;
         const dmg = (thunder ? 34 : 20 * (tl >= 3 ? 1.35 : 1) * (tl >= 5 ? 1.4 : 1)) * this.dmgMult;
         let cur = g.enemies.nearest(p.x - p.fx * 10, p.z - p.fz * 10, 22);
@@ -465,7 +465,9 @@ class WeaponSystem {
       const e = h.e;
       const x = ray.origin.x + ray.direction.x * h.t, y = ray.origin.y + ray.direction.y * h.t, z = ray.origin.z + ray.direction.z * h.t;
       const crit = this._rollCrit(h.weak);
-      const killed = g.enemies.damage(e, dmgBase * crit, { source: 'gun', crit: crit > 1, head: h.head, stagger: 1, kx: ray.direction.x * 6, kz: ray.direction.z * 6 });
+      // Range falloff: full damage up close, about half at 55 m+ (let them come to you)
+      const fall = Math.max(0.55, Math.min(1, 1.3 - h.t / 60));
+      const killed = g.enemies.damage(e, dmgBase * crit * fall, { source: 'gun', crit: crit > 1, head: h.head, stagger: 1, kx: ray.direction.x * 6, kz: ray.direction.z * 6 });
       g.vfx.hitSpark(x, y, z, h.head ? 7 : 5, h.head ? 6 : 3.2, h.head ? 2 : 1);
       if (lvl >= 5) this.blast(x, z, 2.6 * this.areaMult, dmgBase * 0.55, 1, 'blast', false, y);
       g.onGunHit(e, h, killed, x, y, z);

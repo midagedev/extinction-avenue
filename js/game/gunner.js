@@ -18,7 +18,7 @@ class GunnerView {
     this.root = new THREE.Group();
     this.root.name = 'GunnerViewModel';
     // Low and a little right of centre, like a pintle-mounted gun the gunner leans into
-    this.root.position.set(0.2, -0.5, -0.82);
+    this.root.position.set(0.17, -0.47, -1.0);
     camera.add(this.root);
     this.pivot = new THREE.Group();
     this.root.add(this.pivot);
@@ -29,22 +29,42 @@ class GunnerView {
       this.pivot.add(m);
       return m;
     };
+    // Hatch coaming at the bottom corners (static in the view, sways with the cab's roll via the camera)
+    this.rims = [];
+    for (const s of [-1, 1]) {
+      const rim = new THREE.Mesh(assets.get('hatchRim').geometry, material);
+      rim.position.set(s * 0.62, -0.46, -0.7);
+      rim.rotation.set(0.25, 0, s * 0.32);
+      rim.frustumCulled = false;
+      rim.renderOrder = 9;
+      camera.add(rim);
+      this.rims.push(rim);
+    }
     this.gun = mk('tailGun');
     this.rail = mk('tailRail');
     this.rail.visible = false;
     // Muzzle flash: additive star that pops for a frame or two
     const flashMat = new THREE.MeshBasicNodeMaterial({ color: new THREE.Color(6, 3.6, 1.2), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
-    const star = new THREE.PlaneGeometry(0.6, 0.6);
+    // 8-point star (long and short spikes), facing along the barrel
+    const shape = new THREE.Shape();
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2;
+      const r = i % 2 ? 0.05 : i % 4 === 0 ? 0.3 : 0.16;
+      if (i === 0) shape.moveTo(Math.cos(a) * r, Math.sin(a) * r); else shape.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+    }
+    const star = new THREE.ShapeGeometry(shape);
     this.flash = new THREE.Mesh(star, flashMat);
     this.flash.position.copy(MUZZLE).add(_v.set(0, 0, 0.12));
     this.flash.frustumCulled = false;
     this.flash.renderOrder = 11;
     this.flash.visible = false;
     this.pivot.add(this.flash);
+    // A second, side-on star gives the flash some volume
     this.flashB = this.flash.clone();
     this.flashB.rotation.y = Math.PI / 2;
+    this.flashB.position.z += 0.15;
     this.pivot.add(this.flashB);
-    this.light = new THREE.PointLight(0xffb060, 0, 9, 2);
+    this.light = new THREE.PointLight(0xffb060, 0, 5, 2);
     this.light.position.copy(MUZZLE);
     this.pivot.add(this.light);
     this.recoil = 0;
@@ -64,15 +84,16 @@ class GunnerView {
   setVisible(on) {
     this.visible = on;
     this.root.visible = on;
+    for (const r of this.rims) r.visible = on;
   }
 
   fire(strength = 1) {
     this.recoil = Math.min(1.4, this.recoil + 0.55 * strength);
     this.flashT = 0.045 + 0.02 * strength;
     this.flash.rotation.z = Math.random() * Math.PI;
-    const s = 0.8 + Math.random() * 0.5 * strength;
+    const s = 0.75 + Math.random() * 0.45 * strength;
     this.flash.scale.setScalar(s);
-    this.flashB.scale.set(s * 0.6, s, 1);
+    this.flashB.scale.set(s * 1.4, s * 0.5, 1);
   }
 
   /**
@@ -101,7 +122,7 @@ class GunnerView {
     const on = this.flashT > 0 && this.visible;
     this.flash.visible = on;
     this.flashB.visible = on;
-    this.light.intensity = on ? 30 : 0;
+    this.light.intensity = on ? 3 : 0;
     void cam;
   }
 

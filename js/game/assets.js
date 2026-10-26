@@ -26,6 +26,7 @@ const ASSET_MANIFEST = {
   tailGun: { kind: 'prop', url: null, placeholder: 'tailGun' }, // first-person view model (gun + gunner's hands)
   tailRail: { kind: 'prop', url: null, placeholder: 'tailRail' },
   tailMount: { kind: 'prop', url: null, placeholder: 'tailMount' },
+  hatchRim: { kind: 'prop', url: null, placeholder: 'hatchRim' },
   attGatling: { kind: 'prop', url: null, placeholder: 'attGatling' },
   attMissiles: { kind: 'prop', url: null, placeholder: 'attMissiles' },
   attTesla: { kind: 'prop', url: null, placeholder: 'attTesla' },

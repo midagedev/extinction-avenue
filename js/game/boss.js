@@ -105,7 +105,7 @@ class TRexBoss {
     const e = g.enemies.spawn('trex', r.x, r.z, { boss: true, scale: SCALE, ctrl: this, heading: r.heading, hpMult: 1 });
     if (!e) return;
     e.scale = SCALE;
-    e.maxHp = e.hp = 15000 * (1 + Math.max(0, g.director.time - g.director.bossTime) / 900);
+    e.maxHp = e.hp = 21000 * (1 + Math.max(0, g.director.time - g.director.bossTime) / 900);
     e.mode = 'intro';
     e.bs = bs;
     e.bd = 0;

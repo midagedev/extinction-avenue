@@ -159,6 +159,7 @@ class HUD {
     if (this.calloutT > 0) { this.calloutT -= dt; if (this.calloutT <= 0) el.callout.className = ''; }
     // Persistent callouts: RELOAD! while reloading / empty
     if (reloading && this.calloutT <= 0 && w.overdrive <= 0) this.callout('RELOAD!', 'reload', 0.5);
+    if (!reloading && w.ammo > 0 && el.callout.textContent === 'RELOAD!' && this.calloutT > 0) { this.calloutT = 0; el.callout.className = ''; }
     // Cracks fade
     for (let i = this.cracks.length - 1; i >= 0; i--) {
       const c = this.cracks[i];

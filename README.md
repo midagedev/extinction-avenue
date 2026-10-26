@@ -1,10 +1,12 @@
 # EXTINCTION AVENUE
 
-**Rush hour just went Cretaceous.** Cretagen's specimens have broken containment in Midtown Manhattan. You drive Unit 77,
-an armored animal-control cab, down the real avenues and fight the stampede. The cab's weapons fire themselves,
-Vampire Survivors-style. You aim the roof cannon with the mouse, steer around telegraphed attacks, ram the small ones,
-and evolve your build. The run ends with **GRIDLOCK**, a T. rex in a cracked containment collar that chases you down
-the avenue.
+**Rush hour just went Cretaceous.** Cretagen's specimens have broken containment in Midtown Manhattan, and they're
+chasing your cab. Unit 77, an armored animal-control taxi, drives itself down the real avenues. You're the **rear
+gunner**: you stand in the roof hatch facing backward over the tail gun, and you shoot everything that runs you down,
+like in a classic arcade jeep-chase gun game. Raptors smash out of storefronts, pterosaurs dive at your face, and the
+cab stops in combat zones to hold intersections. Level-ups add support guns and evolutions Vampire Survivors-style, but
+the aimed gun is the star. The run ends with **GRIDLOCK**, a T. rex in a cracked containment collar that chases the cab
+down the avenue, flanks it, and finally charges head-on.
 
 It's a free browser game: a static site with no install and no build step. It's built with three.js `WebGPURenderer` +
 TSL, with a WebGL2 fallback.
@@ -34,31 +36,44 @@ To host it, push the folder to GitHub Pages or any static host. Nothing needs co
 
 | | Desktop | Touch |
 |---|---|---|
-| Aim / fire Roof Cannon | Mouse + hold **left click** (the reticle locks onto targets and weak points) | Auto-fire; tap the street to aim |
-| Steer across the avenue | **A / D** or **← / →** | Left-thumb stick |
-| Nitro | **Shift** / **W** / **↑** | NITRO button |
-| Brake | **S** / **↓** | — |
-| Skyhammer air strike (charged by kills) | **Space** / **E** / **right click** | SKYHAMMER button |
-| Level-up choice | Click a card or **1 / 2 / 3**, **R** rerolls | Tap |
-| Pause / mute / toggle auto-fire | **Esc** or **P** / **M** / **F** | II button |
+| Aim the tail gun | Mouse (the crosshair turns red over a dinosaur, gold over a weak point) | Your finger is the crosshair |
+| Fire | Hold **left click** | Touch and hold |
+| Reload | Automatic when the belt runs dry; **R** or **right click** reloads early | RELOAD button |
+| Skyhammer air strike (charged by kills) | **Space** (lands where the crosshair meets the street) | SKYHAMMER button |
+| Level-up choice | Click a card or **1 / 2 / 3 / 4**, **R** rerolls | Tap |
+| Continue after a wreck | **Enter** / **Space** / click PRESS START | Tap |
+| Pause / mute / auto-fire | **Esc** or **P** / **M** / **F** (fires whenever the crosshair is on a dinosaur) | II button |
 
 ## The game in one minute
 
-- **On rails.** The cab follows a real loop of Midtown streets: 5th Ave → W 34th St → 7th Ave through Times Square →
-  W 57th St. You control lateral position and speed (nitro / brake), and the camera is free to frame the action.
-- **Bullet heaven.** Gene cores drop from fossilized dinosaurs. Each level-up pauses the game and offers 3 upgrades
-  (8 weapons, 8 passives). Max a weapon and own its partner passive to **evolve** it (Rail Lance, Storm Gatlings,
-  Buzzsaw Halo, Cluster Barrage, Thunderhead, Inferno Wake, Nova Mines, Dragon's Breath).
-- **Light-gun feel.** The aimed Roof Cannon is your strongest single-target damage, and it crits on weak points.
-- **Escalating waves.** Scuttler swarms, Sicklejaw pack hunters, Brutes, Hornwall chargers (red lane telegraphs),
-  Clubtail tail-swipes, Skyreaver dive-bombers. Elites and mini-bosses (Alpha Ravager, Hornwall Matriarch) drop
-  supply crates.
-- **GRIDLOCK, the T. rex boss (≈7:30).** A name-card reveal, then a three-phase chase. It lunge-bites down a
-  telegraphed lane, sends out stomp shockwaves you have to outrun with nitro, hurls wrecked cars, overtakes you for
-  head-on charges, and roars up raptor packs. Shoot the glowing collar. When it dies there's slow motion, it topples,
+- **On rails, first person.** You never steer. The cab drives a loop of real Midtown streets (5th Ave → W 34th St → 7th
+  Ave through Times Square → W 57th St), speeds up for avenue chases and stops dead in **combat zones**. The camera is
+  the gunner's eye: looking back down the road at the pursuers, swinging to the side for ambushes and forward when the
+  T. rex comes at you head-on.
+- **Readable fights, not swarms.** Usually 5 to 20 dinosaurs are in play, with short peaks around 30 to 40 in the
+  stampede. Each one is worth shooting: Scuttlers (2 hits), Sicklejaw raptors, Brutes, Hornwall chargers, Clubtail
+  tanks and Skyreaver pterosaurs, plus elites and two mini-bosses.
+- **Fair, telegraphed attacks.** Nothing hurts you by touching the cab. A dinosaur that's about to jump you crouches,
+  glows red and gets a shrinking red ring on screen (DANGER!). Shoot it before the ring closes and it STAGGERs out of
+  the attack. Only a few may attack at once, and only after they've been on screen long enough to be shot.
+- **Light-gun feel.** Hitscan heavy machine gun with a 30-round belt, reload, recoil, muzzle flash, spread that blooms
+  when you hold the trigger, headshots (1.6x), hit markers, cracked glass and a red flash when you get hit, a combo
+  multiplier (up to x8), score popping off every kill, and arcade callouts.
+- **Arcade structure.** Beats instead of an endless spawn: OUTBREAK → STOREFRONT → pterosaurs → COMBAT ZONE → AVENUE
+  CHASE → ALPHA RAVAGER → Times Square COMBAT ZONE → CROSSFIRE → SKY RAID → HORNWALL MATRIARCH → STAMPEDE → quiet →
+  WARNING → GRIDLOCK (about 6:30 in). Supply drops float behind the cab (repair, overdrive, Skyhammer): shoot them to
+  grab them.
+- **Survivors layer.** Gene cores stream into the cab. Level-ups offer 3 cards: support weapons (Sentry Guns, Swarm
+  Missiles, Tesla Coil, Exhaust Flamer, Flare Mines, Hubcap Saws, Tailgate Buckshot), passives (Hollow Points,
+  Autoloader, Extended Mag, Stopping Power, Armor, Chassis, Gene Magnet, Blast Radius) and 8 evolutions, including the
+  Tail Gun's own: the piercing **Rail Lance**.
+- **GRIDLOCK, the T. rex.** A slow-motion reveal, then a three-phase chase. It lunges at the tailgate (shoot the collar
+  during the telegraph to stagger it), throws wrecked cars you can shoot out of the air, pulls up beside the cab (the
+  view swings to face it), and in phase 3 overtakes and charges head-on. When it dies there's slow motion, it topples,
   turns to stone and shatters.
-- **Results + Share on X.** You get your score, time, kills, combo, roadkill count and build, plus a one-click
-  tweet. After a victory you can keep driving in endless mode.
+- **Continue?** When the cab is wrecked you get a 10-second CONTINUE countdown. Continuing is free (no coins needed) but
+  resets your combo multiplier, so everyone gets to see the T. rex. Results show your score, headshots, max combo and
+  continues, and there's a one-click post to X.
 
 ## URL parameters
 
@@ -66,8 +81,8 @@ To host it, push the folder to GitHub Pages or any static host. Nothing needs co
 |---|---|
 | `?quality=high\|medium\|low` | High = SSR reflections + 1.5× pixel ratio; Medium = no SSR; Low = no shadows, 0.75× resolution |
 | `?webgl` | Force the WebGL2 backend |
-| `?boss` | Start 12 s before GRIDLOCK with a mid-game build (clip recording) |
-| `?t=SECONDS` | Start later in the run (e.g. `?t=360` for the late-game swarms) |
+| `?boss` | Start just before GRIDLOCK with a mid-game build (clip recording) |
+| `?t=SECONDS` | Skip ahead to the beat at that time (e.g. `?t=230` for the second combat zone) |
 | `?nointro` / `?autostart` | Skip the intro camera / start immediately |
 | `?god` | Invulnerable (testing / filming) |
 | `?test` | No animation loop: drive the game from `window.__game.step()` / `.render()` (headless tests) |
@@ -78,14 +93,16 @@ To host it, push the folder to GitHub Pages or any static host. Nothing needs co
 index.html            the game shell (HUD, menus, level-up, results)
 css/game.css          game UI
 js/game/              the game
-  game.js             entry point, state machine, scoring, level-ups, cinematics, share
+  game.js             entry point, state machine (title → intro → play → continue → results), scoring, aim ray, share
   world.js            renderer + city + post-processing (bloom, grade, CA, hurt/danger edges)
   assets.js           THE ASSET MANIFEST (swap placeholders for GLB files here)
   dino-models.js      procedural low-poly creature rigs   rig.js / poses.js   instanced rigid-part animation
-  enemies.js          species, AI, spatial hash, ramming   director.js   waves, events, spawning
+  enemies.js          species, route-space pursuer AI, telegraphs + attack tokens, hit spheres
+  director.js         the beat script: chases, combat zones, ambushes, set pieces, mini-bosses
+  camera.js / gunner.js  first-person gunner camera (scripted swings) + tail-gun view model
   boss.js             GRIDLOCK                              weapons.js / upgrades.js   arsenal + level-up rules
   pickups.js          gene cores + power-ups                vfx.js / batches.js   pooled instanced VFX
-  player.js / route.js / camera.js / input.js / hud.js / audio.js (procedural WebAudio SFX + music) / icons.js
+  player.js / route.js / input.js / hud.js / audio.js (procedural WebAudio SFX + music) / icons.js
 js/*.js               Slop New York city modules (mrdoob)
 sim.html              the original free-roam simulation
 docs/ART_PIPELINE.md  art bible, full asset list + specs, production routes
@@ -97,16 +114,19 @@ tools/                headless test drivers (Playwright) and data tools
 ## Testing
 
 ```bash
-node --experimental-vm-modules tools/check-syntax.mjs                 # parse every game module
-npm i -D playwright && npx playwright install chromium                # once
-node tools/e2e-play.mjs http://127.0.0.1:8123/ ./shots full  '&quality=low&webgl'          # title → run → level-ups → swarm
-node tools/e2e-play.mjs http://127.0.0.1:8123/ ./shots boss  '&quality=low&webgl&boss&god' # GRIDLOCK → death → results
-node tools/e2e-play.mjs http://127.0.0.1:8123/ ./shots swarm '&quality=low&webgl&t=360&god'
-node tools/e2e-play.mjs http://127.0.0.1:8123/ ./shots balance '&quality=low&webgl'        # bot plays a whole run
-node tools/e2e-live.mjs 'http://127.0.0.1:8123/?quality=low' ./shots [mobile]               # real-time loop + touch
+node --experimental-vm-modules tools/check-syntax.mjs     # parse every game module
+node --test tests/                                         # the original city's unit tests (113)
+npm i -D playwright && npx playwright install chromium     # once (or keep it in .tools/node_modules)
+python3 -m http.server 8123 &
+node tools/e2e-v2.mjs smoke  ./shots          # title → start → 20 s of bot play → first-person screenshot
+node tools/e2e-v2.mjs idle   ./shots          # a player who never touches anything: how long does the cab last?
+node tools/e2e-v2.mjs bot    ./shots '' 3     # a human-like bot (reaction delay, capped mouse speed, aim noise) plays a whole run, seed 3
+node tools/e2e-v2.mjs shots  ./shots          # screenshot set (title, first person, combat zone, level-up, pterosaur, T. rex, continue, results)
 ```
 
-The original city's unit tests still live in `tests/`.
+All drivers open the page with `?test&webgl` (no animation loop; the sim is stepped through `window.__game.step()`)
+and send real mouse events through Playwright, so input goes through the game's own DOM handlers. Headless Chromium
+renders through SwiftShader, so a frame takes seconds; that's why the loop is stepped instead of run in real time.
 
 ## License, credits and data
 
