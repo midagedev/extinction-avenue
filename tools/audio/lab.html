@@ -1,0 +1,15 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>audio lab</title>
+</head>
+<body>
+  <script type="module">
+    // Page side of tools/audio-build.mjs: offline rendering helpers shared by the build scripts.
+    import { lab } from './lab.js';
+    window.lab = lab;
+    window.labReady = true;
+  </script>
+</body>
+</html>
