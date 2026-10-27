@@ -51,6 +51,27 @@ the page reloaded and then showed a black game view. The renderer backend is cho
 - WebKit browsers keep at most 140 MB of decoded music, the same budget as phones, because Safari kills tabs that use
   too much memory.
 
+### Phones / low memory
+
+iOS Safari kills a tab whose WebContent process outgrows its memory limit (roughly 1–1.5 GB on recent iPhones, less on
+older ones) and then shows *"A problem repeatedly occurred on this page"*. The game used to build all of Manhattan at
+1:1, use the High preset (SSR, a 4096×2048 shadow atlas) and decode most of the music at START, so iPhones crashed
+around START. `js/device-profile.js` (`detectProfile`, unit-tested) now turns on a **low-memory profile** for iOS,
+iPadOS (including iPads that report themselves as a Mac), Android / mobile browsers and `navigator.deviceMemory` ≤ 4:
+
+- **Graphics:** the *Phone* preset: 1.25× pixel ratio, no SSR, no shadows (and no shadow stand-ins), bloom at 0.3×
+  resolution. A saved High / Medium setting becomes Phone; the settings menu offers Phone and Low.
+- **City:** only the blocks, street furniture, trees and shore structures within 900 m of the cab's loop are built (the
+  landmarks and the outer boroughs stay, so the skyline is still there). Once the static city meshes are on the GPU,
+  their CPU-side vertex copies are released.
+- **Creatures:** textures are capped at 1024 px.
+- **Audio:** the long music loops stream through an `<audio>` element into the music bus instead of being decoded. Only
+  the short stingers are decoded. SFX decode on first use (the frequent ones up front), in mono, under a 24 MB cap. No
+  MP3 bytes are kept.
+
+Desktop browsers are unchanged. `?lowmem` forces the profile on any device; `?lowmem=0` turns it off (a phone then gets
+the full desktop build). The console logs `[lowmem] phone memory profile (<reason>)` when it is on.
+
 ## Controls
 
 | | Desktop | Touch |
@@ -129,7 +150,8 @@ mute toggle, master / music / effects volume and the arcade announcer voice. All
 
 | Parameter | Effect |
 |---|---|
-| `?quality=high\|medium\|low` | High = SSR reflections + 1.5× pixel ratio; Medium = no SSR; Low = no shadows, 0.75× resolution |
+| `?quality=high\|medium\|low\|phone` | High = SSR reflections + 1.5× pixel ratio; Medium = no SSR; Low = no shadows, 0.75× resolution; Phone = no SSR / shadows, 1.25× (the low-memory default; High / Medium become Phone there) |
+| `?lowmem` / `?lowmem=0` | Force the phone / low-memory profile on / off (see *Phones / low memory*) |
 | `?webgl` | Force the WebGL2 backend |
 | `?webgpu` | Use WebGPU on Safari / iOS, which default to WebGL2 (see *Safari / WebGPU*) |
 | `?boss` | Start just before GRIDLOCK with a mid-game build (clip recording) |
