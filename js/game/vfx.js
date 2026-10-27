@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { PropBatch } from './batches.js';
+import { overlayFont } from './overlay-font.js';
 
 // js/game/vfx.js
 // All transient visual effects: pooled particles (additive HDR glow + lit solids), shockwave rings, beams, ground
@@ -388,6 +389,8 @@ class VFX {
   drawOverlay(camera, dangers = null) {
     const ctx = this.ctx;
     if (!ctx) return;
+    // save/restore around the danger rings puts the canvas font back; don't reuse a cached string across that
+    this._font = null;
     if (!this.overlayScale || this.overlay.width !== Math.round(window.innerWidth * this.overlayScale)) this.resizeOverlay();
     const W = this.overlay.width, H = this.overlay.height;
     const k = this.overlayScale;
@@ -426,9 +429,9 @@ class VFX {
       const t = 1 - n.life / n.max;
       const pop = t < 0.12 ? 0.6 + (t / 0.12) * 0.7 : 1.3 - Math.min(0.3, (t - 0.12) * 1.2);
       const alpha = n.life < 0.2 ? n.life / 0.2 : 1;
-      const size = 17 * k * n.size * pop;
       ctx.globalAlpha = alpha;
-      ctx.font = `${n.kind === 4 ? 900 : 800} ${size}px 'Bebas Neue', 'Anton', Impact, sans-serif`;
+      const font = overlayFont(k, n.size, pop, n.kind === 4 ? 900 : 800);
+      if (this._font !== font) { this._font = font; ctx.font = font; }
       ctx.lineWidth = 4 * k;
       ctx.strokeStyle = 'rgba(0,0,0,0.85)';
       ctx.strokeText(n.text, sx, sy);
@@ -462,11 +465,14 @@ class VFX {
           ctx.restore();
           continue;
         }
+        // A wider dim stroke stands in for shadowBlur. Safari keeps a full shadow raster for every
+        // blurred draw and gets slower until the tab is hidden.
+        ctx.lineWidth = (10 + kk * 6) * k;
+        ctx.strokeStyle = `rgba(255, 32, 16, ${0.22 + 0.1 * pulse})`;
+        ctx.beginPath(); ctx.arc(0, 0, rad, 0, Math.PI * 2); ctx.stroke();
         ctx.lineWidth = (3 + kk * 3) * k;
         ctx.strokeStyle = `rgba(255, ${Math.round(60 - kk * 50)}, 30, ${0.55 + 0.45 * pulse})`;
-        ctx.shadowColor = '#ff2010';
-        ctx.shadowBlur = 12 * k;
-        ctx.beginPath(); ctx.arc(0, 0, rad, 0, Math.PI * 2); ctx.stroke();
+        ctx.stroke();
         // corner ticks
         for (let i = 0; i < 4; i++) {
           const a = i * Math.PI / 2 + Math.PI / 4;
@@ -476,12 +482,13 @@ class VFX {
           ctx.stroke();
         }
         if (d.boss && d.meter !== undefined) {
+          ctx.strokeStyle = 'rgba(255, 176, 46, 0.35)';
+          ctx.lineWidth = 12 * k;
+          ctx.beginPath(); ctx.arc(0, 0, rad + 12 * k, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * d.meter); ctx.stroke();
           ctx.strokeStyle = '#ffd23a';
           ctx.lineWidth = 6 * k;
-          ctx.shadowColor = '#ffb02e';
-          ctx.beginPath(); ctx.arc(0, 0, rad + 12 * k, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * d.meter); ctx.stroke();
+          ctx.stroke();
         }
-        ctx.shadowBlur = 0;
         ctx.font = `900 ${Math.round(22 * k)}px 'Bebas Neue', Impact, sans-serif`;
         ctx.fillStyle = '#ff3b2f';
         ctx.strokeStyle = '#000';

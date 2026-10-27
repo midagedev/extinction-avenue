@@ -23,6 +23,7 @@
 import { MusicDirector } from './audio-music.js';
 import { ProcSynth, RECIPES } from './audio-recipes.js';
 import { isWebKitOnly } from './backend.js';
+import { disconnectVoice } from './audio-voice.js';
 import { LOWMEM } from '../device-profile.js';
 
 const MANIFEST = 'assets/audio/manifest.json';
@@ -117,6 +118,7 @@ class GameAudio {
     this.volume = { master: 0.9, music: 0.6, sfx: 0.85 };
     this.listener = { x: 0, y: 1.6, z: 0, fx: 0, fy: 0, fz: 1 };
     this.voices = []; // active sample/recipe voices
+    this.heldNodes = 0; // air filters + reverb sends not yet disconnected (must stay flat over a session)
     this.byName = new Map(); // name → { count, last }
     this.maxVoices = isMobile ? 26 : 44;
     this.loops = {};
@@ -675,7 +677,7 @@ class GameAudio {
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(vol, when);
     let head = gain;
-    let panner = null, air = null;
+    let panner = null, air = null, send = null;
     if (opts.x !== undefined && opts.z !== undefined) {
       // Air absorption: far sounds lose their top end
       if (dist > 14) {
@@ -684,6 +686,7 @@ class GameAudio {
         air.frequency.value = Math.max(1400, 20000 * Math.exp(-dist / ((opts.range ?? def.range ?? 90) * 0.9)));
         air.connect(gain);
         head = air;
+        this.heldNodes++;
       }
       panner = ctx.createPanner();
       panner.panningModel = 'equalpower';
@@ -695,11 +698,12 @@ class GameAudio {
     } else gain.connect(this.buses[def.bus] || this.buses.impacts);
     const out = panner || gain;
     if (def.verb || (dist > 40 && def.bus === 'creatures')) {
-      const s = ctx.createGain();
-      s.gain.value = (def.verb || 0) + Math.min(0.25, dist / 400);
-      out.connect(s).connect(this.reverbSend);
+      send = ctx.createGain();
+      send.gain.value = (def.verb || 0) + Math.min(0.25, dist / 400);
+      out.connect(send).connect(this.reverbSend);
+      this.heldNodes++;
     }
-    return { gain, head, panner, air };
+    return { gain, head, panner, air, send };
   }
 
   _sampleVoice(name, def, list, vol, rate, when, opts, dist) {
@@ -720,7 +724,7 @@ class GameAudio {
     const c = this._chain(def, vol, when, opts, dist);
     src.connect(c.head);
     src.start(when, offset);
-    const v = { name, prio: def.prio ?? 2, t0: when, src, gain: c.gain, panner: c.panner, follow: opts.follow || null, dead: false };
+    const v = { name, prio: def.prio ?? 2, t0: when, src, gain: c.gain, panner: c.panner, air: c.air, send: c.send, follow: opts.follow || null, dead: false };
     src.onended = () => this._release(v);
     return v;
   }
@@ -730,7 +734,7 @@ class GameAudio {
     if (!r) return null;
     const c = this._chain(def, vol, when, opts, dist);
     const dur = r.fn(this.proc, c.head, when + 0.001, rate, opts) || 0.5;
-    const v = { name, prio: def.prio ?? 2, t0: when, src: null, gain: c.gain, panner: c.panner, follow: opts.follow || null, dead: false };
+    const v = { name, prio: def.prio ?? 2, t0: when, src: null, gain: c.gain, panner: c.panner, air: c.air, send: c.send, follow: opts.follow || null, dead: false };
     v.timer = setTimeout(() => this._release(v), (dur + 0.25) * 1000 + (when - this.ctx.currentTime) * 1000);
     return v;
   }
@@ -755,7 +759,7 @@ class GameAudio {
       if (st) st.count = Math.max(0, st.count - 1);
     }
     if (soft) return;
-    try { v.gain.disconnect(); v.panner?.disconnect(); } catch { /* gone */ }
+    this.heldNodes = Math.max(0, this.heldNodes - disconnectVoice(v));
   }
 
   // ------------------------------------------------------------------------------------------------------------------
@@ -776,7 +780,7 @@ class GameAudio {
     c.gain.gain.setTargetAtTime(opts.volume ?? 0.6, ctx.currentTime, 0.15);
     src.connect(c.head);
     src.start(ctx.currentTime, offset + Math.random() * (buffer.duration - offset) * 0.9);
-    this.loopVoices.set(key, { src, gain: c.gain, panner: c.panner, follow: opts.follow, vol: opts.volume ?? 0.6, range: opts.range ?? 110 });
+    this.loopVoices.set(key, { src, gain: c.gain, panner: c.panner, air: c.air, send: c.send, follow: opts.follow, vol: opts.volume ?? 0.6, range: opts.range ?? 110 });
   }
 
   loopStop(key, fade = 0.4) {
@@ -787,7 +791,7 @@ class GameAudio {
     v.gain.gain.cancelScheduledValues(t);
     v.gain.gain.setTargetAtTime(0, t, fade / 3);
     v.src.stop(t + fade + 0.1);
-    setTimeout(() => { try { v.gain.disconnect(); v.panner?.disconnect(); } catch { /* gone */ } }, (fade + 0.3) * 1000);
+    setTimeout(() => { this.heldNodes = Math.max(0, this.heldNodes - disconnectVoice(v)); }, (fade + 0.3) * 1000);
   }
 
   // ------------------------------------------------------------------------------------------------------------------
@@ -835,7 +839,11 @@ class GameAudio {
     const g = ctx.createGain(); g.gain.value = 1.6;
     src.connect(g).connect(f.gain);
     src.start(ctx.currentTime, s.offset);
-    try { f.src.stop(); } catch { /* ignore */ }
+    try { f.src.stop(); f.src.disconnect(); } catch { /* ignore */ }
+    if (f.sample) { try { f.sample.disconnect(); } catch { /* ignore */ } }
+    if (f.sampleGain) { try { f.sampleGain.disconnect(); } catch { /* ignore */ } }
+    f.sample = src;
+    f.sampleGain = g;
   }
 
   updateLoops(speed, boosting, flamer, active) {
