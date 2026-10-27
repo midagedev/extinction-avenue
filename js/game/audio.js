@@ -28,7 +28,7 @@ import { LOWMEM } from '../device-profile.js';
 const MANIFEST = 'assets/audio/manifest.json';
 const CODEC_DELAY = 1105 / 44100; // LAME encoder + decoder delay of our MP3s (compensated when the decoder keeps it)
 const STORE = 'ea-audio';
-const SFX_BUDGET_LOWMEM = 24e6; // decoded SFX bytes on phones
+const SFX_BUDGET_LOWMEM = 16e6; // decoded SFX bytes on phones (≈ 90 s of mono; was 24 MB, trimmed to pay for the 2.2× screen)
 // Played from the first second of a run: decoded up front (everything else on phones decodes on first use)
 const FIRST_SFX = ['ui_click', 'ui_hover', 'ui_back', 'gun', 'hitmarker', 'fossilize', 'casing', 'xp', 'compy_chirp', 'raptor_screech', 'hurt', 'danger', 'vo_go', 'bell'];
 

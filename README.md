@@ -81,7 +81,7 @@ iPadOS (including iPads that report themselves as a Mac), Android / mobile brows
 - **Creatures:** textures are capped at 1024 px; the GLTF loader caches (GLB bytes) are dropped after load.
 - **Audio:** the long music loops stream through an `<audio>` element into the music bus instead of being decoded. Only
   the short stingers and the 8 s combat drum layer are decoded (the layer follows the streamed loop's clock and is
-  re-phased if it drifts > 35 ms). SFX decode on first use (the frequent ones up front), in mono, under a 24 MB cap.
+  re-phased if it drifts > 35 ms). SFX decode on first use (the frequent ones up front), in mono, under a 16 MB cap (24 MB before the 2.2× screen).
 
 Desktop browsers are unchanged. `?lowmem` forces the profile on any device; `?lowmem=0` turns it off (a phone then gets
 the full desktop build). The console logs `[lowmem] phone memory profile (<reason>)` and `[lowmem] city stream {...}`.
