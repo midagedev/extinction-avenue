@@ -26,11 +26,30 @@ python3 -m http.server 8123
 # or: npx serve .   /   npx http-server -p 8123
 ```
 
-Then open <http://localhost:8123/>. Use a recent Chrome or Edge (WebGPU). Safari and Firefox use WebGPU where they
-support it and fall back to WebGL2 otherwise. The first load builds Manhattan and compiles its shaders behind the loading screen, which
+Then open <http://localhost:8123/>. Use a recent Chrome or Edge (WebGPU), Safari (WebGL2, see below) or Firefox (WebGPU
+where it's available, WebGL2 otherwise). The first load builds Manhattan and compiles its shaders behind the loading screen, which
 takes a few seconds.
 
 To host it, push the folder to GitHub Pages or any static host. Nothing needs compiling.
+
+### Safari / WebGPU
+
+Safari 26 (macOS, iOS, iPadOS) turns WebGPU on by default, but on Safari the WebGPU device was lost when a run started:
+the page reloaded and then showed a black game view. The renderer backend is chosen in `js/game/backend.js`
+(`pickBackend`):
+
+- **Safari and every iOS/iPadOS browser** (all WebKit) use the **WebGL2** backend. `?webgpu` opts back into WebGPU.
+- **Chrome, Edge, Opera and Firefox** use WebGPU when `navigator.gpu` exists and WebGL2 otherwise. `?webgl` forces WebGL2.
+- If the WebGPU device is lost, or reports more than 20 errors within 10 seconds, the loading screen says *"Graphics
+  driver reset — restarting in compatibility mode (WebGL2)…"* and the page reloads with `?webgl`. If the player had
+  already pressed START it also adds `?autostart`, so they go straight back into a run. The fallback never loops: on
+  WebGL2 a device error shows the error screen instead.
+- The game doesn't fail silently. If init fails, an uncaught error happens while loading (or keeps happening during the
+  intro), or START hasn't reached gameplay after about 15 seconds with no frames being drawn, the loading screen shows
+  the error and a **Retry (compatibility mode)** button that reloads with `?webgl&autostart`. Sound can't block START:
+  every public audio method catches its own exceptions.
+- WebKit browsers keep at most 140 MB of decoded music, the same budget as phones, because Safari kills tabs that use
+  too much memory.
 
 ## Controls
 
@@ -112,6 +131,7 @@ mute toggle, master / music / effects volume and the arcade announcer voice. All
 |---|---|
 | `?quality=high\|medium\|low` | High = SSR reflections + 1.5× pixel ratio; Medium = no SSR; Low = no shadows, 0.75× resolution |
 | `?webgl` | Force the WebGL2 backend |
+| `?webgpu` | Use WebGPU on Safari / iOS, which default to WebGL2 (see *Safari / WebGPU*) |
 | `?boss` | Start just before GRIDLOCK with a mid-game build (clip recording) |
 | `?t=SECONDS` | Skip ahead to the beat at that time (e.g. `?t=230` for the second combat zone) |
 | `?nointro` / `?autostart` | Skip the intro camera / start immediately |
@@ -158,7 +178,7 @@ tools/audio/          audio lab: music.js (CC0 track prep + original sting / hea
 
 ```bash
 node --experimental-vm-modules tools/check-syntax.mjs     # parse every game module
-node --test tests/                                         # the original city's unit tests (113)
+node --test tests/                                         # unit tests (120: the original city's 113 + backend choice / fallback URLs)
 npm i -D playwright && npx playwright install chromium     # once (or keep it in .tools/node_modules)
 python3 -m http.server 8123 &
 node tools/e2e-v2.mjs smoke  ./shots          # title → start → 20 s of bot play → first-person screenshot
@@ -171,9 +191,10 @@ python3 -I tools/lab/compare.py ./shots ./cmp # BEFORE / AFTER side-by-sides
 node tools/perf-creatures.mjs                 # 40 animated dinosaurs: draw calls, triangles, CPU pose cost
 node tools/e2e-audio.mjs ./shots              # audio (30 checks): gesture-only AudioContext, settings persistence across reloads, cue transitions (run/boss/victory/continue/game over), phone memory budget, voice cap, master peak, no console errors / autoplay warnings
 node tools/shots-v4.mjs ./shots [phone]       # v4 screenshot set: combat, boss, audio settings + pause sound toggle (desktop and phone)
+node tools/e2e-webkit.mjs ./shots             # Safari smoke (Playwright WebKit, real-time loop, served under /extinction-avenue/): title → START → playing, WebGL2 backend, not-black 3D view, no errors
 ```
 
-All drivers open the page with `?test&webgl` (no animation loop; the sim is stepped through `window.__game.step()`)
+All drivers except `e2e-webkit` open the page with `?test&webgl` (no animation loop; the sim is stepped through `window.__game.step()`)
 and send real mouse events through Playwright, so input goes through the game's own DOM handlers. Headless Chromium
 renders through SwiftShader, so a frame takes seconds; that's why the loop is stepped instead of run in real time.
 
