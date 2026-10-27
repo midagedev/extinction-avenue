@@ -114,8 +114,13 @@ function createGamePost(renderer, sceneColor, reflections, quality) {
  */
 async function createWorld(container, camera, { quality: qualityId = 'high', forceWebGL = false, onStatus = () => {} } = {}) {
   const quality = { ...(QUALITY[qualityId] || QUALITY.high) };
-  const shadowParam = new URLSearchParams(location.search).get('shadows'); // ?shadows=0|1 overrides the preset
+  const q = new URLSearchParams(location.search);
+  const shadowParam = q.get('shadows'); // ?shadows=0|1 overrides the preset
   if (shadowParam === '0' || shadowParam === '1') quality.shadows = shadowParam === '1';
+  // ?pr=<cap> / ?msaa=0|2|4 / ?sharpen=<0..1> override the preset (memory and clarity measurements)
+  if (+q.get('pr') > 0) quality.pixelRatio = +q.get('pr');
+  if (['0', '2', '4'].includes(q.get('msaa'))) quality.samples = +q.get('msaa');
+  if (q.has('sharpen') && +q.get('sharpen') >= 0) quality.sharpen = +q.get('sharpen');
   // No MSAA on the canvas: it only receives the post-processing quad. The scene pass multisamples (quality.samples).
   const renderer = new THREE.WebGPURenderer({
     antialias: false,
@@ -189,7 +194,7 @@ async function createWorld(container, camera, { quality: qualityId = 'high', for
     : null;
 
   // --- Post-processing --------------------------------------------------------------------------------------------
-  // (WebGPU only allows 1 or 4 samples; 2 is a WebGL2 / phone budget)
+  // (WebGPU only allows 1 or 4 samples; ?msaa=2 is WebGL2-only)
   const samples = renderer.backend.isWebGPUBackend && quality.samples > 0 ? 4 : quality.samples;
   const scenePass = pass(scene, camera, { samples });
   scenePass.renderTarget.storeMultisampledColorBuffer = false;

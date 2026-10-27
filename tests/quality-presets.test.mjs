@@ -11,6 +11,7 @@ test('phones render at 2–2.4x with a light sharpen and no SSR; desktop High ca
   assert.equal(p.ssr, false);
   assert.ok(p.sharpen > 0 && p.sharpen <= 0.5);
   assert.ok(p.shadowMap <= 1024, 'phone shadow cascades stay small (memory)');
+  assert.equal(p.samples, 0, 'no multisampled scene buffers on phones (GPU memory)');
   assert.equal(QUALITY.high.pixelRatio, 2.0);
   for (const q of Object.values(QUALITY)) assert.ok([0, 2, 4].includes(q.samples), 'MSAA samples 0 / 2 / 4');
 });

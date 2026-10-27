@@ -11,10 +11,12 @@ const QUALITY = {
   low: { pixelRatio: 0.75, ssr: false, shadows: false, bloomScale: 0.35, samples: 0, sharpen: 0.3 },
   // Phones / low-memory devices (js/device-profile.js LOWMEM): no SSR targets, a small bloom chain, and cheap sun
   // shadows near the cab only: 1024² cascades over the first ~120 m, no shadow stand-ins. A sharp picture comes first:
-  // 2.2× pixel ratio (≈ 54 % of an iPhone's 3× pixels; 1.6× was 28 % and read as blurry) with 2× MSAA on the scene
-  // pass and a light sharpening pass. js/game/quality-governor.js gives up shadows and stream reach before resolution
-  // when frames run long, and never drops below 1.5×.
-  phone: { pixelRatio: 2.2, ssr: false, shadows: true, shadowMap: 1024, shadowFar: 120, bloomScale: 0.35, samples: 2, sharpen: 0.35 }
+  // 2.2× pixel ratio (≈ 54 % of an iPhone's 3× pixels; 1.6× was 28 % and read as blurry) and a light sharpening
+  // pass. No MSAA: at 2.2× the jaggies are sub-pixel on a ~460 ppi screen, and the multisampled scene buffers cost
+  // ~60–80 MB in the GPU process (iPhone-emulation soak; with them the 2.2× build sat that much above the 1.6× one,
+  // without them it is level). js/game/quality-governor.js gives up shadows and stream reach before resolution when
+  // frames run long, and never drops below 1.5×.
+  phone: { pixelRatio: 2.2, ssr: false, shadows: true, shadowMap: 1024, shadowFar: 120, bloomScale: 0.35, samples: 0, sharpen: 0.35 }
 };
 
 const LOOKS = {

@@ -195,8 +195,8 @@ async function measure({ a: aB64, c: cB64 }) {
   for (const e of enemies) (byType[e.type] ||= []).push(e.h);
   for (const k in byType) { const s = byType[k].sort((p, q) => p - q); byType[k] = s[s.length >> 1]; }
 
-  // thumbnail for the baseline folder (480 px wide JPEG-free PNG)
-  const tw = 480, th = Math.round(H * tw / W);
+  // thumbnail for the baseline folder (PNG, 360 px wide landscape, 220 px portrait)
+  const tw = W > H ? 360 : 220, th = Math.round(H * tw / W);
   const t = document.createElement('canvas'); t.width = tw; t.height = th;
   const tx = t.getContext('2d'); tx.imageSmoothingQuality = 'high'; tx.drawImage(A.c, 0, 0, tw, th);
   const r1 = (x) => +x.toFixed(1), r2 = (x) => +x.toFixed(2);
