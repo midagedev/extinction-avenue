@@ -59,29 +59,64 @@ older ones) and then shows *"A problem repeatedly occurred on this page"*. The g
 around START. `js/device-profile.js` (`detectProfile`, unit-tested) now turns on a **low-memory profile** for iOS,
 iPadOS (including iPads that report themselves as a Mac), Android / mobile browsers and `navigator.deviceMemory` ≤ 4:
 
-- **Graphics:** the *Phone* preset: 1.25× pixel ratio, no SSR, no shadows (and no shadow stand-ins), bloom at 0.3×
-  resolution. A saved High / Medium setting becomes Phone; the settings menu offers Phone and Low.
-- **City:** only the blocks, street furniture, trees and shore structures within 900 m of the cab's loop are built (the
-  landmarks and the outer boroughs stay, so the skyline is still there). Once the static city meshes are on the GPU,
-  their CPU-side vertex copies are released.
-- **Creatures:** textures are capped at 1024 px.
+- **Graphics:** the *Phone* preset: 1.6× pixel ratio, no SSR, bloom at 0.35× resolution, and sun shadows near the cab:
+  1024² cascades over the first 140 m, cast only by the cab and the creatures and received only by the street (asphalt,
+  sidewalks). Letting every city material cast/receive would cost ~160 MB of JS heap in three.js shader builds; this
+  costs ~12 MB. A saved High / Medium setting becomes Phone; the settings menu offers Phone and Low. `?shadows=0|1`
+  overrides the preset.
+- **Quality governor** (`js/game/quality-governor.js`): while playing, when 3 s windows of frames run slower than
+  ~36 fps, when the JS heap passes 70 % of its limit (where the browser reports it) or when the renderer's own GPU
+  allocations pass 260 MB (iOS has no memory API, so the budget is counted), it steps down one notch at a time: pixel
+  ratio 1.35 → 1.15 → 1.0, shadows off, city stream window 70 % → 50 %. It never steps back up. `?governor=0` turns it
+  off.
+- **City chunk streaming** (`js/game/city-stream.js`): after the build, the static city is cut into 200 m cells
+  (instanced meshes split by instance, big merged meshes split by triangle). Only the cells in a window along the
+  cab's route are in the scene and on the GPU: 900 m behind the cab (the gunner looks back down the street), 450 m
+  ahead, 260 m to the sides, plus the straight sightline along the current heading (the street continues past the
+  corner just turned), with 120 m of hysteresis. Cells entering the window are added nearest-first under a per-frame
+  upload budget; cells leaving it release their GPU buffers and render objects and are rebuilt from a compact CPU
+  recipe when the loop brings the cab back. Cells that no window along the loop can ever reach are never built (the
+  builders check `cityKeep()` against `loopReach()`). Pieces larger than a cell (the harbour, long seawall faces),
+  the landmarks and the borough skyline stay resident. `?stream=0` turns streaming off. Typically ~45 of 212 cells
+  are resident.
+- **Creatures:** textures are capped at 1024 px; the GLTF loader caches (GLB bytes) are dropped after load.
 - **Audio:** the long music loops stream through an `<audio>` element into the music bus instead of being decoded. Only
-  the short stingers are decoded. SFX decode on first use (the frequent ones up front), in mono, under a 24 MB cap. No
-  MP3 bytes are kept.
+  the short stingers and the 8 s combat drum layer are decoded (the layer follows the streamed loop's clock and is
+  re-phased if it drifts > 35 ms). SFX decode on first use (the frequent ones up front), in mono, under a 24 MB cap.
 
 Desktop browsers are unchanged. `?lowmem` forces the profile on any device; `?lowmem=0` turns it off (a phone then gets
-the full desktop build). The console logs `[lowmem] phone memory profile (<reason>)` when it is on.
+the full desktop build). The console logs `[lowmem] phone memory profile (<reason>)` and `[lowmem] city stream {...}`.
 
-Measured in Chromium with iPhone emulation (393×852 @3x, iOS UA, WebGL2, SwiftShader), resident memory of the page's
-renderer process / the GPU process / the JS heap:
+**Mid-game reloads (hotfix 2).** `tools/mem-long-probe.mjs` plays a long session on the phone profile (`?autoplay`
+makes the game play itself, through GRIDLOCK into the next run) and samples memory every 15 s of game time
+(`tools/mem-long-table.mjs` tabulates the log). What it found on the previous build: no JavaScript leak (the JS heap
+stays at ~193 MB for 9 minutes), but memory that only goes up while playing. Every part of the city the cab reaches for
+the first time gets render objects, geometries and vertex buffers that were never released (renderer geometries
+1876 → 2612, render objects 2633 → 3373, until a full lap is done), plus SFX that decode on first use (up to their
+24 MB cap) and pipelines for effects seen for the first time. Over 9 minutes the page process grew 490 → 572 MB and the
+GPU process 549 → 660 MB, on top of a load peak of ~700 MB. That kind of slow climb is what gets a tab killed after a
+while of playing.
 
-| | Title screen | After START (intro / run) | Peak |
-|---|---|---|---|
-| Before (live site, c491168) | 1079 / 771 / 792 MB | 1194 / up to 1595 / 669 MB | renderer 1194, GPU 1612 MB |
-| Low-memory profile | 622 / 494 / 335 MB | ≈ 470 / 550 / 188 MB | renderer 679, GPU 558 MB |
+With streaming, the city's render state stays bounded: render objects stay around 2650–2940 and move up and down as
+cells come and go, and the renderer's GPU allocations are ~20 % lower (≈ 120 vs 150 MB). The opening view draws ~60 %
+fewer triangles (1.1 M vs 2.6 M). The picture got sharper (1.6× vs 1.25×) and gained shadows at about the same
+process memory. A slow page-process creep of ~+27 MB over 6 minutes remains in both builds in this emulation. With
+the JS heap and the renderer's counts flat, it comes from lazily decoded SFX (bounded) and browser-side allocations.
 
-Playwright WebKit with `devices['iPhone 15']` reaches gameplay from START with the profile on and no page errors. A real
-iPhone hasn't been measured.
+Measured in Chromium with iPhone emulation (393×852 @3x, iOS UA, WebGL2, SwiftShader), `?test&webgl&lowmem&god&autoplay`,
+values are page (renderer) process / GPU process / JS heap in MB; GPU allocations = the renderer's own count
+(`renderer.info.memory`). Logs: `mem-long-before.log` (9 min), `mem-long-after.log` (7 min).
+
+| | 15 s into the run | 7 min in (420 s) | Drift 60–420 s: first → last third | Peak (page / GPU) | GPU allocations, MB | Renderer geometries (start → max) |
+|---|---|---|---|---|---|---|
+| Before (40158c5) | 490 / 549 / 192 | 543 / 639 / 194 | 518 → 545 / 596 → 634 / 192 → 196 | 707 / 680 | 145.5 → 150.9 | 1876 → 2612 |
+| After | 480 / 548 / 188 | 525 / 658 / 186 | 515 → 542 / 604 → 666 / 188 → 189 | 691 / 697 | 115.6 → 120.5 | 1740 → 2410 |
+
+Of the ~500 MB Chromium page process, the game's own data is about 200 MB (≈110 MB of JS objects + ≈90 MB of
+ArrayBuffers, measured with a heap snapshot); the rest is the browser itself in this software-rendered emulation, so
+these RSS numbers are an upper bound for what an iPhone's WebContent process holds.
+Playwright WebKit with `devices['iPhone 15']` (`node tools/e2e-webkit.mjs <outDir> iphone`) reaches gameplay from START
+with the profile, Phone quality and streaming on and no page errors. A real iPhone still hasn't been measured.
 
 ## Controls
 
@@ -163,6 +198,8 @@ mute toggle, master / music / effects volume and the arcade announcer voice. All
 |---|---|
 | `?quality=high\|medium\|low\|phone` | High = SSR reflections + 1.5× pixel ratio; Medium = no SSR; Low = no shadows, 0.75× resolution; Phone = no SSR / shadows, 1.25× (the low-memory default; High / Medium become Phone there) |
 | `?lowmem` / `?lowmem=0` | Force the phone / low-memory profile on / off (see *Phones / low memory*) |
+| `?stream=0` / `?shadows=0\|1` / `?governor=0` | Phones: no city streaming / shadows off or on / no automatic quality step-down |
+| `?autoplay` | The game plays itself (memory soaks, `tools/mem-long-probe.mjs`) |
 | `?webgl` | Force the WebGL2 backend |
 | `?webgpu` | Use WebGPU on Safari / iOS, which default to WebGL2 (see *Safari / WebGPU*) |
 | `?boss` | Start just before GRIDLOCK with a mid-game build (clip recording) |
@@ -180,6 +217,8 @@ css/game.css          game UI
 js/game/              the game
   game.js             entry point, state machine (title → intro → play → continue → results), scoring, aim ray, share
   world.js            renderer + city + post-processing (bloom, grade, CA, hurt/danger edges)
+  city-stream.js      phones: the static city in 200 m cells, only the window along the cab's route resident
+  quality-governor.js phones: steps pixel ratio / shadows / stream window down under frame-time or memory pressure
   assets.js           THE ASSET MANIFEST (GLB files, species skins: morphs, clips, looks)
   skin-model.js       GLB → skinned model; bakes GLB clips / procedural keyframes (FK + bone-scale morphs) to matrices
   skin-rig.js         GPU-instanced skinning (one draw call per species & LOD), PBR creature material
@@ -211,7 +250,7 @@ tools/audio/          audio lab: music.js (CC0 track prep + original sting / hea
 
 ```bash
 node --experimental-vm-modules tools/check-syntax.mjs     # parse every game module
-node --test tests/                                         # unit tests (120: the original city's 113 + backend choice / fallback URLs)
+node --test tests/                                         # unit tests (137: the city's 113 + backend choice / fallback URLs + phone profile / stream window)
 npm i -D playwright && npx playwright install chromium     # once (or keep it in .tools/node_modules)
 python3 -m http.server 8123 &
 node tools/e2e-v2.mjs smoke  ./shots          # title → start → 20 s of bot play → first-person screenshot
