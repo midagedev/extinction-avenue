@@ -40,7 +40,9 @@ const TRENDS = {
   programs: { rel: 0.05, abs: 4 },
   geometries: { rel: 0.08, abs: 30 },
   textures: { rel: 0.08, abs: 6 },
-  audioLive: { rel: 0.25, abs: 24 }
+  audioLive: { rel: 0.25, abs: 24 },
+  // Distinct canvas font strings. Safari caches each one until the tab is backgrounded; a quantized font set plateaus.
+  fontKeys: { rel: 0.15, abs: 40 }
 };
 
 export { thirds, trendStatus, TRENDS };

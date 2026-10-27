@@ -1,10 +1,12 @@
 // Long-session frame-cost probe: does the game get slower the longer you play?
 //   node tools/perf-decay-probe.mjs <outDir> [seconds=900] [engine=chromium|webkit]
 //
-// Phone profile (393×852 @3x, iOS Safari UA), real animation loop (not the stepped ?test driver), WebGL2:
-//   ?webgl&lowmem&god&autoplay&nointro&autostart&governor=0
-// governor is off so a quality step-down cannot hide a rising frame cost. god+autoplay keeps the run alive through
-// GRIDLOCK into the next run. Samples every 30 s of wall clock once gameplay has started:
+// Phone profile (393×852 @3x, iOS Safari UA), WebGL2, the sim driven from here (?test — headless Chromium
+// stalls requestAnimationFrame, so a wall-clock rAF loop does not play). Game ticks at 30 Hz; a couple of
+// real scene frames are rasterized per sample (SwiftShader cannot sustain 30 fps at phone resolution):
+//   ?test&webgl&lowmem&god&autoplay&nointro&governor=0
+// governor stays off (test mode never installs it) so a quality step-down cannot hide a rising frame cost.
+// god+autoplay keeps the run alive through GRIDLOCK into the next run. Samples every 30 s of game time:
 //   frame callback time (mean / p95 of the game loop), draw calls, triangles,
 //   renderer.info.memory geometries / textures / programs / render targets,
 //   scene object count, live Web Audio nodes (WeakRefs; created − collected),
@@ -46,7 +48,7 @@ const server = http.createServer((req, res) => {
   });
 });
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
-const url = `http://127.0.0.1:${server.address().port}${BASE_PATH}?webgl&lowmem&god&autoplay&nointro&autostart&governor=0`;
+const url = `http://127.0.0.1:${server.address().port}${BASE_PATH}?test&webgl&lowmem&god&autoplay&nointro&governor=0`;
 
 const logPath = path.join(outDir, 'probe.log');
 fs.writeFileSync(logPath, '');
@@ -89,13 +91,40 @@ await ctx.addInitScript(() => {
     proto.texSubImage2D = function (...a) { G.texSubImage2D++; return ts.apply(this, a); };
     const ti = proto.texImage2D;
     proto.texImage2D = function (...a) { G.texImage2D++; return ti.apply(this, a); };
+    for (const k of ['drawArrays', 'drawElements', 'drawArraysInstanced', 'drawElementsInstanced']) {
+      const f = proto[k];
+      if (!f) continue;
+      G[k] = 0;
+      proto[k] = function (...a) { G[k]++; return f.apply(this, a); };
+    }
+    if (window.__glDebug) {
+      G.glErrors = [];
+      const note = function (fn, name) {
+        const f = proto[fn];
+        if (!f) return;
+        proto[fn] = function (...a) {
+          const r = f.apply(this, a);
+          if (G.glErrors.length < 12) {
+            const e = this.getError();
+            if (e) G.glErrors.push(name + ':' + e);
+          }
+          return r;
+        };
+      };
+      note('drawElements', 'drawElements');
+      note('drawArrays', 'drawArrays');
+      note('drawElementsInstanced', 'drawElementsInstanced');
+      note('drawArraysInstanced', 'drawArraysInstanced');
+    }
   }
+  const fontSeen = new Set();
+  window.__fontKeys = () => fontSeen.size;
   const c2 = window.CanvasRenderingContext2D && window.CanvasRenderingContext2D.prototype;
   if (c2) {
     const blur = Object.getOwnPropertyDescriptor(c2, 'shadowBlur');
     if (blur?.set) Object.defineProperty(c2, 'shadowBlur', { configurable: true, get() { return blur.get.call(this); }, set(v) { if (v) G.shadowBlur++; blur.set.call(this, v); } });
     const font = Object.getOwnPropertyDescriptor(c2, 'font');
-    if (font?.set) Object.defineProperty(c2, 'font', { configurable: true, get() { return font.get.call(this); }, set(v) { G.fontSet++; font.set.call(this, v); } });
+    if (font?.set) Object.defineProperty(c2, 'font', { configurable: true, get() { return font.get.call(this); }, set(v) { G.fontSet++; fontSeen.add(String(v)); font.set.call(this, v); } });
   }
   const refs = [];
   window.__audioLive = () => {
@@ -192,6 +221,7 @@ const snapshot = () => page.evaluate(() => {
     objects, meshes,
     enemies: g?.enemies?.list?.length ?? null,
     audioLive: window.__audioLive ? window.__audioLive() : null,
+    fontKeys: window.__fontKeys ? window.__fontKeys() : null,
     audioVoices: g?.audio?.voices?.length ?? null,
     audioState: g?.audio?.ctx?.state || 'none',
     pr: r ? +r.getPixelRatio().toFixed(2) : null,
@@ -207,26 +237,97 @@ const t0 = Date.now();
 const wall = () => ((Date.now() - t0) / 1000).toFixed(0);
 log(wall() + 's', 'loading');
 await page.goto(url, { waitUntil: 'domcontentloaded' });
-await page.waitForFunction(() => window.__game?.game?.state === 'playing', null, { timeout: 900000 });
-// A real gesture so the AudioContext actually runs (play() is a no-op while suspended).
-await page.mouse.click(200, 400);
-await page.waitForTimeout(500);
-await page.evaluate(() => window.__game?.game?.audio?.unlock?.());
+await page.waitForFunction(() => window.__game?.game?.state === 'title', null, { timeout: 900000 });
+// The tap is the user gesture AudioContext needs; the button starts the run.
+await page.tap('#btn-play', { force: true }).catch(() => page.evaluate(() => window.__game.start()));
+await page.waitForFunction(() => window.__game?.game?.state === 'playing', null, { timeout: 120000 });
 log(wall() + 's', 'PLAYING', JSON.stringify(await snapshot()), 'rss', JSON.stringify(rss()));
+await page.evaluate(() => window.__game?.game?.world?.renderer?.backend?.gl?.finish?.());
 
-let lastGL = {};
+// SwiftShader takes ~4.5 s for one phone-resolution frame, so a 30 fps soak cannot run for 15 min.
+// Step every tick (gameplay, audio, overlay at 30 Hz). Rasterize FULL_FRAMES real scene frames at
+// the end of each sample and fold one gl.finish() into that frame time.
+// The renderer's rAF is what advances NodeFrame and resets info. It cannot run inside this
+// synchronous loop, and without a new frame id the post pipeline reuses the scene pass and only
+// draws the output quad. Match Animation.start on each full frame: reset info, then advance the frame.
+const DT = 1 / 30;
+const FULL_FRAMES = Math.max(1, +(process.env.FULL_FRAMES || 3));
+log('full frames per sample', FULL_FRAMES);
+const drive = (frames) => page.evaluate(async ({ frames, fullFrames }) => {
+  const g = window.__game;
+  const dts = [];
+  let err = null;
+  let ticks = 0;
+  const gl0 = { ...(window.__glStats || {}) };
+  const renderer = g.game?.world?.renderer;
+  const glCtx = renderer?.backend?.gl;
+  const nodeFrame = renderer?._nodes?.nodeFrame;
+  const vfx = g.game?.vfx;
+  const cam = g.game?.cam?.camera;
+  const firstFull = Math.max(0, frames - fullFrames);
+  for (let i = 0; i < frames; i++) {
+    try {
+      g.step(1 / 30, 1 / 30);
+      ticks++;
+      if (i >= firstFull) {
+        renderer?.info?.reset?.();
+        nodeFrame?.update?.();
+        glCtx?.finish?.();
+        const a = performance.now();
+        g.render();
+        glCtx?.finish?.();
+        dts.push(performance.now() - a);
+      } else if (vfx && cam) {
+        vfx.drawOverlay(cam, g.game.enemies?.dangers);
+      }
+    } catch (e) { err = String(e?.stack || e).slice(0, 240); break; }
+  }
+  dts.sort((x, y) => x - y);
+  const mid = Math.floor(dts.length / 2);
+  const wallMean = dts.length ? (dts.length % 2 ? dts[mid] : (dts[mid - 1] + dts[mid]) / 2) : 0;
+  const mean = dts.reduce((s, v) => s + v, 0) / (dts.length || 1);
+  const gl = window.__glStats || {};
+  const dgl = {};
+  for (const k of Object.keys(gl)) dgl[k] = (gl[k] || 0) - (gl0[k] || 0);
+  const api = window.__game;
+  const game = api?.game;
+  const w = game?.world;
+  const info = w?.renderer?.info;
+  if (typeof window.gc === 'function') { try { window.gc(); } catch { /* ignore */ } }
+  let objects = 0;
+  if (w?.scene) w.scene.traverse(() => { objects++; });
+  return {
+    n: ticks, rendered: dts.length, mean: wallMean, cpuMs: mean, p95: dts[Math.min(dts.length - 1, Math.floor(dts.length * 0.95))] || 0, err, dgl,
+    fontKeys: window.__fontKeys ? window.__fontKeys() : 0,
+    state: game?.state, time: game ? +game.director.time.toFixed(1) : 0, beat: game?.director.beat?.id,
+    drawCalls: info?.render?.drawCalls ?? null, triangles: info?.render?.triangles ?? null,
+    glDraws: (dgl.drawArrays || 0) + (dgl.drawElements || 0) + (dgl.drawArraysInstanced || 0) + (dgl.drawElementsInstanced || 0),
+    geometries: info?.memory?.geometries ?? null, textures: info?.memory?.textures ?? null,
+    programs: info?.memory?.programs ?? null, renderTargets: info?.memory?.renderTargets ?? null,
+    gpuMB: info ? +(info.memory.total / 1048576).toFixed(1) : null,
+    objects, enemies: game?.enemies?.list?.length ?? null,
+    audioLive: window.__audioLive ? window.__audioLive() : null,
+    audioVoices: game?.audio?.voices?.length ?? null, audioState: game?.audio?.ctx?.state || 'none',
+    pr: w?.renderer ? +w.renderer.getPixelRatio().toFixed(2) : null,
+    heapMB: performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1048576) : null,
+    stream: w?.stream?.info?.() || null,
+    glErrors: (window.__glStats && window.__glStats.glErrors) || null
+  };
+}, { frames, fullFrames: FULL_FRAMES });
+
 const rows = [];
 let hiddenDone = false;
-const playT0 = Date.now();
-while ((Date.now() - playT0) / 1000 < SECONDS) {
-  const elapsed = (Date.now() - playT0) / 1000;
-  const wait = Math.min(SAMPLE_S, SECONDS - elapsed);
-  if (wait > 0.2) await page.waitForTimeout(wait * 1000);
-  if (page.isClosed()) break;
-  if (HIDE_AT && !hiddenDone && elapsed + wait >= HIDE_AT) {
+let gameT = 0;
+while (gameT < SECONDS) {
+  const frames = Math.round(Math.min(SAMPLE_S, SECONDS - gameT) / DT);
+  const driven = await drive(frames);
+  if (driven.err) log(wall() + 's', '[step error]', driven.err);
+  if (!driven.n) { log(wall() + 's', 'no ticks, stopping'); break; }
+  gameT += driven.n * DT;
+  if (HIDE_AT && !hiddenDone && gameT >= HIDE_AT) {
     hiddenDone = true;
     const before = await snapshot();
-    log(wall() + 's', 'HIDE before', JSON.stringify({ frameMs: before.frameMs, audioLive: before.audioLive, programs: before.programs, objects: before.objects, drawCalls: before.drawCalls, audioState: before.audioState }));
+    log(wall() + 's', 'HIDE before', JSON.stringify({ frameMs: before.frameMs, audioLive: before.audioLive, fontKeys: before.fontKeys, programs: before.programs, objects: before.objects, drawCalls: before.drawCalls, audioState: before.audioState }));
     try {
       const cdp = await ctx.newCDPSession(page);
       await cdp.send('Page.setWebLifecycleState', { state: 'frozen' });
@@ -242,27 +343,34 @@ while ((Date.now() - playT0) / 1000 < SECONDS) {
     });
     await page.waitForTimeout(1500);
     const after = await snapshot();
-    log(wall() + 's', 'HIDE after', JSON.stringify({ frameMs: after.frameMs, audioLive: after.audioLive, programs: after.programs, objects: after.objects, drawCalls: after.drawCalls, audioState: after.audioState, hidden: after.hidden }));
+    log(wall() + 's', 'HIDE after', JSON.stringify({ frameMs: after.frameMs, audioLive: after.audioLive, fontKeys: after.fontKeys, programs: after.programs, objects: after.objects, drawCalls: after.drawCalls, audioState: after.audioState, hidden: after.hidden }));
   }
-  const s = await snapshot();
   const m = rss();
-  const dgl = {};
-  for (const k of Object.keys(s.gl || {})) dgl[k] = (s.gl[k] || 0) - (lastGL[k] || 0);
-  lastGL = s.gl || {};
+  const dgl = driven.dgl || {};
   const row = {
-    t: +((Date.now() - playT0) / 1000).toFixed(0),
-    ...m, ...s,
-    glDelta: dgl
+    t: +gameT.toFixed(0),
+    frameMs: +driven.mean.toFixed(2),
+    frameP95: +driven.p95.toFixed(2),
+    frameN: driven.n,
+    rendered: driven.rendered,
+    ...m,
+    state: driven.state, time: driven.time, beat: driven.beat,
+    drawCalls: driven.drawCalls, glDraws: driven.rendered ? Math.round(driven.glDraws / driven.rendered) : null, triangles: driven.triangles,
+    geometries: driven.geometries, textures: driven.textures, programs: driven.programs,
+    renderTargets: driven.renderTargets, gpuMB: driven.gpuMB, objects: driven.objects,
+    enemies: driven.enemies, audioLive: driven.audioLive, audioVoices: driven.audioVoices,
+    audioState: driven.audioState, pr: driven.pr, heapMB: driven.heapMB, stream: driven.stream,
+    fontKeys: driven.fontKeys, glDelta: dgl
   };
-  delete row.gl;
   rows.push(row);
   log(wall() + 's', `t=${row.t}`, JSON.stringify({
-    game: row.time, state: row.state, frameMs: row.frameMs, p95: row.frameP95, frames: row.frameN,
-    draws: row.drawCalls, tris: row.triangles, obj: row.objects, geo: row.geometries, tex: row.textures,
+    game: row.time, state: row.state, frameMs: row.frameMs, p95: row.frameP95, ticks: row.frameN, rendered: row.rendered,
+    draws: row.drawCalls, glDraws: row.glDraws, tris: row.triangles, obj: row.objects, geo: row.geometries, tex: row.textures,
     prog: row.programs, rt: row.renderTargets, audio: row.audioLive, voices: row.audioVoices, audioState: row.audioState,
     heap: row.heapMB, pr: row.pr, rss: m, gpuMB: row.gpuMB, enemies: row.enemies,
     bufData: dgl.bufferData, bufSub: dgl.bufferSubData, texSub: dgl.texSubImage2D, texImg: dgl.texImage2D,
-    newBuf: dgl.createBuffer, delBuf: dgl.deleteBuffer, newProg: dgl.createProgram, shadow: dgl.shadowBlur, font: dgl.fontSet,
+    newBuf: dgl.createBuffer, delBuf: dgl.deleteBuffer, newProg: dgl.createProgram, shadow: dgl.shadowBlur, font: dgl.fontSet, fontKeys: row.fontKeys,
+    glErrors: driven.glErrors,
     stream: row.stream && { res: row.stream.resident, adds: row.stream.adds, drops: row.stream.drops }
   }));
 }
@@ -275,7 +383,7 @@ for (const key of Object.keys(TRENDS)) {
 }
 const fails = Object.entries(trend).filter(([, v]) => v.status === 'FAIL').map(([k]) => k);
 fs.writeFileSync(path.join(outDir, 'samples.json'), JSON.stringify({ engine, url, seconds: SECONDS, warmup, rows, trend }, null, 1));
-const cols = ['t', 'frameMs', 'frameP95', 'drawCalls', 'triangles', 'objects', 'geometries', 'textures', 'programs', 'renderTargets', 'audioLive', 'heapMB', 'rend', 'gpu', 'gpuMB', 'pr', 'time'];
+const cols = ['t', 'frameMs', 'frameP95', 'drawCalls', 'triangles', 'objects', 'geometries', 'textures', 'programs', 'renderTargets', 'audioLive', 'fontKeys', 'heapMB', 'rend', 'gpu', 'gpuMB', 'pr', 'time'];
 fs.writeFileSync(path.join(outDir, 'samples.csv'), cols.join(',') + '\n' + rows.map((r) => cols.map((c) => r[c] ?? '').join(',')).join('\n') + '\n');
 fs.writeFileSync(path.join(outDir, 'trend.json'), JSON.stringify({ warmup, trend, fails }, null, 1));
 writeChart(path.join(outDir, 'chart.png'), rows);
@@ -296,6 +404,7 @@ function writeChart(file, rows) {
     ['geometries', 'geometries', [120, 220, 140]],
     ['textures', 'textures', [160, 140, 255]],
     ['audio nodes', 'audioLive', [255, 120, 60]],
+    ['font keys', 'fontKeys', [255, 220, 80]],
     ['heap MB', 'heapMB', [200, 200, 200]]
   ];
   const W = 960, H = series.length * 78 + 16, pad = 8;
