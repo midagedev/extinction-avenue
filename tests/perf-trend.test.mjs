@@ -8,7 +8,7 @@ function series(key, values, t0 = 0) {
 
 test('thirds ignores warmup and splits the rest into equal ends', () => {
   const rows = series('audioLive', [1, 2, 10, 11, 12, 40, 41, 42]);
-  const t = thirds(rows, 'audioLive', { warmup: 30 });
+  const t = thirds(rows, 'audioLive', { warmup: 60 });
   assert.ok(t);
   assert.equal(t.n, 2);
   assert.equal(t.first, 10.5);
