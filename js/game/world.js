@@ -25,22 +25,26 @@ import { Route } from './route.js';
 // gameplay-driven effects (hurt vignette + chromatic aberration, slow-motion desaturation, white flash).
 
 const QUALITY = {
-  // pixel ratio cap, SSR, shadows, bloom resolution
-  high: { pixelRatio: 1.5, ssr: true, shadows: true, bloomScale: 0.5 },
-  medium: { pixelRatio: 1.0, ssr: false, shadows: true, bloomScale: 0.5 },
-  low: { pixelRatio: 0.75, ssr: false, shadows: false, bloomScale: 0.35 },
+  // pixel ratio cap, SSR, shadows, bloom resolution, MSAA samples of the scene pass (the canvas itself only receives
+  // the post-processing quad, so it never multisamples), sharpen = contrast-adaptive sharpening amount (0 = off)
+  high: { pixelRatio: 2.0, ssr: true, shadows: true, bloomScale: 0.5, samples: 4, sharpen: 0 },
+  medium: { pixelRatio: 1.25, ssr: false, shadows: true, bloomScale: 0.5, samples: 4, sharpen: 0.25 },
+  low: { pixelRatio: 0.75, ssr: false, shadows: false, bloomScale: 0.35, samples: 0, sharpen: 0.3 },
   // Phones / low-memory devices (js/device-profile.js LOWMEM): no SSR targets, a small bloom chain, and cheap sun
-  // shadows near the cab only: 1024² cascades over the first ~140 m (vs 3072² over 300+ m), no shadow stand-ins.
-  // The streamed city (city-stream.js) paid for the pixel ratio and the shadows; js/game/quality-governor.js steps
-  // them back down when frames run long.
-  phone: { pixelRatio: 1.6, ssr: false, shadows: true, shadowMap: 1024, shadowFar: 140, bloomScale: 0.35 }
+  // shadows near the cab only: 1024² cascades over the first ~120 m, no shadow stand-ins. A sharp picture comes first:
+  // 2.2× pixel ratio (≈ 54 % of an iPhone's 3× pixels; 1.6× was 28 % and read as blurry) with 2× MSAA on the scene
+  // pass and a light sharpening pass. js/game/quality-governor.js gives up shadows and stream reach before resolution
+  // when frames run long, and never drops below 1.5×.
+  phone: { pixelRatio: 2.2, ssr: false, shadows: true, shadowMap: 1024, shadowFar: 120, bloomScale: 0.35, samples: 2, sharpen: 0.35 }
 };
 
 const LOOKS = {
-  // Twilight "neon Cretaceous": cool blue hour with saturated emissive accents
-  twilight: { exposure: 1.1, contrast: 1.14, saturation: 1.12, balance: [1.0, 0.99, 1.04], bloom: 0.55, threshold: 0.95 },
-  midnight: { exposure: 1.18, contrast: 1.12, saturation: 1.12, balance: [0.98, 1.0, 1.05], bloom: 0.6, threshold: 0.85 },
-  golden: { exposure: 1.04, contrast: 1.12, saturation: 1.1, balance: [1.045, 1.0, 0.955], bloom: 0.42, threshold: 1.1 }
+  // Twilight "neon Cretaceous": cool blue hour with saturated emissive accents. Bloom thresholds sit above what lit
+  // surfaces reach (sky, sunlit facades, the wet street), so only emissives bloom — tracers, muzzle flashes,
+  // explosions, lamps, creature eyes — instead of a low-resolution haze over the whole frame.
+  twilight: { exposure: 1.1, contrast: 1.16, saturation: 1.14, balance: [1.0, 0.99, 1.03], bloom: 0.3, threshold: 1.45 },
+  midnight: { exposure: 1.18, contrast: 1.14, saturation: 1.14, balance: [0.98, 1.0, 1.04], bloom: 0.34, threshold: 1.3 },
+  golden: { exposure: 1.04, contrast: 1.14, saturation: 1.12, balance: [1.04, 1.0, 0.96], bloom: 0.28, threshold: 1.6 }
 };
 
 function createGamePost(renderer, sceneColor, reflections, quality) {
@@ -59,27 +63,41 @@ function createGamePost(renderer, sceneColor, reflections, quality) {
     danger: uniform(0) // boss red pulse at the edges
   };
 
-  // Chromatic aberration: sample R and B with a radial offset (sceneColor is the pass texture node)
+  // Chromatic aberration only as a damage pulse (u.aberration is kicked by each hit the cab takes and decays): R and
+  // B sampled with a radial offset (sceneColor is the pass texture node). Zero offset = a plain, sharp frame.
   const centered = screenUV.sub(0.5);
-  const caAmt = u.hurt.mul(0.006).add(u.aberration.mul(0.012)).add(0.0006);
-  const off = centered.mul(caAmt);
-  const r = sceneColor.sample(screenUV.add(off)).r;
-  const b = sceneColor.sample(screenUV.sub(off)).b;
-  const base = vec3(r, sceneColor.g, b);
+  const off = centered.mul(u.aberration.mul(0.012));
+  let base = vec3(sceneColor.sample(screenUV.add(off)).r, sceneColor.g, sceneColor.sample(screenUV.sub(off)).b);
+  if (quality.sharpen > 0) {
+    // Contrast-adaptive sharpening (after AMD FidelityFX CAS): the 4 neighbours' local contrast sets a negative-lobe
+    // weight, so edges blurred by the browser's upscale of a sub-native canvas get crisp without ringing on flat areas
+    const texel = vec2(1).div(screenSize);
+    const n = sceneColor.sample(screenUV.add(vec2(0, texel.y))).rgb, s = sceneColor.sample(screenUV.sub(vec2(0, texel.y))).rgb;
+    const e = sceneColor.sample(screenUV.add(vec2(texel.x, 0))).rgb, w = sceneColor.sample(screenUV.sub(vec2(texel.x, 0))).rgb;
+    const c = sceneColor.rgb;
+    // weights from a tone-compressed copy (HDR highlights would otherwise saturate them)
+    const tc = (v) => v.div(v.add(1));
+    const mn = min(min(min(tc(n), tc(s)), min(tc(e), tc(w))), tc(c));
+    const mx = max(max(max(tc(n), tc(s)), max(tc(e), tc(w))), tc(c));
+    const amp = min(mn, vec3(1).sub(mx)).div(max(mx, 1e-4)).clamp(0, 1).sqrt();
+    const wgt = amp.mul(float(-1).div(mix(8.0, 5.0, quality.sharpen)));
+    const sharp = c.add(n.add(s).add(e).add(w).mul(wgt)).div(wgt.mul(4).add(1));
+    base = max(base.add(sharp.sub(c)), vec3(0));
+  }
   const scene = reflections ? base.add(reflections.rgb) : base;
   const exposed = max(scene, vec3(0)).mul(u.exposure).mul(u.balance);
   const peak = max(max(exposed.r, exposed.g), exposed.b);
   const bloomInput = vec4(exposed.mul(float(10.0).div(max(peak, 10.0))), 1.0);
-  const bloomPass = bloom(bloomInput, 0.5, 0.45, 0.95);
+  const bloomPass = bloom(bloomInput, 0.3, 0.1, 1.45); // small radius: tight halos around emissives, no full-frame haze
   bloomPass.smoothWidth.value = 0.35;
   bloomPass.setResolutionScale(quality.bloomScale);
 
   const outputNode = Fn(() => {
     const color = exposed.add(bloomPass.rgb).toVar();
     const luma = dot(color, vec3(0.2126, 0.7152, 0.0722)).toVar();
-    // Teal shadows / warm highlights split tone
-    const shadows = mix(vec3(0.94, 1.0, 1.07), vec3(1), smoothstep(0.02, 0.5, luma));
-    const highlights = mix(vec3(1), vec3(1.05, 1.0, 0.94), smoothstep(0.6, 3.0, luma));
+    // Teal shadows / warm highlights split tone (light: the street's darks stay neutral enough to separate creatures)
+    const shadows = mix(vec3(0.975, 1.0, 1.035), vec3(1), smoothstep(0.02, 0.5, luma));
+    const highlights = mix(vec3(1), vec3(1.03, 1.0, 0.965), smoothstep(0.6, 3.0, luma));
     color.mulAssign(shadows.mul(highlights));
     color.mulAssign(pow(max(luma, 0.0001).div(0.18), u.contrast.sub(1.0)));
     const gray = dot(color, vec3(0.2126, 0.7152, 0.0722));
@@ -88,7 +106,7 @@ function createGamePost(renderer, sceneColor, reflections, quality) {
 
     const aspect = screenSize.x.div(screenSize.y);
     const radius = length(screenUV.sub(0.5).mul(vec2(aspect, 1))).div(length(vec2(aspect, 1).mul(0.5)));
-    const vignette = float(1).sub(smoothstep(0.3, 1.0, radius).mul(float(0.28).add(u.desat.mul(0.25))));
+    const vignette = float(1).sub(smoothstep(0.45, 1.05, radius).mul(float(0.14).add(u.desat.mul(0.3))));
     color.mulAssign(vignette);
     // Hurt / danger edge glow
     const edge = smoothstep(0.45, 1.05, radius);
@@ -120,8 +138,9 @@ async function createWorld(container, camera, { quality: qualityId = 'high', for
   const quality = { ...(QUALITY[qualityId] || QUALITY.high) };
   const shadowParam = new URLSearchParams(location.search).get('shadows'); // ?shadows=0|1 overrides the preset
   if (shadowParam === '0' || shadowParam === '1') quality.shadows = shadowParam === '1';
+  // No MSAA on the canvas: it only receives the post-processing quad. The scene pass multisamples (quality.samples).
   const renderer = new THREE.WebGPURenderer({
-    antialias: true,
+    antialias: false,
     powerPreference: 'high-performance',
     reversedDepthBuffer: true,
     forceWebGL
@@ -192,7 +211,9 @@ async function createWorld(container, camera, { quality: qualityId = 'high', for
     : null;
 
   // --- Post-processing --------------------------------------------------------------------------------------------
-  const scenePass = pass(scene, camera);
+  // (WebGPU only allows 1 or 4 samples; 2 is a WebGL2 / phone budget)
+  const samples = renderer.backend.isWebGPUBackend && quality.samples > 0 ? 4 : quality.samples;
+  const scenePass = pass(scene, camera, { samples });
   scenePass.renderTarget.storeMultisampledColorBuffer = false;
   let reflections = null;
   let sceneMRT = null;

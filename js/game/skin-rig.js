@@ -14,8 +14,10 @@ import {
 //
 // Shading (MeshStandardNodeMaterial, physically based): albedo texture (or baked flat colours) recoloured per species
 // by a luminance ramp, rest-pose-space stripes and countershading (so packs share one texture yet read as different
-// animals), per-instance tint, tangent-space normal map (or a procedural scale bump for untextured models), a cool
-// rim light so silhouettes read against the city, hit flash, elite rim and the stone (fossilise) blend.
+// animals), per-instance tint, tangent-space normal map (or a procedural scale bump for untextured models), hit flash,
+// elite rim and the stone (fossilise) blend. Readability against the grey-blue street (all emissive, no extra lights
+// or passes): a strong warm rim so silhouettes pop, a soft key from the camera side (the cab's floodlight) so the hide
+// colour reads even in shadow, and glowing eyes + a faint glow on the head, the weak point (findHead).
 // LOD1 (decimated mesh) is used for individuals that are small on screen; individuals outside the view are skipped.
 
 const _f = new THREE.Frustum();
@@ -24,6 +26,47 @@ const _s = new THREE.Sphere();
 const _q = new THREE.Quaternion();
 const _e = new THREE.Euler(0, 0, 0, 'YXZ');
 const _m = new THREE.Matrix4();
+
+/**
+ * Where the head is in a skinned model's rest pose: the vertices skinned ≥ 70 % to the head bone give the head's
+ * centre and radius, and the eye spot = the vertex nearest the upper, lateral, rear third of that box (creatures face
+ * +Z). Returns { c: [x,y,z], r, eye: [|x|,y,z], eyeR } or null (no head bone / too few vertices).
+ */
+function findHead(g, headBone) {
+  const pos = g?.getAttribute('position'), si = g?.getAttribute('skinIndex'), sw = g?.getAttribute('skinWeight');
+  if (headBone < 0 || !pos || !si || !sw || !pos.array.length) return null;
+  const pts = [];
+  for (let i = 0; i < pos.count; i++) {
+    let w = 0;
+    for (let k = 0; k < 4; k++) if (si.getComponent(i, k) === headBone) w += sw.getComponent(i, k);
+    if (w >= 0.7) pts.push(i);
+  }
+  if (pts.length < 30) return null;
+  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  for (const i of pts) for (let a = 0; a < 3; a++) { const v = pos.getComponent(i, a); lo[a] = Math.min(lo[a], v); hi[a] = Math.max(hi[a], v); }
+  const size = hi.map((h, a) => Math.max(1e-4, h - lo[a]));
+  const ax = Math.max(Math.abs(lo[0]), Math.abs(hi[0]), 1e-4);
+  // Sculpted eyeballs are the densest vertex clusters on the upper half of the head's sides; without one (too
+  // sparse), fall back to the upper, lateral, rear third of the head box
+  const big = Math.max(...size);
+  const rr = (big * 0.06) ** 2;
+  let best = -1, bd = Infinity, bestN = 0;
+  for (let k = 0; k < pts.length; k++) {
+    const i = pts[k];
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+    const s = Math.abs(x) / ax, u = (y - lo[1]) / size[1], f = (z - lo[2]) / size[2];
+    const d = (s - 0.9) ** 2 + (u - 0.8) ** 2 + (f - 0.4) ** 2;
+    if (bestN < 12 && d < bd) { bd = d; best = i; }
+    if (s < 0.35 || u < 0.4 || (k & 1)) continue;
+    let n = 0;
+    for (const j of pts) if ((pos.getX(j) - x) ** 2 + (pos.getY(j) - y) ** 2 + (pos.getZ(j) - z) ** 2 < rr) n++;
+    if (n > bestN && n >= 12) { bestN = n; best = i; }
+  }
+  return {
+    c: lo.map((l, a) => l + size[a] / 2), r: big * 0.62,
+    eye: [Math.abs(pos.getX(best)), pos.getY(best), pos.getZ(best)], eyeR: big * 0.06
+  };
+}
 
 class SkinnedCrowd {
   /**
@@ -59,6 +102,7 @@ class SkinnedCrowd {
     this.lookB = this.partIndex.get(this.alias('head')) ?? -1;
     this.jawBone = this.partIndex.get(this.alias('jaw')) ?? -1;
     const look = opts.look || model.def.skin.look || {};
+    this.head = findHead(model.geometries[0], this.lookB);
     this.lods = model.geometries.map((g, k) => this._makeLOD(g, look, k));
     if (opts.attachments?.length) this.attach = this._makeAttachment(opts.attachments);
     const h = model.height || 2;
@@ -156,15 +200,28 @@ class SkinnedCrowd {
       const grad = sign(det).mul(r1.mul(dhx).add(r2.mul(dhy)));
       mat.normalNode = normalize(abs(det).mul(N).sub(grad));
     }
-    // rim light (silhouettes against the street), hit flash, elite rim
+    // warm rim light (silhouettes against the street), camera-side key, eyes + head glow, hit flash, elite rim
     const viewDir = normalize(cameraPosition.sub(positionWorld));
-    const rim = pow(float(1).sub(max(dot(normalWorld, viewDir), 0)), 3.0);
-    const rimC = U(look.rim || [0.1, 0.14, 0.21]).mul(rim).mul(float(1).sub(stone));
+    const live = float(1).sub(stone);
+    const rim = pow(float(1).sub(max(dot(normalWorld, viewDir), 0)), 2.5);
+    const rimC = U(look.rim || [1.0, 0.52, 0.22]).mul(rim).mul(look.rimK ?? 0.8).mul(live);
+    // key: a light from just above-left of the camera, as albedo × N·L (emissive, so it costs no light in the clusters)
+    const key = max(dot(normalView, vec3(-0.3, 0.5, 0.81)), 0);
+    const keyC = col.mul(key.mul(look.key ?? 0.4)).mul(live);
+    let headC = vec3(0);
+    const hd = this.head;
+    if (hd) {
+      // eyes: two rest-space spots mirrored in x, hot enough to bloom; the head (weak point) a faint amber glow
+      const eyeD = length(vec3(abs(vRest.x), vRest.y, vRest.z).sub(vec3(hd.eye[0], hd.eye[1], hd.eye[2])));
+      const eye = smoothstep(hd.eyeR, hd.eyeR * 0.45, eyeD);
+      const headK = smoothstep(hd.r, hd.r * 0.55, length(vRest.sub(vec3(...hd.c))));
+      headC = U(look.eye || [3.4, 0.9, 0.08]).mul(eye).add(vec3(1.0, 0.5, 0.1).mul(headK.mul(rim.mul(0.35).add(0.03)))).mul(live);
+    }
     const eliteC = U([3.2, 0.5, 2.2]).mul(elite).mul(rim.mul(2.0).add(0.1));
     // attack telegraph (iTint.w): a pulsing red-hot rim + glow, separate from the white hit flash
     const tele = iTint.w;
     const teleC = vec3(1.0, 0.16, 0.06).mul(tele).mul(rim.mul(2.4).add(0.05));
-    mat.emissiveNode = rimC.add(vec3(1.0, 0.82, 0.68).mul(flash.mul(0.55))).add(eliteC).add(teleC);
+    mat.emissiveNode = rimC.add(keyC).add(headC).add(vec3(1.0, 0.82, 0.68).mul(flash.mul(0.55))).add(eliteC).add(teleC);
     return mat;
   }
 

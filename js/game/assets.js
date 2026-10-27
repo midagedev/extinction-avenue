@@ -50,17 +50,17 @@ const ASSET_MANIFEST = {
   // Creatures (capacity = max simultaneous individuals drawn). `skin` = rigged GLB drawn by skin-rig.js (instanced
   // skinning); without it (or if loading fails) the procedural placeholder rig is used.
   compy: { kind: 'rig', url: THEROPOD, placeholder: 'compy', capacity: 700, skin: theropod({
-    targetHeight: 0.63, radius: 0.3, morph: { head: 1.3, jaw: 1.3, neck2: [0.95, 0.95, 0.95], thighL: [1, 1.05, 1], thighR: [1, 1.05, 1] },
-    look: { ramp: [[0.03, 0.07, 0.015], [0.22, 0.4, 0.06], [0.78, 0.84, 0.42]], stripes: [10, 0.65], stripeColor: [0.18, 0.2, 0.1], belly: [1.6, 1.45, 1.05], roughness: 0.72 }
+    targetHeight: 0.78, radius: 0.36, morph: { head: 1.3, jaw: 1.3, neck2: [0.95, 0.95, 0.95], thighL: [1, 1.05, 1], thighR: [1, 1.05, 1] },
+    look: { ramp: [[0.05, 0.13, 0.0], [0.4, 0.72, 0.02], [0.7, 0.98, 0.18]], stripes: [10, 0.6], stripeColor: [0.22, 0.26, 0.08], belly: [1.45, 1.3, 1.0], roughness: 0.7, rim: [1.0, 0.85, 0.3], key: 0.5 }
   }) },
   raptor: { kind: 'rig', url: THEROPOD, placeholder: 'raptor', capacity: 240, skin: theropod({
-    targetHeight: 1.78, radius: 0.55, morph: { head: 1.06, jaw: 1.06 },
-    look: { ramp: [[0.07, 0.025, 0.01], [0.55, 0.23, 0.07], [0.96, 0.8, 0.52]], stripes: [7, 0.75], stripeColor: [0.22, 0.12, 0.08], belly: [1.55, 1.45, 1.25], roughness: 0.75 }
+    targetHeight: 1.95, radius: 0.6, morph: { head: 1.06, jaw: 1.06 },
+    look: { ramp: [[0.12, 0.025, 0.0], [0.86, 0.24, 0.02], [1.0, 0.5, 0.12]], stripes: [7, 0.7], stripeColor: [0.2, 0.08, 0.04], belly: [1.35, 1.3, 1.2], roughness: 0.72 }
   }) },
   brute: { kind: 'rig', url: THEROPOD, placeholder: 'brute', capacity: 48, skin: theropod({
     targetHeight: 3.28, radius: 1.05,
     morph: { root: [1.16, 1.1, 1], spine: [1.2, 1.14, 1], chest: [1.2, 1.14, 1], neck1: [1.18, 1.12, 1], neck2: [1.14, 1.08, 1], head: 1.16, jaw: 1.16, thighL: [1.14, 1.04, 1.14], thighR: [1.14, 1.04, 1.14], tail1: [1.12, 1.1, 1] },
-    look: { ramp: [[0.02, 0.025, 0.04], [0.19, 0.24, 0.3], [0.68, 0.72, 0.76]], blotch: [1.6, 0.55], blotchColor: [0.35, 0.36, 0.45], belly: [1.5, 1.45, 1.4], roughness: 0.78 }
+    look: { ramp: [[0.08, 0.005, 0.01], [0.62, 0.05, 0.06], [0.95, 0.28, 0.2]], blotch: [1.6, 0.55], blotchColor: [0.3, 0.12, 0.2], belly: [1.4, 1.5, 1.35], roughness: 0.74, rim: [1.0, 0.7, 0.3] }
   }) },
   // Hornwall: Quaternius' CC0 Triceratops (rig + 6 clips), refined by tools/lab/refine-quaternius.js (crease-aware
   // Loop subdivision ×2, 1.3k → 21k triangles, LOD1 5.3k); procedural hide detail in the shader
@@ -69,7 +69,7 @@ const ASSET_MANIFEST = {
     clips: { run: 'Triceratops_Run', walk: 'Triceratops_Walk', idle: 'Triceratops_Idle', bite: 'Triceratops_Attack', paw: 'Triceratops_Attack', pounce: 'Triceratops_Jump', death: 'Triceratops_Death' },
     once: ['bite', 'pounce', 'death'], speeds: { run: 24, walk: 7 },
     aliases: { body: 'Body', head: 'Head', neck: 'Neck', jaw: '_none' }, headCenter: [0, -0.5, 1.3],
-    look: { tint: [2.3, 2.15, 1.8], blotch: [1.5, 0.5], blotchColor: [0.55, 0.5, 0.42], stripes: [2.2, 0.4], stripeColor: [0.55, 0.48, 0.38], belly: [1.9, 1.75, 1.45], scaleFreq: 7, scaleBump: 0.03, roughness: 0.82 }
+    look: { tint: [1.7, 0.8, 2.6], blotch: [1.5, 0.5], blotchColor: [1.1, 0.75, 0.3], stripes: [2.2, 0.4], stripeColor: [0.45, 0.32, 0.55], belly: [1.5, 1.6, 1.1], scaleFreq: 7, scaleBump: 0.03, roughness: 0.8 }
   } },
   // Spiketail (id kept as 'ankylo'): no CC0 rigged ankylosaur exists, so Quaternius' CC0 Stegosaurus stands in —
   // refined like the Triceratops (2.3k → 36k triangles, LOD1 9k); its tail-swing clip is the telegraphed swipe
@@ -78,14 +78,14 @@ const ASSET_MANIFEST = {
     clips: { run: 'Stegosaurus_Run', walk: 'Stegosaurus_Walk', idle: 'Stegosaurus_Idle', bite: 'Stegosaurus_Attack', paw: 'Stegosaurus_Attack', pounce: 'Stegosaurus_Jump', death: 'Stegosaurus_Death' },
     once: ['bite', 'pounce', 'death'], speeds: { run: 26, walk: 7 },
     aliases: { body: 'Body', head: 'Head', neck: 'Neck', jaw: '_none' }, headCenter: [0, -0.2, 0.7],
-    look: { tint: [1.35, 1.3, 1.25], blotch: [1.3, 0.5], blotchColor: [0.5, 0.42, 0.34], stripes: [3, 0.35], stripeColor: [0.55, 0.45, 0.38], belly: [1.8, 1.7, 1.45], scaleFreq: 8, scaleBump: 0.03, roughness: 0.82 }
+    look: { tint: [0.2, 1.4, 1.95], blotch: [1.3, 0.5], blotchColor: [1.6, 0.6, 0.35], stripes: [3, 0.35], stripeColor: [0.5, 0.35, 0.3], belly: [2.2, 1.4, 1.2], scaleFreq: 8, scaleBump: 0.03, roughness: 0.8 }
   } },
   // Skyreaver: no CC0 rigged pterosaur exists — a high-detail procedural model (tools/lab/build-ptero.js, 17.5k
   // triangles, smooth lofted body / beak / crest, membrane wings) with procedural flight clips
   ptero: { kind: 'rig', url: 'assets/models/pterosaur.glb', placeholder: 'ptero', capacity: 40, skin: {
     clips: 'pterosaur', ground: false, targetWidth: 6.4, height: 0.86, radius: 1.2, feet: [], lodK: 1e9,
     aliases: { body: 'root' }, headCenter: [0, -0.02, 0.3],
-    look: { tint: [1.2, 1.15, 1.25], stripes: [18, 0.4], stripeColor: [0.45, 0.3, 0.42], blotch: [3, 0.4], blotchColor: [0.6, 0.45, 0.6], belly: [2.2, 1.9, 2.1], scaleFreq: 14, scaleBump: 0.005, roughness: 0.66, rim: [0.16, 0.1, 0.2] }
+    look: { tint: [1.9, 0.75, 1.5], stripes: [18, 0.4], stripeColor: [0.45, 0.2, 0.35], blotch: [3, 0.4], blotchColor: [0.9, 0.5, 0.3], belly: [1.6, 1.9, 1.7], scaleFreq: 14, scaleBump: 0.005, roughness: 0.66, rim: [1.0, 0.6, 0.35] }
   } },
   // GRIDLOCK: the same sculpt as a T. rex — huge head, short thick neck, tiny arms, heavier body, dark olive hide
   trex: { kind: 'rig', url: THEROPOD, placeholder: 'trex', capacity: 1, skin: theropod({
@@ -95,7 +95,7 @@ const ASSET_MANIFEST = {
       head: [1.48, 1.44, 1.38], jaw: [1.48, 1.44, 1.38], armL: 0.42, foreL: 0.42, handL: 0.42, armR: 0.42, foreR: 0.42, handR: 0.42,
       tail1: [1.16, 1.12, 1.02], tail2: [1.1, 1.08, 1.02], thighL: [1.12, 1.03, 1.12], thighR: [1.12, 1.03, 1.12]
     },
-    look: { ramp: [[0.025, 0.03, 0.018], [0.19, 0.18, 0.1], [0.66, 0.56, 0.36]], blotch: [1.1, 0.6], blotchColor: [0.45, 0.42, 0.34], stripes: [3.2, 0.35], stripeColor: [0.4, 0.38, 0.3], belly: [1.7, 1.5, 1.15], roughness: 0.74, rim: [0.16, 0.18, 0.26] }
+    look: { ramp: [[0.04, 0.045, 0.015], [0.36, 0.33, 0.1], [0.85, 0.7, 0.4]], blotch: [1.1, 0.6], blotchColor: [0.42, 0.3, 0.2], stripes: [3.2, 0.35], stripeColor: [0.3, 0.22, 0.12], belly: [1.6, 1.45, 1.15], roughness: 0.72, rimK: 0.6, eye: [4.5, 1.2, 0.2] }
   }) },
 
   // Pickups
