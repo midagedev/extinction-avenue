@@ -152,11 +152,12 @@ class Game {
 
   /** WebGPU device lost / erroring: reload on WebGL2 (never loops — on WebGL2 already this becomes a fatal error) */
   gpuFallback(reason) {
-    if (this.dead) return;
+    // Allowed over an error screen: a dying device often throws (shown by fatal()) before device.lost resolves
+    if (this.fallingBack) return;
     const url = fallbackURL(location.href, { autostart: this.runRequested });
     if (!url) { this.fatal(`Graphics error (${reason}).`); return; }
     console.warn(`[webgpu] ${reason} — restarting on WebGL2`);
-    this.dead = true;
+    this.fallingBack = this.dead = true;
     try { this.world?.renderer.setAnimationLoop(null); } catch { /* ignore */ }
     showLoadingScreen('Graphics driver reset — restarting in compatibility mode (WebGL2)…');
     setTimeout(() => location.replace(url), 1200);
