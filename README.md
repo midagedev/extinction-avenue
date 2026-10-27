@@ -59,16 +59,16 @@ older ones) and then shows *"A problem repeatedly occurred on this page"*. The g
 around START. `js/device-profile.js` (`detectProfile`, unit-tested) now turns on a **low-memory profile** for iOS,
 iPadOS (including iPads that report themselves as a Mac), Android / mobile browsers and `navigator.deviceMemory` ≤ 4:
 
-- **Graphics:** the *Phone* preset: 1.6× pixel ratio, no SSR, bloom at 0.35× resolution, and sun shadows near the cab:
-  1024² cascades over the first 140 m, cast only by the cab and the creatures and received only by the street (asphalt,
-  sidewalks). Letting every city material cast/receive would cost ~160 MB of JS heap in three.js shader builds; this
+- **Graphics:** the *Phone* preset: 2.2× pixel ratio (see *Screen clarity* below), 2× MSAA on the scene pass, a light
+  sharpening pass, no SSR, bloom at 0.35× resolution, and sun shadows near the cab: 1024² cascades over the first
+  120 m, cast only by the cab and received only by the street (asphalt, sidewalks). Letting every city material cast/receive would cost ~160 MB of JS heap in three.js shader builds; this
   costs ~12 MB. A saved High / Medium setting becomes Phone; the settings menu offers Phone and Low. `?shadows=0|1`
   overrides the preset.
 - **Quality governor** (`js/game/quality-governor.js`): while playing, when 3 s windows of frames run slower than
   ~36 fps, when the JS heap passes 70 % of its limit (where the browser reports it) or when the renderer's own GPU
-  allocations pass 260 MB (iOS has no memory API, so the budget is counted), it steps down one notch at a time: pixel
-  ratio 1.35 → 1.15 → 1.0, shadows off, city stream window 70 % → 50 %. It never steps back up. `?governor=0` turns it
-  off.
+  allocations pass 260 MB (iOS has no memory API, so the budget is counted), it steps down one notch at a time:
+  shadows off, city stream window 70 %, pixel ratio 1.85, stream window 50 %, pixel ratio 1.5 — resolution goes last
+  and never below 1.5×. It never steps back up. `?governor=0` turns it off.
 - **City chunk streaming** (`js/game/city-stream.js`): after the build, the static city is cut into 200 m cells
   (instanced meshes split by instance, big merged meshes split by triangle). Only the cells in a window along the
   cab's route are in the scene and on the GPU: 900 m behind the cab (the gunner looks back down the street), 450 m
@@ -117,6 +117,32 @@ ArrayBuffers, measured with a heap snapshot); the rest is the browser itself in 
 these RSS numbers are an upper bound for what an iPhone's WebContent process holds.
 Playwright WebKit with `devices['iPhone 15']` (`node tools/e2e-webkit.mjs <outDir> iphone`) reaches gameplay from START
 with the profile, Phone quality and streaming on and no page errors. A real iPhone still hasn't been measured.
+
+### Screen clarity
+
+Players (real iPhone and desktop) found the picture *"too blurry / milky — I can barely see the enemies."* Measured
+with the QA loop's fixed-seed shots (`tools/qa-shots.mjs`), the causes were, in order of impact:
+
+1. **Bloom as a veil.** Threshold 0.95 / strength 0.55 / radius 0.45 bloomed every lit surface (sky, sunlit facades, the
+   wet street, the cab right under the camera) through a low-resolution chain, so a haze lay over the whole frame. On
+   the phone, switching bloom off dropped the street's dark floor from luma 83 to 2. Now threshold 1.45, strength 0.3,
+   radius 0.1: only emissives bloom (tracers, muzzle flashes, explosions, lamps, creature eyes), in tight halos.
+2. **Phone resolution.** 1.6× on a 3× iPhone is 28 % of the screen's pixels. Now 2.2× (54 %) plus contrast-adaptive
+   sharpening in the post pass (it pre-compensates the blur of the browser's upscale); the governor gives up shadows and stream reach before resolution and stops
+   at 1.5×. Desktop High caps at 2× (was 1.5×).
+3. **Dinosaurs the colour of the street.** Dark olive / grey-blue / maroon hides and a weak navy rim. Now saturated
+   species colours against the grey-blue city (lime compy, orange raptor, crimson brute, violet Hornwall, teal
+   Spiketail, magenta Skyreaver, bronze GRIDLOCK), a strong warm rim, a soft camera-side key, glowing eyes (found on
+   each sculpt's eyeballs) and a faint glow on the head, the weak point. Compys are 24 % and raptors 10 % taller. All
+   of it is in the one instanced skinning shader: no extra lights, passes or draw calls.
+4. Smaller softeners: a constant chromatic aberration (now only the damage pulse), a 0.28 vignette (0.14) and a heavy
+   split tone (lighter). Fog was not a cause and is unchanged.
+
+Memory paid for itself: the canvas no longer multisamples (it only receives the post-processing quad; the scene pass
+carries the MSAA, 2× on phones), which offsets the larger phone render targets. Numbers: see the table below and
+`tools/qa-baselines/`.
+
+<!-- clarity-table -->
 
 ## Controls
 
@@ -218,7 +244,8 @@ js/game/              the game
   game.js             entry point, state machine (title → intro → play → continue → results), scoring, aim ray, share
   world.js            renderer + city + post-processing (bloom, grade, CA, hurt/danger edges)
   city-stream.js      phones: the static city in 200 m cells, only the window along the cab's route resident
-  quality-governor.js phones: steps pixel ratio / shadows / stream window down under frame-time or memory pressure
+  quality-governor.js phones: steps shadows / stream window / pixel ratio down under frame-time or memory pressure
+  quality-presets.js  graphics presets (pixel ratio, MSAA, sharpen, shadows, bloom scale) and time-of-day looks
   assets.js           THE ASSET MANIFEST (GLB files, species skins: morphs, clips, looks)
   skin-model.js       GLB → skinned model; bakes GLB clips / procedural keyframes (FK + bone-scale morphs) to matrices
   skin-rig.js         GPU-instanced skinning (one draw call per species & LOD), PBR creature material
@@ -248,9 +275,24 @@ tools/audio/          audio lab: music.js (CC0 track prep + original sting / hea
 
 ## Testing
 
+**Run the QA loop before every push** (see also `CLAUDE.md`):
+
+```bash
+node tools/qa.mjs                  # syntax + unit tests + page errors + fixed-seed shots with readability metrics vs tools/qa-baselines + WebKit iPhone e2e
+node tools/qa.mjs --soak           # + the phone memory soak (needed for anything touching render targets, resolution, shadows, streaming, audio buffers)
+node tools/qa.mjs --url https://midagedev.github.io/extinction-avenue/   # the deployed build
+node tools/qa.mjs --steps shots --only phone [--update-baselines]       # one profile; refresh the baseline after a deliberate visual change
+```
+
+It prints a PASS / WARN / FAIL table (sharpness, street veil, luma spread, creature-vs-street contrast, silhouette edge,
+enemy size in px, pixel ratio, page errors, WebKit checks, memory peaks) and exits 1 on a FAIL. Artifacts go to
+`.tools/qa/<timestamp>/`.
+
+The individual drivers:
+
 ```bash
 node --experimental-vm-modules tools/check-syntax.mjs     # parse every game module
-node --test tests/                                         # unit tests (137: the city's 113 + backend choice / fallback URLs + phone profile / stream window)
+node --test tests/                                         # unit tests (142: the city's 113 + backend choice / fallback URLs + phone profile / stream window + quality presets / governor)
 npm i -D playwright && npx playwright install chromium     # once (or keep it in .tools/node_modules)
 python3 -m http.server 8123 &
 node tools/e2e-v2.mjs smoke  ./shots          # title → start → 20 s of bot play → first-person screenshot
@@ -263,6 +305,7 @@ python3 -I tools/lab/compare.py ./shots ./cmp # BEFORE / AFTER side-by-sides
 node tools/perf-creatures.mjs                 # 40 animated dinosaurs: draw calls, triangles, CPU pose cost
 node tools/e2e-audio.mjs ./shots              # audio (30 checks): gesture-only AudioContext, settings persistence across reloads, cue transitions (run/boss/victory/continue/game over), phone memory budget, voice cap, master peak, no console errors / autoplay warnings
 node tools/shots-v4.mjs ./shots [phone]       # v4 screenshot set: combat, boss, audio settings + pause sound toggle (desktop and phone)
+node tools/qa-shots.mjs ./shots [--only phone] [--native]  # the QA loop's fixed-seed shots + metrics.json (--native: the phone frame again at 3×)
 node tools/e2e-webkit.mjs ./shots             # Safari smoke (Playwright WebKit, real-time loop, served under /extinction-avenue/): title → START → playing, WebGL2 backend, not-black 3D view, no errors
 ```
 

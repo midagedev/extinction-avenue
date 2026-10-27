@@ -99,6 +99,7 @@ check('renderer runs the WebGL2 backend', await page.evaluate(() => !window.__ga
 if (IPHONE) {
   const p = await page.evaluate(() => { const w = window.__game.game.world; return { quality: w.quality.id, pr: w.renderer.getPixelRatio(), stream: w.stream?.info() }; });
   check('iPhone: phone profile, Phone quality, city streaming on', p.quality === 'phone' && !!p.stream && p.stream.resident > 0 && p.stream.resident < p.stream.cells, JSON.stringify(p));
+  check('iPhone: sharp pixel ratio (>= 2x of a 3x screen)', p.pr >= 2, `pixel ratio ${p.pr}`);
   await page.locator('#btn-play').scrollIntoViewIfNeeded().catch(() => {});
   await page.tap('#btn-play', { force: true, timeout: 60000 });
 } else await page.click('#btn-play', { timeout: 60000 });
