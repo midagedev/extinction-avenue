@@ -39,5 +39,8 @@ street, not every kind of ugly.
 - **Phone clarity.** Phone pixel ratio stays ≥ 2 (governor floor 1.5, `js/game/quality-governor.js`); bloom only on
   emissives (threshold ≥ 1.3, `js/game/quality-presets.js`); chromatic aberration only as the damage pulse. The unit
   tests in `tests/quality-presets.test.mjs` pin these.
+- **Dinosaur size on screen.** Gunner FOV 56°, portrait capped at 68° (`js/game/camera.js`); far creatures get a
+  minimum on-screen size (`enemies.js` `minScreenBoost`). The QA shots fail if the enemy height in px drops (median
+  < 75 % or min < 60 % of the baseline). `node tools/qa.mjs --fast` = syntax + unit + shots (~7 min).
 - Headless: SwiftShader WebGPU presents nothing — drivers use `?test&webgl` and step the sim (`window.__game.step()`,
   `.render()`). Playwright lives in `.tools/node_modules` (gitignored).
