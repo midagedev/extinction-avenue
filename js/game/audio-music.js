@@ -150,6 +150,9 @@ export class MusicDirector {
     }
     // Heat layer on the combat cue
     const c = this.cur;
+    if (c && c.id === 'combat' && c.stream) {
+      if (!c.layer) { if (this.a.music.has('combat_heat')) this._attachLayer(c); } else this._syncLayer(c, dt);
+    }
     if (c && c.layer) {
       const target = c.id === 'combat' ? smooth((this.heat - 0.35) / 0.45) * 0.95 : 0;
       this.layerLevel += (target - this.layerLevel) * Math.min(1, dt * 1.5);
@@ -258,7 +261,7 @@ export class MusicDirector {
       srcs.push(s);
       loopAt = when + intro.buffer.duration - intro.offset - 0.002;
     }
-    // Phones: long loops stream from an <audio> element (GameAudio.streamSource), no heat layer
+    // Phones: long loops stream from an <audio> element (GameAudio.streamSource); the heat layer follows its clock
     const stream = this.a.isStream(id);
     const s = stream ? this.a.streamSource(e) : ctx.createBufferSource();
     if (stream) {
@@ -278,12 +281,21 @@ export class MusicDirector {
     s.connect(gain);
     srcs.push(s);
     t0 = loopAt;
-    const cue = { id, entry: e, srcs, gain, t0, len, layer: null, at: when, fadeIn: Math.max(0.01, fadeIn), outAt: Infinity };
+    const cue = { id, entry: e, srcs, gain, t0, len, layer: null, at: when, fadeIn: Math.max(0.01, fadeIn), outAt: Infinity, stream: stream ? s : null };
     this.a.musicUsed.set(id, performance.now());
     if (intro) this.a.musicUsed.set('boss2_intro', performance.now());
     // Heat layer: same tempo, 4-bar loop that divides the combat loop exactly → started on the same grid
-    if (id === 'combat' && !stream) this._attachLayer(cue);
+    if (id === 'combat') this._attachLayer(cue);
     return cue;
+  }
+
+  /** Phase (s into the 4-bar layer loop) the layer should be at, ctx time `at`; null while a stream isn't playing */
+  _layerPhase(cue, at, llen) {
+    if (!cue.stream) return (((at - cue.t0) % llen) + llen) % llen;
+    const t = cue.stream.time;
+    if (t === null) return null;
+    const pos = t - cue.entry.loopStart + (at - this.ctx.currentTime);
+    return ((pos % llen) + llen) % llen;
   }
 
   _attachLayer(cue) {
@@ -291,26 +303,48 @@ export class MusicDirector {
     const le = this.entry('combat_heat');
     if (!L || !le) { this.a.loadMusic(['combat_heat']); return; }
     const ctx = this.ctx;
-    const lg = ctx.createGain();
-    lg.gain.value = this.layerLevel;
-    lg.connect(cue.gain);
+    const llen = le.loopEnd - le.loopStart;
+    const start = Math.max(cue.t0, ctx.currentTime + 0.05);
+    const pos = this._layerPhase(cue, start, llen);
+    if (pos === null) return; // streamed cue not playing yet: update() retries
+    let lg = cue.layer?.gain;
+    if (!lg) {
+      lg = ctx.createGain();
+      lg.gain.value = this.layerLevel;
+      lg.connect(cue.gain);
+    }
     const s = ctx.createBufferSource();
     s.buffer = L.buffer;
     s.loop = true;
     s.loopStart = le.loopStart + L.offset;
     s.loopEnd = le.loopEnd + L.offset;
-    const llen = le.loopEnd - le.loopStart;
-    const start = Math.max(cue.t0, ctx.currentTime + 0.05);
-    const pos = (((start - cue.t0) % llen) + llen) % llen;
     s.start(start, le.loopStart + L.offset + pos);
     s.connect(lg);
     cue.srcs.push(s);
-    cue.layer = { src: s, gain: lg };
+    cue.layer = { src: s, gain: lg, t0: start - pos, llen, checkT: 2 };
+  }
+
+  /** Phones: the streamed combat loop runs on the <audio> element's clock (and re-seeks at its loop point); every 2 s
+   *  the layer is re-started on its phase if it drifted by more than 35 ms (while it is quiet, if possible) */
+  _syncLayer(cue, dt) {
+    const ly = cue.layer;
+    if ((ly.checkT -= dt) > 0) return;
+    ly.checkT = 2;
+    const now = this.ctx.currentTime;
+    const want = this._layerPhase(cue, now, ly.llen);
+    if (want === null) return;
+    const have = (((now - ly.t0) % ly.llen) + ly.llen) % ly.llen;
+    let err = Math.abs(want - have);
+    err = Math.min(err, ly.llen - err);
+    if (err < 0.035 || (err < 0.12 && this.layerLevel > 0.15)) return;
+    try { ly.src.stop(now + 0.06); } catch { /* already stopped */ }
+    cue.srcs = cue.srcs.filter((x) => x !== ly.src);
+    this._attachLayer(cue);
   }
 
   /** The layer finished loading after the combat cue started */
   onLoaded(id) {
-    if (id === 'combat_heat' && this.cur && this.cur.id === 'combat' && !this.cur.layer && !this.a.isStream('combat')) this._attachLayer(this.cur);
+    if (id === 'combat_heat' && this.cur && this.cur.id === 'combat' && !this.cur.layer) this._attachLayer(this.cur);
     // The cue we were waiting for: start it right away (don't wait for the next frame update)
     if (this.want === id && (!this.cur || this.cur.id !== id)) this._to(id, { quant: this.cur ? 'bar' : 'now', fadeIn: 0.4, fadeOut: 0.6 });
     if (this.state === 'boss' && id === this._bossCueId() && this.cur && this.cur.id !== id) this._to(id, { quant: 'bar', fadeIn: 0.1, fadeOut: 0.5 });

@@ -492,6 +492,8 @@ class GameAudio {
     const seek = (t) => { try { el.currentTime = t; } catch { /* metadata not loaded yet */ } };
     const at = (when, fn) => setTimeout(fn, Math.max(0, (when - ctx.currentTime) * 1000));
     return {
+      /** Playback position of the element (s into the file) while it plays, else null: layers sync to it */
+      get time() { return s.busy && !el.paused && el.readyState >= 2 ? el.currentTime : null; },
       connect: (node) => { try { s.node.disconnect(); } catch { /* not connected */ } s.node.connect(node); return node; },
       start: (when) => {
         seek(e.loopStart);
