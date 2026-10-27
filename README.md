@@ -59,7 +59,7 @@ older ones) and then shows *"A problem repeatedly occurred on this page"*. The g
 around START. `js/device-profile.js` (`detectProfile`, unit-tested) now turns on a **low-memory profile** for iOS,
 iPadOS (including iPads that report themselves as a Mac), Android / mobile browsers and `navigator.deviceMemory` ≤ 4:
 
-- **Graphics:** the *Phone* preset: 2.2× pixel ratio (see *Screen clarity* below), no MSAA, a light sharpening pass, no SSR, bloom at 0.35× resolution, and sun shadows near the cab: 1024² cascades over the first
+- **Graphics:** the *Phone* preset: 2.2× pixel ratio (see *Screen clarity* below), no MSAA, a light sharpening pass, no SSR, bloom at 0.35× resolution, and sun shadows near the cab: 512² cascades over the first
   120 m, cast only by the cab and received only by the street (asphalt, sidewalks). Letting every city material cast/receive would cost ~160 MB of JS heap in three.js shader builds; this
   costs ~12 MB. A saved High / Medium setting becomes Phone; the settings menu offers Phone and Low. `?shadows=0|1`
   overrides the preset.

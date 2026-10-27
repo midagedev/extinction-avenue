@@ -121,9 +121,11 @@ async function createWorld(container, camera, { quality: qualityId = 'high', for
   if (+q.get('pr') > 0) quality.pixelRatio = +q.get('pr');
   if (['0', '2', '4'].includes(q.get('msaa'))) quality.samples = +q.get('msaa');
   if (q.has('sharpen') && +q.get('sharpen') >= 0) quality.sharpen = +q.get('sharpen');
-  // No MSAA on the canvas: it only receives the post-processing quad. The scene pass multisamples (quality.samples).
+  // No MSAA and no depth buffer on the canvas: it only receives the post-processing quad. The scene pass has its own
+  // depth and multisamples (quality.samples).
   const renderer = new THREE.WebGPURenderer({
     antialias: false,
+    depth: false,
     powerPreference: 'high-performance',
     reversedDepthBuffer: true,
     forceWebGL
