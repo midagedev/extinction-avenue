@@ -28,6 +28,20 @@ test('absolute slack absorbs a small count bump the relative test would flag', (
   assert.equal(trendStatus(bump, TRENDS.programs), 'PASS');
 });
 
+test('a lap of city streaming does not fail geometries, a steady climb does', () => {
+  const lap = thirds(series('geometries', [1670, 1570, 1540, 1600, 1660, 1700, 1760, 1810, 1790, 1760, 1720]), 'geometries');
+  assert.equal(trendStatus(lap, TRENDS.geometries), 'PASS');
+  const leak = thirds(series('geometries', [1500, 1600, 1700, 2000, 2200, 2400, 2800, 3000, 3200]), 'geometries');
+  assert.equal(trendStatus(leak, TRENDS.geometries), 'FAIL');
+});
+
+test('canvas font keys that keep growing fail, and a plateau passes', () => {
+  const grow = thirds(series('fontKeys', [800, 1600, 2400, 4000, 5000, 6000, 7500, 8500, 9100]), 'fontKeys');
+  assert.equal(trendStatus(grow, TRENDS.fontKeys), 'FAIL');
+  const flat = thirds(series('fontKeys', [40, 48, 52, 55, 55, 56, 56, 56, 56]), 'fontKeys');
+  assert.equal(trendStatus(flat, TRENDS.fontKeys), 'PASS');
+});
+
 test('frame time that drifts up across a soak fails', () => {
   const slow = thirds(series('frameMs', [30, 31, 32, 40, 42, 44, 55, 58, 60]), 'frameMs');
   assert.equal(trendStatus(slow, TRENDS.frameMs), 'FAIL');

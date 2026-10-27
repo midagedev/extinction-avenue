@@ -307,6 +307,7 @@ const drive = (frames) => page.evaluate(async ({ frames, fullFrames }) => {
     gpuMB: info ? +(info.memory.total / 1048576).toFixed(1) : null,
     objects, enemies: game?.enemies?.list?.length ?? null,
     audioLive: window.__audioLive ? window.__audioLive() : null,
+    audioHeld: game?.audio?.heldNodes ?? null,
     audioVoices: game?.audio?.voices?.length ?? null, audioState: game?.audio?.ctx?.state || 'none',
     pr: w?.renderer ? +w.renderer.getPixelRatio().toFixed(2) : null,
     heapMB: performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1048576) : null,
@@ -358,7 +359,7 @@ while (gameT < SECONDS) {
     drawCalls: driven.drawCalls, glDraws: driven.rendered ? Math.round(driven.glDraws / driven.rendered) : null, triangles: driven.triangles,
     geometries: driven.geometries, textures: driven.textures, programs: driven.programs,
     renderTargets: driven.renderTargets, gpuMB: driven.gpuMB, objects: driven.objects,
-    enemies: driven.enemies, audioLive: driven.audioLive, audioVoices: driven.audioVoices,
+    enemies: driven.enemies, audioLive: driven.audioLive, audioHeld: driven.audioHeld, audioVoices: driven.audioVoices,
     audioState: driven.audioState, pr: driven.pr, heapMB: driven.heapMB, stream: driven.stream,
     fontKeys: driven.fontKeys, glDelta: dgl
   };
@@ -366,7 +367,7 @@ while (gameT < SECONDS) {
   log(wall() + 's', `t=${row.t}`, JSON.stringify({
     game: row.time, state: row.state, frameMs: row.frameMs, p95: row.frameP95, ticks: row.frameN, rendered: row.rendered,
     draws: row.drawCalls, glDraws: row.glDraws, tris: row.triangles, obj: row.objects, geo: row.geometries, tex: row.textures,
-    prog: row.programs, rt: row.renderTargets, audio: row.audioLive, voices: row.audioVoices, audioState: row.audioState,
+    prog: row.programs, rt: row.renderTargets, audio: row.audioLive, held: row.audioHeld, voices: row.audioVoices, audioState: row.audioState,
     heap: row.heapMB, pr: row.pr, rss: m, gpuMB: row.gpuMB, enemies: row.enemies,
     bufData: dgl.bufferData, bufSub: dgl.bufferSubData, texSub: dgl.texSubImage2D, texImg: dgl.texImage2D,
     newBuf: dgl.createBuffer, delBuf: dgl.deleteBuffer, newProg: dgl.createProgram, shadow: dgl.shadowBlur, font: dgl.fontSet, fontKeys: row.fontKeys,
@@ -383,7 +384,7 @@ for (const key of Object.keys(TRENDS)) {
 }
 const fails = Object.entries(trend).filter(([, v]) => v.status === 'FAIL').map(([k]) => k);
 fs.writeFileSync(path.join(outDir, 'samples.json'), JSON.stringify({ engine, url, seconds: SECONDS, warmup, rows, trend }, null, 1));
-const cols = ['t', 'frameMs', 'frameP95', 'drawCalls', 'triangles', 'objects', 'geometries', 'textures', 'programs', 'renderTargets', 'audioLive', 'fontKeys', 'heapMB', 'rend', 'gpu', 'gpuMB', 'pr', 'time'];
+const cols = ['t', 'frameMs', 'frameP95', 'drawCalls', 'triangles', 'objects', 'geometries', 'textures', 'programs', 'renderTargets', 'audioLive', 'audioHeld', 'fontKeys', 'heapMB', 'rend', 'gpu', 'gpuMB', 'pr', 'time'];
 fs.writeFileSync(path.join(outDir, 'samples.csv'), cols.join(',') + '\n' + rows.map((r) => cols.map((c) => r[c] ?? '').join(',')).join('\n') + '\n');
 fs.writeFileSync(path.join(outDir, 'trend.json'), JSON.stringify({ warmup, trend, fails }, null, 1));
 writeChart(path.join(outDir, 'chart.png'), rows);
@@ -404,6 +405,7 @@ function writeChart(file, rows) {
     ['geometries', 'geometries', [120, 220, 140]],
     ['textures', 'textures', [160, 140, 255]],
     ['audio nodes', 'audioLive', [255, 120, 60]],
+    ['held audio', 'audioHeld', [255, 80, 40]],
     ['font keys', 'fontKeys', [255, 220, 80]],
     ['heap MB', 'heapMB', [200, 200, 200]]
   ];

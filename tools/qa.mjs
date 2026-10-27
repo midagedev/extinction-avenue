@@ -11,7 +11,10 @@
 //   webkit   Playwright WebKit as an iPhone 15: real START flow, phone profile, pixel ratio, streaming, not black
 //            (IPHONE=1 tools/e2e-webkit.mjs)
 //   soak     opt-in (--soak[=gameSeconds], default 240): the phone-profile memory soak (tools/mem-long-probe.mjs);
-//            peak page / GPU-process RSS and the renderer's own GPU allocations vs the baseline
+//            peak page / GPU-process RSS and the renderer's own GPU allocations vs the baseline, then the
+//            frame-cost probe (tools/perf-decay-probe.mjs). That probe FAILs when draw calls, scene objects,
+//            programs, geometries, textures, live audio nodes, reverb sends still held, canvas font keys or
+//            frame time trend up (last third vs first third, after warmup).
 // Options:
 //   --fast                syntax, unit and shots only (~9 min; the full run adds page errors and WebKit)
 //   --url <base>          test a deployed build, e.g. --url https://midagedev.github.io/extinction-avenue/
@@ -161,6 +164,15 @@ const STEPS = {
       fs.writeFileSync(bf, JSON.stringify({ ...baseline, memory: { rend: peak.rend, gpu: peak.gpu, gpuInfoMB: gpuInfo, gameSeconds: soakSecs, date: new Date().toISOString() } }, null, 1));
       log('memory baseline updated');
     }
+    const trendDir = path.join(out, 'decay');
+    log(`soak trend: ${soakSecs} game seconds`);
+    const tr = await run(process.execPath, ['tools/perf-decay-probe.mjs', trendDir, String(soakSecs)], { logFile: path.join(out, 'decay.log') });
+    let trend = null;
+    try { trend = JSON.parse(fs.readFileSync(path.join(trendDir, 'trend.json'), 'utf8')); } catch { /* probe wrote nothing */ }
+    if (!trend) { row('soak', 'frame-cost trend', 'FAIL', tr.text.trim().split('\n').pop()?.slice(0, 120) || 'no trend.json'); return; }
+    const fmt = (v) => v && Number.isFinite(v.first) ? `${Math.round(v.first)}→${Math.round(v.last)}` : '';
+    for (const [k, v] of Object.entries(trend.trend)) row('soak', `trend ${k}`, v.status, fmt(v));
+    if (tr.code !== 0 && !Object.values(trend.trend).some((v) => v.status === 'FAIL')) row('soak', 'frame-cost probe exit', 'FAIL', `code ${tr.code}`);
   }
 };
 
