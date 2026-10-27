@@ -174,7 +174,7 @@ class Game {
       last = now;
       if (this.dead || this.state !== 'intro') { clearInterval(this._wd); return; }
       const since = now - t0 - hiddenFor;
-      const stalled = !document.hidden && now - Math.max(this.lastFrameAt, t0) > 8000;
+      const stalled = !document.hidden && now - Math.max(this.lastFrameAt, t0) > 10000;
       if (since > 15000 && (stalled || this.frames - f0 > 600)) {
         clearInterval(this._wd);
         this.fatal('Something went wrong — the game stopped responding.', new Error(`watchdog: state ${this.state}, ${this.frames - f0} frames since START`));
@@ -536,12 +536,13 @@ class Game {
 
   // ------------------------------------------------------------------------------------------------------------------
   frame(now) {
-    this.frames++;
-    this.lastFrameAt = performance.now();
     const rawDt = (now - this.lastNow) / 1000;
     this.lastNow = now;
     this.tick(Math.min(0.05, Math.max(0.0005, rawDt)));
     this.renderFrame();
+    // START watchdog: a frame that completed (one slow software-rendered frame is not a hang, a throwing one is)
+    this.frames++;
+    this.lastFrameAt = performance.now();
   }
 
   tick(dt) {
