@@ -351,4 +351,10 @@ function posedBox(g, clip, n) {
   return box.getSize(new THREE.Vector3()).setY(box.max.y);
 }
 
-export { loadSkinnedModel, loadGLTF };
+/** Phones: once every model is built, drop the loader caches (the parsed GLTFs keep their whole GLB bytes alive) */
+function releaseModelCaches() {
+  gltfCache.clear();
+  geoCache.clear();
+}
+
+export { loadSkinnedModel, loadGLTF, releaseModelCaches };

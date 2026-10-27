@@ -35,6 +35,17 @@ const _b = new THREE.Vector3();
 const _c = new THREE.Vector3();
 const _s = new THREE.Vector3();
 
+/** The Object3D state a piece copies from its source (kept instead of the source, which holds the full arrays) */
+function stateOf(src) {
+  return {
+    name: src.name, castShadow: src.castShadow, receiveShadow: src.receiveShadow, renderOrder: src.renderOrder,
+    layers: { mask: src.layers.mask }, frustumCulled: src.frustumCulled, userData: { ...src.userData },
+    position: src.position.clone(), quaternion: src.quaternion.clone(), scale: src.scale.clone(),
+    matrixAutoUpdate: src.matrixAutoUpdate, matrix: src.matrix.clone(),
+    onBeforeRender: Object.prototype.hasOwnProperty.call(src, 'onBeforeRender') ? src.onBeforeRender : undefined
+  };
+}
+
 function copyState(dst, src) {
   dst.name = src.name;
   dst.castShadow = src.castShadow;
@@ -48,7 +59,7 @@ function copyState(dst, src) {
   dst.scale.copy(src.scale);
   dst.matrixAutoUpdate = src.matrixAutoUpdate;
   dst.matrix.copy(src.matrix);
-  if (Object.prototype.hasOwnProperty.call(src, 'onBeforeRender')) dst.onBeforeRender = src.onBeforeRender;
+  if (src.onBeforeRender && (!src.isObject3D || Object.prototype.hasOwnProperty.call(src, 'onBeforeRender'))) dst.onBeforeRender = src.onBeforeRender;
 }
 
 /** out[j] = src[ids[j]] for items of `size` components */
@@ -83,6 +94,7 @@ class CityStream {
     if (culled) for (const c of culled) cullD.set(c.mesh, c.d);
     this.cullD = cullD;
     this._partition(roots);
+    this.cullD = null;
     if (culled) for (let i = culled.length - 1; i >= 0; i--) if (!culled[i].mesh.parent) culled.splice(i, 1);
   }
 
@@ -160,6 +172,9 @@ class CityStream {
     const shared = [];
     const own = [];
     for (const [name, a] of Object.entries(geo0.attributes)) (a.isInstancedBufferAttribute ? own : shared).push([name, a]);
+    // what the pieces need of the source: its vertex data (shared), never its per-instance arrays
+    const tpl = { index: geo0.index, groups: geo0.groups.map((g) => ({ ...g })), drawRange: { ...geo0.drawRange }, boundingBox: geo0.boundingBox, boundingSphere: geo0.boundingSphere };
+    const state = stateOf(mesh);
     const cullD = this.cullD.get(mesh) || 0;
     for (const [k, ids] of groups) {
       const m = ids.length;
@@ -182,7 +197,7 @@ class CityStream {
         box.expandByPoint(_b.copy(_v).addScalar(r0 * Math.max(_s.x, _s.y, _s.z)));
       }
       const piece = {
-        kind: 'inst', source: mesh, parent: mesh.parent, material: mesh.material, geo0, shared, extra, matrices, colors, count: m,
+        kind: 'inst', state, parent: mesh.parent, material: mesh.material, tpl, shared, extra, matrices, colors, count: m,
         sphere: box.getBoundingSphere(new THREE.Sphere()), cullD, obj: null,
         bytes: matrices.byteLength + (colors ? colors.byteLength : 0) + extra.reduce((s, e) => s + e.arr.byteLength, 0)
       };
@@ -267,18 +282,18 @@ class CityStream {
   // ---- residency --------------------------------------------------------------------------------------------------
   _makeInstanced(p) {
     const geo = new THREE.BufferGeometry();
-    if (p.geo0.index) geo.setIndex(p.geo0.index);
+    if (p.tpl.index) geo.setIndex(p.tpl.index);
     for (const [name, a] of p.shared) geo.setAttribute(name, a);
     for (const e of p.extra) geo.setAttribute(e.name, new THREE.InstancedBufferAttribute(e.arr, e.s, e.normalized, e.mpa));
-    for (const gr of p.geo0.groups) geo.addGroup(gr.start, gr.count, gr.materialIndex);
-    geo.setDrawRange(p.geo0.drawRange.start, p.geo0.drawRange.count);
-    geo.boundingBox = p.geo0.boundingBox;
-    geo.boundingSphere = p.geo0.boundingSphere;
+    for (const gr of p.tpl.groups) geo.addGroup(gr.start, gr.count, gr.materialIndex);
+    geo.setDrawRange(p.tpl.drawRange.start, p.tpl.drawRange.count);
+    geo.boundingBox = p.tpl.boundingBox;
+    geo.boundingSphere = p.tpl.boundingSphere;
     const mesh = new THREE.InstancedMesh(geo, p.material, 0);
     mesh.count = p.count;
     mesh.instanceMatrix = this.storageInstances ? new THREE.StorageInstancedBufferAttribute(p.matrices, 16) : new THREE.InstancedBufferAttribute(p.matrices, 16);
     if (p.colors) mesh.instanceColor = new THREE.InstancedBufferAttribute(p.colors, 3);
-    copyState(mesh, p.source);
+    copyState(mesh, p.state);
     mesh.computeBoundingSphere();
     mesh.updateMatrixWorld(true);
     return mesh;
@@ -364,7 +379,7 @@ class CityStream {
   /** For the shader pre-compilation: one piece of every material / instancing kind that is not resident yet */
   addRepresentatives() {
     const seen = new Set();
-    const key = (p) => `${p.kind}:${p.kind === 'inst' ? p.material.uuid : p.obj.material.uuid}:${p.obj?.castShadow ?? p.source.castShadow}`;
+    const key = (p) => `${p.kind}:${p.kind === 'inst' ? p.material.uuid : p.obj.material.uuid}:${p.obj?.castShadow ?? p.state.castShadow}`;
     for (const k of this.resident) for (const p of this.cells.get(k).pieces) seen.add(key(p));
     for (const c of this.cells.values()) {
       if (c.resident) continue;

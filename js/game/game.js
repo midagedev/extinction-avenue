@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { createWorld } from './world.js';
 import { ASSET_MANIFEST, loadAssets } from './assets.js';
+import { releaseModelCaches } from './skin-model.js';
 import { Route, WalkGrid } from './route.js';
 import { Player } from './player.js';
 import { VFX } from './vfx.js';
@@ -238,6 +239,7 @@ class Game {
     }
     setStatus('Thawing specimens…', 0.5);
     this.assets = await loadAssets(ASSET_MANIFEST);
+    if (LOWMEM) releaseModelCaches();
     this.route = new Route();
     this.walk = new WalkGrid(this.route);
     this.player = new Player(scene, this.assets, this.route, makeLivery());
