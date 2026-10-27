@@ -95,6 +95,34 @@ export function streamDiff(resident, want, keep, dist = () => 0) {
   return { add, drop };
 }
 
+/**
+ * The streaming window at arc length s: the band along the route (streamCells) plus the straight sightline along the
+ * heading (the street keeps going past the corner the cab just turned). `sample(s)` must also give the unit heading
+ * { hx, hz }. `reach` scales the distances (quality-governor.js shrinks it), `pad` grows them (hysteresis).
+ */
+export function windowCells(sample, s, { reach = 1, pad = 0 } = {}) {
+  const behind = STREAM.behind * reach, ahead = STREAM.ahead * reach, side = STREAM.side * Math.max(0.75, reach);
+  const cells = streamCells(sample, s, { behind, ahead, side, pad });
+  const p = sample(s, {});
+  const ray = (t, out) => { out.x = p.x + p.hx * (t - s); out.z = p.z + p.hz * (t - s); return out; };
+  for (const k of streamCells(ray, s, { behind, ahead, side: side * 0.5, pad })) cells.add(k);
+  return cells;
+}
+
+/** Every cell any window (with its hysteresis) reaches along a closed route of `length` m: nothing else is ever seen */
+export function loopReach(sample, length, step = 25) {
+  const reach = new Set();
+  for (let s = 0; s < length; s += step) for (const k of windowCells(sample, s, { pad: STREAM.hysteresis })) reach.add(k);
+  return reach;
+}
+
+/** Does the box [x0, x1] x [z0, z1] touch any of the cells? */
+export function boxInCells(cells, x0, z0, x1 = x0, z1 = z0, cell = STREAM.cell) {
+  const cx0 = Math.floor(x0 / cell), cx1 = Math.floor(x1 / cell), cz0 = Math.floor(z0 / cell), cz1 = Math.floor(z1 / cell);
+  for (let cx = cx0; cx <= cx1; cx++) for (let cz = cz0; cz <= cz1; cz++) if (cells.has(cellKey(cx, cz))) return true;
+  return false;
+}
+
 // ---- The live profile of this page -------------------------------------------------------------------------------
 const nav = typeof navigator !== 'undefined' ? navigator : {};
 const loc = typeof location !== 'undefined' ? location : { search: '', pathname: '' };
@@ -106,7 +134,15 @@ export const LOWMEM = PROFILE.lowmem;
 // The city window only applies to the game (index.html), not to the free-roam city sandbox (sim.html)
 const WINDOW = LOWMEM && !/sim\.html$/.test(loc.pathname || '') ? cityWindow() : null;
 
+// With city streaming (js/game/world.js), the builders only emit what the loop's windows can ever reach (loopReach)
+let REACH = null;
+/** Restrict cityKeep to these cells (null: back to the plain window). Game only, set before the city is built. */
+export function setCityReach(cells) {
+  REACH = WINDOW && cells ? cells : null;
+}
+
 /** Should the city builders emit something at (x, z) (or over the box to x1, z1)? Always true off the lowmem profile */
 export function cityKeep(x0, z0, x1 = x0, z1 = z0) {
+  if (REACH) return boxInCells(REACH, Math.min(x0, x1), Math.min(z0, z1), Math.max(x0, x1), Math.max(z0, z1));
   return !WINDOW || inWindow(WINDOW, x0, z0, x1, z1);
 }

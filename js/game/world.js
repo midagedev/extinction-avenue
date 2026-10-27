@@ -14,8 +14,9 @@ import { buildRoadNetwork } from '../road-network.js';
 import { buildRoadPaint } from '../road-paint.js';
 import { LightingSystem } from '../lighting.js';
 import { setupSceneCulling, updateSceneCulling, sceneCullingList } from '../scene-culling.js';
-import { LOWMEM } from '../device-profile.js';
+import { LOWMEM, loopReach, setCityReach } from '../device-profile.js';
 import { CityStream } from './city-stream.js';
+import { Route } from './route.js';
 
 // js/game/world.js
 // The stage: the renderer, slop-newyork's Manhattan (grid, blocks, landmarks, street furniture, road paint; no ambient
@@ -140,6 +141,13 @@ async function createWorld(container, camera, { quality: qualityId = 'high', for
   if (quality.shadowFar) lighting.shadowFarMax = quality.shadowFar;
   lighting.applyPreset('twilight');
 
+  // Phones: the city streams in cells along the cab's route (js/game/city-stream.js; ?stream=0 turns it off). The
+  // builders only emit what some window along the loop can reach (device-profile.js cityKeep / loopReach).
+  const streaming = LOWMEM && new URLSearchParams(location.search).get('stream') !== '0' && !/sim\.html$/.test(location.pathname);
+  const route = new Route();
+  const reach = streaming ? loopReach((s, out) => route.sample(s, out), route.length) : null;
+  setCityReach(reach);
+
   onStatus('Rebuilding Manhattan…', null);
   await nextFrame();
   const cityGrid = buildCityGrid(scene);
@@ -178,11 +186,9 @@ async function createWorld(container, camera, { quality: qualityId = 'high', for
   else if (LOWMEM) {
     for (const r of cullingRoots) r.traverse((o) => { o.castShadow = false; o.receiveShadow = !!o.material?.userData?.groundSurface; });
   }
-  // Phones: the static city streams in cells along the cab's route (js/game/city-stream.js; ?stream=0 turns it off)
-  const streamParam = new URLSearchParams(location.search).get('stream');
-  const stream = LOWMEM && streamParam !== '0' && !/sim\.html$/.test(location.pathname)
+  const stream = streaming
     ? new CityStream(['ManhattanCityGrid', 'ManhattanCityBlocks', 'ManhattanStreetDetails', 'RoadMarkings'].map((n) => scene.getObjectByName(n)).filter(Boolean),
-      { storageInstances: !!renderer.backend.isWebGPUBackend, culled: sceneCullingList() })
+      { storageInstances: !!renderer.backend.isWebGPUBackend, culled: sceneCullingList(), reach })
     : null;
 
   // --- Post-processing --------------------------------------------------------------------------------------------

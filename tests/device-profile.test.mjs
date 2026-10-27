@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { detectProfile, cityWindow, inWindow, cityKeep, LOWMEM, STREAM, cellOf, cellKey, streamCells, streamDiff } from '../js/device-profile.js';
+import { detectProfile, cityWindow, inWindow, cityKeep, LOWMEM, STREAM, cellOf, cellKey, streamCells, streamDiff, windowCells, loopReach, boxInCells, setCityReach } from '../js/device-profile.js';
 
 const UA = {
   iPhone: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1',
@@ -111,4 +111,53 @@ test('streamDiff: adds the missing cells nearest first, drops only outside the h
   assert.deepEqual(streamDiff(resident, want, new Set(['a', 'b', 'c', 'd', 'e']), dist), { add: ['e', 'd'], drop: [] });
   assert.deepEqual(streamDiff(resident, want, new Set(['b', 'c', 'd', 'e']), dist).drop, ['a']);
   assert.deepEqual(streamDiff(new Set(), new Set(), new Set()), { add: [], drop: [] });
+});
+
+// A 1000 x 600 m rectangular loop (like route.js LOOP), sampled by arc length with its heading
+function rectLoop(w = 1000, h = 600) {
+  const L = 2 * (w + h);
+  return {
+    length: L,
+    sample(s, out = {}) {
+      s = ((s % L) + L) % L;
+      if (s < w) Object.assign(out, { x: s, z: 0, hx: 1, hz: 0 });
+      else if (s < w + h) Object.assign(out, { x: w, z: s - w, hx: 0, hz: 1 });
+      else if (s < 2 * w + h) Object.assign(out, { x: w - (s - w - h), z: h, hx: -1, hz: 0 });
+      else Object.assign(out, { x: 0, z: h - (s - 2 * w - h), hx: 0, hz: -1 });
+      return out;
+    }
+  };
+}
+
+test('windowCells: the straight sightline reaches past the corner the cab just turned', () => {
+  const loop = rectLoop();
+  // just after the corner at (1000, 0), heading +z: looking back along the heading means x = 1000, z < 0
+  const w = windowCells(loop.sample, 1000 + 50);
+  assert.ok(w.has(cellKey(...cellOf(1000, -600))), 'the street beyond the corner, behind the cab');
+  const routeOnly = streamCells(loop.sample, 1000 + 50);
+  assert.ok(!routeOnly.has(cellKey(...cellOf(1000, -600))));
+  // a smaller reach (quality governor) gives a smaller window
+  assert.ok(windowCells(loop.sample, 500, { reach: 0.5 }).size < w.size);
+});
+
+test('loopReach covers every window along the loop, and nothing far away', () => {
+  const loop = rectLoop();
+  const reach = loopReach(loop.sample, loop.length);
+  for (let s = 0; s < loop.length; s += 137) for (const k of windowCells(loop.sample, s)) assert.ok(reach.has(k), `${k} at s=${s}`);
+  assert.ok(!reach.has(cellKey(...cellOf(5000, 5000))));
+  assert.ok(!reach.has(cellKey(...cellOf(500, 3000))), 'not 2.4 km off the loop');
+});
+
+test('boxInCells: boxes and points against a cell set', () => {
+  const cells = new Set([cellKey(0, 0), cellKey(2, 0)]);
+  assert.ok(boxInCells(cells, 10, 10));
+  assert.ok(!boxInCells(cells, 250, 10)); // cell (1, 0)
+  assert.ok(boxInCells(cells, 250, 10, 450, 20)); // spans into (2, 0)
+  assert.ok(!boxInCells(cells, -50, -50, -10, -10));
+});
+
+test('setCityReach does nothing off the lowmem profile', () => {
+  setCityReach(new Set());
+  assert.equal(cityKeep(0, 0), true);
+  setCityReach(null);
 });

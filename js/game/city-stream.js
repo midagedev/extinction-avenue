@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import { STREAM, cellOf, cellKey, streamCells, streamDiff } from '../device-profile.js';
+import { STREAM, cellOf, cellKey, windowCells, loopReach, streamDiff } from '../device-profile.js';
 
 // js/game/city-stream.js
 // Phones (js/device-profile.js LOWMEM): city chunk streaming along the cab's route.
@@ -51,6 +51,12 @@ function copyState(dst, src) {
   if (Object.prototype.hasOwnProperty.call(src, 'onBeforeRender')) dst.onBeforeRender = src.onBeforeRender;
 }
 
+/** out[j] = src[ids[j]] for items of `size` components */
+function gather(src, ids, size, out) {
+  for (let j = 0; j < ids.length; j++) { const o = ids[j] * size; for (let q = 0; q < size; q++) out[j * size + q] = src[o + q]; }
+  return out;
+}
+
 const bytesOf = (geo) => Object.values(geo.attributes).reduce((s, a) => s + (a.array?.byteLength || 0), 0) + (geo.index?.array?.byteLength || 0);
 
 class CityStream {
@@ -61,8 +67,9 @@ class CityStream {
    *   culled: scene-culling's distance-culled chunk list ({ mesh, x, y, z, r, d }): pieces cut from those chunks keep
    *   their cull distance (updateCulling) and the replaced chunks leave the list
    */
-  constructor(roots, { storageInstances = false, culled = null } = {}) {
+  constructor(roots, { storageInstances = false, culled = null, reach = null } = {}) {
     this.storageInstances = storageInstances;
+    this.reachable = reach; // device-profile.js loopReach: cells outside it are never built (null: all)
     this.cells = new Map(); // key -> { key, cx, cz, pieces: [], resident, bytes }
     this.resident = new Set();
     this.strays = new Set(); // pieces added outside the window for the shader pre-compilation
@@ -79,9 +86,11 @@ class CityStream {
     if (culled) for (let i = culled.length - 1; i >= 0; i--) if (!culled[i].mesh.parent) culled.splice(i, 1);
   }
 
+  /** The cell at (x, z), or null when no window along the loop ever reaches it (the piece is dropped right away) */
   _cell(x, z) {
     const [cx, cz] = cellOf(x, z);
     const key = cellKey(cx, cz);
+    if (this.reachable && !this.reachable.has(key)) return null;
     let c = this.cells.get(key);
     if (!c) this.cells.set(key, (c = { key, cx, cz, pieces: [], resident: false, bytes: 0 }));
     return c;
@@ -143,6 +152,7 @@ class CityStream {
       const r = r0 * Math.max(_s.x, _s.y, _s.z);
       _v.copy(geo0.boundingSphere.center).applyMatrix4(_m);
       const k = r > RESIDENT_LIMIT ? 'keep' : this._cell(_v.x, _v.z);
+      if (k === null) continue;
       let ids = groups.get(k);
       if (!ids) groups.set(k, (ids = []));
       ids.push(i);
@@ -154,13 +164,12 @@ class CityStream {
     for (const [k, ids] of groups) {
       const m = ids.length;
       const matrices = new Float32Array(m * 16);
-      ids.forEach((id, j) => matrices.set(src.subarray(id * 16, id * 16 + 16), j * 16));
-      const colors = mesh.instanceColor ? new Float32Array(m * 3) : null;
-      if (colors) ids.forEach((id, j) => colors.set(mesh.instanceColor.array.subarray(id * 3, id * 3 + 3), j * 3));
+      gather(src, ids, 16, matrices);
+      const colors = mesh.instanceColor ? gather(mesh.instanceColor.array, ids, 3, new Float32Array(m * 3)) : null;
       const extra = own.map(([name, a]) => {
         const s = a.itemSize;
         const arr = new a.array.constructor(m * s);
-        ids.forEach((id, j) => arr.set(a.array.subarray(id * s, id * s + s), j * s));
+        gather(a.array, ids, s, arr);
         return { name, arr, s, normalized: a.normalized, mpa: a.meshPerAttribute };
       });
       // bounds of the subset in world space (for the cull distance)
@@ -201,10 +210,12 @@ class CityStream {
     const triCount = (idx ? idx.count : pos.count) / 3;
     if (r <= RESIDENT_LIMIT) {
       _v.copy(g.boundingSphere.center).applyMatrix4(W);
-      mesh.userData.streamed = true;
+      const cellObj = this._cell(_v.x, _v.z);
       const parent = mesh.parent;
       parent.remove(mesh); // added back when its cell is resident
-      this._addPiece(this._cell(_v.x, _v.z), { kind: 'mesh', parent, obj: mesh, geometry: g, sphere: new THREE.Sphere(_v.clone(), r), cullD, bytes: bytesOf(g) });
+      if (!cellObj) { g.dispose(); this.stats.deadBytes += bytesOf(g); return; } // never in view
+      mesh.userData.streamed = true;
+      this._addPiece(cellObj, { kind: 'mesh', parent, obj: mesh, geometry: g, sphere: new THREE.Sphere(_v.clone(), r), cullD, bytes: bytesOf(g) });
       return;
     }
     if (triCount < MIN_TRIS) return; // the harbour water, sky domes, ...: resident
@@ -220,6 +231,7 @@ class CityStream {
       _c.fromBufferAttribute(pos, i2).applyMatrix4(W);
       const big = _a.distanceToSquared(_b) > lim2 || _b.distanceToSquared(_c) > lim2 || _c.distanceToSquared(_a) > lim2;
       const k = big ? 'keep' : this._cell((_a.x + _b.x + _c.x) / 3, (_a.z + _b.z + _c.z) / 3);
+      if (k === null) continue; // never in view
       let list = tris.get(k);
       if (!list) tris.set(k, (list = []));
       list.push(i0, i1, i2);
@@ -318,8 +330,7 @@ class CityStream {
   /** Bind the route (Route-like: sample(s, out) -> { x, z, hx, hz }, length) and free the cells no window reaches */
   setRoute(route) {
     this.sample = (s, out = {}) => route.sample(s, out);
-    const reach = new Set();
-    for (let s = 0; s < route.length; s += 25) for (const k of this._window(s, STREAM.hysteresis, 1)) reach.add(k);
+    const reach = this.reachable || loopReach(this.sample, route.length);
     for (const [key, c] of this.cells) {
       if (reach.has(key)) continue;
       for (const p of c.pieces) {
@@ -334,13 +345,7 @@ class CityStream {
   }
 
   _window(s, pad, reach = this.reach) {
-    const behind = STREAM.behind * reach, ahead = STREAM.ahead * reach, side = STREAM.side * Math.max(0.75, reach);
-    const cells = streamCells(this.sample, s, { behind, ahead, side, pad });
-    // the straight sightline along the current heading (the street keeps going past the corner the cab turned)
-    const p = this.sample(s, {});
-    const ray = (t, out) => { out.x = p.x + p.hx * (t - s); out.z = p.z + p.hz * (t - s); return out; };
-    for (const k of streamCells(ray, s, { behind, ahead, side: side * 0.5, pad })) cells.add(k);
-    return cells;
+    return windowCells(this.sample, s, { reach, pad });
   }
 
   /** Shrink (or restore) the window: 1 = STREAM as configured (quality-governor.js steps it down under pressure) */
