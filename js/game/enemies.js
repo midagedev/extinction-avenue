@@ -24,12 +24,12 @@ import { animateCreature } from './creature-anim.js';
 
 const SPECIES = {
   //          hp: base HP · close: closing speed on the cab (m/s) · dmg: per landed attack · wind: telegraph seconds
-  compy: { name: 'Scuttler', size: 2.0, hp: 18, close: 6.5, dmg: 3, radius: 0.55, height: 0.8, xp: 2, score: 100, mass: 0.3, stride: 2.6, wind: 1.25, gaps: [-9, -17], leap: true, headR: 0.22, sound: 'compy_chirp' },
-  raptor: { name: 'Sicklejaw', size: 1.35, hp: 55, close: 7.5, dmg: 6, radius: 0.95, height: 1.7, xp: 5, score: 250, mass: 1, stride: 1.6, wind: 1.15, gaps: [-10, -20], leap: true, headR: 0.34, sound: 'raptor_screech' },
+  compy: { name: 'Scuttler', size: 2.7, hp: 18, close: 6.5, dmg: 3, radius: 0.55, height: 0.8, xp: 2, score: 100, mass: 0.3, stride: 2.6, wind: 1.25, gaps: [-8, -15], leap: true, headR: 0.22, sound: 'compy_chirp' },
+  raptor: { name: 'Sicklejaw', size: 1.75, hp: 55, close: 7.5, dmg: 6, radius: 0.95, height: 1.7, xp: 5, score: 250, mass: 1, stride: 1.6, wind: 1.15, gaps: [-9, -18], leap: true, headR: 0.34, sound: 'raptor_screech' },
   brute: { name: 'Brute Raptor', hp: 260, close: 5.5, dmg: 11, radius: 1.5, height: 2.8, xp: 16, score: 800, mass: 4, stride: 1.15, wind: 1.35, gaps: [-12, -22], leap: true, headR: 0.5, stagger: 0.18, sound: 'brute_growl' },
   trike: { name: 'Hornwall', hp: 650, close: 4.5, dmg: 15, radius: 2.4, height: 3, xp: 35, score: 1500, mass: 12, stride: 0.75, wind: 1.7, gaps: [-24, -32], charger: true, headR: 1.0, stagger: 0.22, sound: 'trike_bellow' },
   ankylo: { name: 'Spiketail', hp: 800, close: 3.2, dmg: 12, radius: 2.2, height: 2, xp: 40, score: 2000, mass: 14, stride: 0.7, wind: 1.4, gaps: [-8, -12], armor: 0.4, swipe: true, headR: 0.6, stagger: 0.2, sound: 'ankylo_grunt' },
-  ptero: { name: 'Skyreaver', hp: 35, close: 9, dmg: 6, radius: 1.3, height: 1, xp: 6, score: 300, mass: 0.5, flyer: true, stride: 1, wind: 1.1, gaps: [-14, -24], headR: 0.35, sound: 'ptero_cry' },
+  ptero: { name: 'Skyreaver', size: 1.35, hp: 35, close: 9, dmg: 6, radius: 1.3, height: 1, xp: 6, score: 300, mass: 0.5, flyer: true, stride: 1, wind: 1.1, gaps: [-12, -21], headR: 0.35, sound: 'ptero_cry' },
   // The boss: driven entirely by its controller (boss.js)
   trex: { name: 'GRIDLOCK', hp: 16000, close: 8, dmg: 15, radius: 3.2, height: 6.4, xp: 0, score: 50000, mass: 80, stride: 0.5, sound: 'trex_roar', custom: true }
 };
@@ -832,10 +832,12 @@ class EnemyManager {
         if (h && h.t < bt) { bt = h.t; best = e; head = h.weak > 1; weak = h.weak; }
         continue;
       }
-      const hr = e.sp.headR * e.scale * 1.25;
-      const th = raySphere(ray, e.hx, e.hy, e.hz, hr);
-      const br = Math.max(e.radius * 0.95, e.sp.height * e.scale * 0.42);
-      const tb = raySphere(ray, e.bx, e.by, e.bz, br);
+      // far individuals are drawn larger (render: e.vis, scaled about the feet); the hit spheres follow
+      const v = e.vis || 1;
+      const hr = e.sp.headR * e.scale * 1.25 * v;
+      const th = raySphere(ray, e.x + (e.hx - e.x) * v, e.y + (e.hy - e.y) * v, e.z + (e.hz - e.z) * v, hr);
+      const br = Math.max(e.radius * 0.95, e.sp.height * e.scale * 0.42) * v;
+      const tb = raySphere(ray, e.x + (e.bx - e.x) * v, e.y + (e.by - e.y) * v, e.z + (e.bz - e.z) * v, br);
       if (th < bt && th <= tb + hr) { bt = th; best = e; head = true; weak = 1.6; }
       else if (tb < bt) { bt = tb; best = e; head = false; weak = 1; }
     }
@@ -869,6 +871,9 @@ class EnemyManager {
 
   render(time) {
     const cam = this.game.cam?.camera;
+    // Minimum on-screen size: an individual whose height would cover less than MIN_SCREEN of the view height is drawn
+    // up to MAX_BOOST larger (far stragglers and fresh spawns never shrink to specks; raycast() scales its spheres too)
+    const fovK = cam ? 2 * Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2) : 0;
     for (const id of SPECIES_IDS) {
       const rig = this.rigs[id];
       if (rig.skinned && cam) rig.setView(cam);
@@ -886,7 +891,8 @@ class EnemyManager {
         }
         animateCreature(e, rig, time, cam?.position);
         const tele = e.state === 'windup' ? 0.55 + 0.45 * Math.sin(time * 30) : 0;
-        rig.add(e.x, e.y, e.z, e.heading, e.scale, e.anim, e.flash, e.stone, e.elite ? 1 : 0, e.pitch, e.roll, e.tint, tele);
+        e.vis = cam ? minScreenBoost(e, cam.position, fovK) : 1;
+        rig.add(e.x, e.y, e.z, e.heading, e.scale * e.vis, e.anim, e.flash, e.stone, e.elite ? 1 : 0, e.pitch, e.roll, e.tint, tele);
         continue;
       }
       if (e.ctrl) {
@@ -904,4 +910,13 @@ class EnemyManager {
   }
 }
 
-export { EnemyManager, SPECIES, SPECIES_IDS, SpatialHash, CAR_RADIUS, CAR_REAR, raySphere };
+const MIN_SCREEN = 0.05, MAX_BOOST = 1.45;
+/** Visual scale factor (>= 1) that keeps a creature at least MIN_SCREEN of the view height tall */
+function minScreenBoost(e, camPos, fovK) {
+  const h = e.sp.flyer ? e.radius * 1.4 : e.sp.height * e.scale;
+  const d = Math.max(1, Math.hypot(e.x - camPos.x, e.y - camPos.y, e.z - camPos.z));
+  const frac = h / (d * fovK);
+  return frac >= MIN_SCREEN ? 1 : Math.min(MAX_BOOST, MIN_SCREEN / frac);
+}
+
+export { EnemyManager, minScreenBoost, MIN_SCREEN, MAX_BOOST, SPECIES, SPECIES_IDS, SpatialHash, CAR_RADIUS, CAR_REAR, raySphere };

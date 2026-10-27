@@ -7,6 +7,7 @@
      900
     ],
     "dpr": 2,
+    "fov": 56,
     "pr": 2,
     "canvas": [
      2880,
@@ -17,33 +18,34 @@
      1800
     ],
     "quality": "high",
-    "gpuMB": 569.2,
+    "gpuMB": 569.3,
     "state": "playing",
-    "time": 34.4
+    "time": 34.5
    },
    "lumaP2": 2,
-   "lumaP50": 100,
+   "lumaP50": 104,
    "lumaP98": 250,
    "spread": 248,
-   "veil": 7,
-   "sharpness": 73.25,
-   "edgePct": 5.58,
-   "entropy": 6.96,
-   "edgeDensity": 0.518,
+   "veil": 10,
+   "sharpness": 81.37,
+   "edgePct": 6.16,
+   "entropy": 7.02,
+   "edgeDensity": 0.534,
    "contrast": 230,
    "creature": {
-    "pixels": 90187,
-    "sharePct": 1.74,
-    "bgDiff": 39.6,
-    "colorDiff": 68.2,
-    "edge": 27.6
+    "pixels": 188396,
+    "sharePct": 3.63,
+    "bgDiff": 41.5,
+    "colorDiff": 77.9,
+    "edge": 44.2
    },
    "enemies": {
-    "count": 3,
-    "medianH": 229,
-    "minH": 157,
+    "count": 4,
+    "medianH": 453,
+    "minH": 238,
     "byType": {
-     "compy": 229
+     "raptor": 453,
+     "compy": 266
     }
    }
   },
@@ -54,6 +56,7 @@
      900
     ],
     "dpr": 2,
+    "fov": 56,
     "pr": 2,
     "canvas": [
      2880,
@@ -64,34 +67,34 @@
      1800
     ],
     "quality": "high",
-    "gpuMB": 569.6,
+    "gpuMB": 569.5,
     "state": "playing",
-    "time": 62.4
+    "time": 62.3
    },
    "lumaP2": 1,
-   "lumaP50": 89,
-   "lumaP98": 243,
-   "spread": 242,
-   "veil": 17,
-   "sharpness": 110.11,
-   "edgePct": 7.16,
-   "entropy": 6.99,
-   "edgeDensity": 0.48,
-   "contrast": 223,
+   "lumaP50": 90,
+   "lumaP98": 246,
+   "spread": 245,
+   "veil": 20,
+   "sharpness": 98.55,
+   "edgePct": 6.39,
+   "entropy": 7.07,
+   "edgeDensity": 0.495,
+   "contrast": 218,
    "creature": {
-    "pixels": 222482,
-    "sharePct": 4.29,
-    "bgDiff": 53.2,
-    "colorDiff": 92.6,
-    "edge": 36.7
+    "pixels": 155323,
+    "sharePct": 3,
+    "bgDiff": 66.4,
+    "colorDiff": 111.8,
+    "edge": 46.7
    },
    "enemies": {
-    "count": 6,
-    "medianH": 258,
-    "minH": 99,
+    "count": 4,
+    "medianH": 233,
+    "minH": 174,
     "byType": {
-     "compy": 256,
-     "raptor": 501
+     "compy": 230,
+     "raptor": 301
     }
    }
   },
@@ -102,6 +105,7 @@
      659
     ],
     "dpr": 3,
+    "fov": 68,
     "pr": 2.2,
     "canvas": [
      864,
@@ -112,33 +116,34 @@
      1977
     ],
     "quality": "phone",
-    "gpuMB": 114.9,
+    "gpuMB": 115.5,
     "state": "playing",
-    "time": 34.5
+    "time": 34.3
    },
-   "lumaP2": 4,
-   "lumaP50": 99,
-   "lumaP98": 252,
-   "spread": 248,
-   "veil": 24,
-   "sharpness": 89.63,
-   "edgePct": 8.27,
-   "entropy": 7.41,
-   "edgeDensity": 0.444,
-   "contrast": 238,
+   "lumaP2": 3,
+   "lumaP50": 74,
+   "lumaP98": 236,
+   "spread": 233,
+   "veil": 10,
+   "sharpness": 88.97,
+   "edgePct": 8.22,
+   "entropy": 7.08,
+   "edgeDensity": 0.437,
+   "contrast": 212,
    "creature": {
-    "pixels": 36021,
-    "sharePct": 1.55,
-    "bgDiff": 51,
-    "colorDiff": 85.5,
-    "edge": 24.2
+    "pixels": 87032,
+    "sharePct": 3.73,
+    "bgDiff": 55,
+    "colorDiff": 99.2,
+    "edge": 20.5
    },
    "enemies": {
-    "count": 4,
-    "medianH": 92,
-    "minH": 52,
+    "count": 3,
+    "medianH": 298,
+    "minH": 282,
     "byType": {
-     "compy": 92
+     "compy": 298,
+     "raptor": 513
     }
    }
   },
@@ -149,6 +154,7 @@
      659
     ],
     "dpr": 3,
+    "fov": 68,
     "pr": 2.2,
     "canvas": [
      864,
@@ -159,40 +165,39 @@
      1977
     ],
     "quality": "phone",
-    "gpuMB": 115.6,
+    "gpuMB": 115.5,
     "state": "playing",
-    "time": 62.5
+    "time": 62.4
    },
-   "lumaP2": 4,
-   "lumaP50": 110,
-   "lumaP98": 252,
-   "spread": 248,
-   "veil": 53,
-   "sharpness": 91.56,
-   "edgePct": 8.41,
-   "entropy": 7.3,
-   "edgeDensity": 0.437,
-   "contrast": 241,
+   "lumaP2": 2,
+   "lumaP50": 80,
+   "lumaP98": 233,
+   "spread": 231,
+   "veil": 4,
+   "sharpness": 103.55,
+   "edgePct": 9.54,
+   "entropy": 7.08,
+   "edgeDensity": 0.457,
+   "contrast": 209,
    "creature": {
-    "pixels": 41340,
-    "sharePct": 1.77,
-    "bgDiff": 42.3,
-    "colorDiff": 76.9,
-    "edge": 33.5
+    "pixels": 91952,
+    "sharePct": 3.94,
+    "bgDiff": 61.4,
+    "colorDiff": 114.8,
+    "edge": 32.5
    },
    "enemies": {
-    "count": 6,
-    "medianH": 141,
-    "minH": 59,
+    "count": 5,
+    "medianH": 296,
+    "minH": 147,
     "byType": {
-     "compy": 140,
-     "raptor": 153,
-     "brute": 315
+     "raptor": 482,
+     "compy": 163
     }
    }
   }
  },
- "date": "2026-10-27T14:09:55.595Z",
+ "date": "2026-10-27T15:00:58.347Z",
  "seed": 1977,
  "moments": [
   34,

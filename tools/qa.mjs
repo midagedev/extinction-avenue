@@ -13,6 +13,7 @@
 //   soak     opt-in (--soak[=gameSeconds], default 240): the phone-profile memory soak (tools/mem-long-probe.mjs);
 //            peak page / GPU-process RSS and the renderer's own GPU allocations vs the baseline
 // Options:
+//   --fast                syntax, unit and shots only (~9 min; the full run adds page errors and WebKit)
 //   --url <base>          test a deployed build, e.g. --url https://midagedev.github.io/extinction-avenue/
 //                         (syntax / unit still check the working tree)
 //   --only desktop|phone  one shots profile
@@ -30,7 +31,7 @@ const ROOT = new URL('..', import.meta.url).pathname;
 const BASE_DIR = path.join(ROOT, 'tools/qa-baselines');
 const args = process.argv.slice(2);
 const opt = (k, d = null) => { const a = args.find((x) => x === k || x.startsWith(k + '=')); if (!a) return d; if (a.includes('=')) return a.split('=').slice(1).join('='); const i = args.indexOf(a); return args[i + 1] && !args[i + 1].startsWith('--') ? args[i + 1] : true; };
-const steps = String(opt('--steps', 'syntax,unit,errors,shots,webkit')).split(',').filter(Boolean);
+const steps = String(opt('--steps', args.includes('--fast') ? 'syntax,unit,shots' : 'syntax,unit,errors,shots,webkit')).split(',').filter(Boolean);
 const soakArg = opt('--soak');
 if (soakArg && !steps.includes('soak')) steps.push('soak');
 const soakSecs = soakArg === true || !soakArg ? 240 : +soakArg;
@@ -73,7 +74,9 @@ const CHECKS = [
   ['luma spread p2-p98', (m) => m.spread, (v, b) => (v < b - 25 ? 'FAIL' : v < b - 10 ? 'WARN' : 'PASS')],
   ['creature vs street (Δluma)', (m) => m.creature.bgDiff, (v, b) => (v < b * 0.7 ? 'FAIL' : v < b * 0.85 ? 'WARN' : 'PASS')],
   ['creature silhouette edge', (m) => m.creature.edge, (v, b) => (v < b * 0.6 ? 'FAIL' : v < b * 0.8 ? 'WARN' : 'PASS')],
-  ['enemy height px (median)', (m) => m.enemies.medianH, (v, b) => (v < b * 0.75 ? 'WARN' : 'PASS')],
+  ['enemy height px (median)', (m) => m.enemies.medianH, (v, b) => (v < b * 0.75 ? 'FAIL' : v < b * 0.9 ? 'WARN' : 'PASS')],
+  ['enemy height px (min)', (m) => m.enemies.minH, (v, b) => (v < b * 0.6 ? 'FAIL' : v < b * 0.8 ? 'WARN' : 'PASS')],
+  ['camera FOV (vertical °)', (m) => m.view.fov, (v, b) => (b && v > b + 2 ? 'WARN' : 'PASS')],
   ['enemies measured', (m) => m.enemies.count, (v) => (v === 0 ? 'WARN' : 'PASS')]
 ];
 

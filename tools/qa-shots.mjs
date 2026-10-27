@@ -174,7 +174,8 @@ async function measure({ a: aB64, c: cB64 }) {
   const enemies = [];
   for (const e of G.enemies.list) {
     if (e.ghost || e.state === 'dying' || e.state === 'launched' || e.boss) continue;
-    const h = (e.sp?.height || 1) * (e.scale || 1), rad = Math.max(e.radius || 0.5, Math.hypot(e.hx - e.x, e.hz - e.z) + (e.sp?.headR || 0.3) * (e.scale || 1));
+    const vk = e.vis || 1; // drawn scale boost for far individuals (enemies.js minScreenBoost)
+    const h = (e.sp?.height || 1) * (e.scale || 1) * vk, rad = Math.max(e.radius || 0.5, Math.hypot(e.hx - e.x, e.hz - e.z) + (e.sp?.headR || 0.3) * (e.scale || 1)) * vk;
     let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9, front = false;
     for (const dx of [-rad, rad]) for (const dz of [-rad, rad]) for (const yy of [e.y - 0.2, e.y + h * 1.25 + 0.3]) {
       v.set(e.x + dx, yy, e.z + dz).project(cam);
@@ -201,7 +202,7 @@ async function measure({ a: aB64, c: cB64 }) {
   const tx = t.getContext('2d'); tx.imageSmoothingQuality = 'high'; tx.drawImage(A.c, 0, 0, tw, th);
   const r1 = (x) => +x.toFixed(1), r2 = (x) => +x.toFixed(2);
   return {
-    view: { css: [innerWidth, innerHeight], dpr, pr: +r.getPixelRatio().toFixed(2), canvas: [cvs.width, cvs.height], device: [W, H], quality: w.quality?.id, gpuMB: r1((r.info.memory?.total || 0) / 1048576), state: G.state, time: r1(G.director.time) },
+    view: { css: [innerWidth, innerHeight], dpr, fov: +G.cam.camera.fov.toFixed(1), pr: +r.getPixelRatio().toFixed(2), canvas: [cvs.width, cvs.height], device: [W, H], quality: w.quality?.id, gpuMB: r1((r.info.memory?.total || 0) / 1048576), state: G.state, time: r1(G.director.time) },
     lumaP2: p2, lumaP50: p50, lumaP98: p98, spread: p98 - p2, veil,
     sharpness: r2((lap / inner) * 10), edgePct: r2((edges / inner) * 100),
     entropy: r2(entropy), edgeDensity: +(gEdges / gChecked).toFixed(3), contrast: g95 - g5,

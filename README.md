@@ -117,6 +117,16 @@ these RSS numbers are an upper bound for what an iPhone's WebContent process hol
 Playwright WebKit with `devices['iPhone 15']` (`node tools/e2e-webkit.mjs <outDir> iphone`) reaches gameplay from START
 with the profile, Phone quality and streaming on and no page errors. A real iPhone still hasn't been measured.
 
+### Field of view and dinosaur size
+
+On an upright iPhone the view felt *"too wide, the dinosaurs too small"*: portrait screens widened the vertical FOV
+to keep ~52° across, so an iPhone (aspect ≈ 0.46) got ≈ 92° vertical. Now the gunner's FOV is 56° (was 64°), and
+portrait screens widen it only up to 68° (`js/game/camera.js` `portraitFov`). The small species grew with their
+gameplay scale, so hit spheres and contact distances follow: Scuttler ×1.35, Sicklejaw ×1.3, Skyreaver ×1.35. Their
+chase slots moved ~1–3 m closer. A creature that would cover less than 5 % of the view height is drawn up to 1.45×
+larger (`enemies.js` `minScreenBoost`, scaled about its feet); the aim raycast scales its hit spheres the same way.
+The QA loop records the FOV and the enemy height in px (median and min) per shot, and fails when they regress.
+
 ### Screen clarity
 
 Players (real iPhone and desktop) found the picture *"too blurry / milky — I can barely see the enemies."* Measured
@@ -137,11 +147,43 @@ with the QA loop's fixed-seed shots (`tools/qa-shots.mjs`), the causes were, in 
 4. Smaller softeners: a constant chromatic aberration (now only the damage pulse), a 0.28 vignette (0.14) and a heavy
    split tone (lighter). Fog was not a cause and is unchanged.
 
-Memory paid for itself: the canvas no longer multisamples (it only receives the post-processing quad; the scene pass
-carries the MSAA, 2× on phones), which offsets the larger phone render targets. Numbers: see the table below and
-`tools/qa-baselines/`.
+**Memory** (iPhone emulation, `tools/mem-long-probe.mjs`, page process / GPU process, MB). The first 2.2× build with 2×
+MSAA cost ~95 MB more in the GPU process (SwiftShader rounds 2× up to 4×), so phones dropped MSAA. The canvas lost its
+unused depth buffer, the phone shadow cascades went to 512² (only the cab casts), and the phone SFX cache went from 24
+to 16 MB.
 
-<!-- clarity-table -->
+| 300 game-s soak | page peak | page mean / max in play | GPU-process peak | GPU-process mean | renderer allocations (max) |
+|---|---|---|---|---|---|
+| Before (1.6×, 397bb90) | 704 | 520 / 538 | 654 | 610 | 120 MB |
+| 2.2× + 2× MSAA (6511244) | 638 | 530 / 552 | 754 | 695 | 143 MB |
+| 2.2×, no MSAA, 512² shadows, no canvas depth (660f1bb) | 735 * | 532 / 550 | **647** | **601** | 131 MB |
+
+\* The page-process peak is the load spike (GC timing). It varies 630–745 MB between runs of the same build. Paired
+load probes (load + 15 s): before 714 / 712, after 709 / 724, FOV pass 705.
+
+Before (397bb90) → after, fixed seed, `node tools/qa-shots.mjs` (BEFORE served from a worktree of the old commit). The
+scenes share the seed but not every frame: bigger compys and raptors change hits and spawns.
+
+| metric | desktop-t34 before → after | desktop-t62 before → after | phone-t34 before → after | phone-t62 before → after |
+|---|---|---|---|---|
+| camera FOV (vertical °) | 64 → **56** | 64 → **56** | 92.2 → **68** | 92.2 → **68** |
+| pixel ratio | 1.5 → **2** | 1.5 → **2** | 1.6 → **2.2** | 1.6 → **2.2** |
+| sharpness | 35.51 → **81.37** | 45.43 → **98.55** | 31.9 → **88.97** | 23.85 → **103.55** |
+| edge px % | 3.84 → **6.16** | 5.29 → **6.39** | 4.01 → **8.22** | 2.32 → **9.54** |
+| street veil (p5 luma) | 18 → **10** | 27 → **20** | 87 → **10** | 178 → **4** |
+| luma p2 | 4 → **2** | 3 → **1** | 18 → **3** | 25 → **2** |
+| luma p50 | 108 → **104** | 97 → **90** | 150 → **74** | 197 → **80** |
+| luma spread p2-p98 | 246 → **248** | 245 → **245** | 234 → **233** | 229 → **231** |
+| inspector contrast p5-p95 | 232 → **230** | 222 → **218** | 224 → **212** | 217 → **209** |
+| color entropy bits | 7.14 → **7.02** | 7.42 → **7.07** | 7.4 → **7.08** | 6.61 → **7.08** |
+| edge density | 0.488 → **0.534** | 0.47 → **0.495** | 0.388 → **0.437** | 0.286 → **0.457** |
+| creature vs street dLuma | 27.6 → **41.5** | 40.6 → **66.4** | 34.1 → **55** | 20 → **61.4** |
+| creature vs street dRGB | 54.8 → **77.9** | 73.9 → **111.8** | 61 → **99.2** | 39.6 → **114.8** |
+| silhouette edge contrast | 15.7 → **44.2** | 29.4 → **46.7** | 4.2 → **20.5** | 6.2 → **32.5** |
+| enemies measured | 5 → **4** | 7 → **4** | 7 → **3** | 6 → **5** |
+| enemy median height px | 168 → **453** | 83 → **233** | 66 → **298** | 121 → **296** |
+| enemy min height px | 46 → **238** | 73 → **174** | 35 → **282** | 35 → **147** |
+| renderer GPU alloc MB | 444.5 → **569.3** | 444.7 → **569.5** | 110 → **115.5** | 109.8 → **115.5** |
 
 ## Controls
 

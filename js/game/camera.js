@@ -18,7 +18,11 @@ const _plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 // Gunner eye point in car space (x = car left, y = up, z = car forward): standing in the roof hatch, behind the sign
 const EYE = { x: 0, y: 2.15, z: -0.4 };
 const BASE_PITCH = -0.15; // looking slightly down the road behind the cab
-const GUNNER_FOV = 64;
+// Vertical FOV of the gunner's view. 64° made the chase read small; 56° frames the street and the pack closer.
+const GUNNER_FOV = 56;
+// Portrait phones: the vertical FOV is widened so the view keeps some width across, but never past this (an upright
+// iPhone, aspect ≈ 0.46, used to get ≈ 92° and the dinosaurs became specks)
+const PORTRAIT_MAX_FOV = 68;
 
 function damp(cur, target, lambda, dt) {
   return cur + (target - cur) * (1 - Math.exp(-lambda * dt));
@@ -26,6 +30,13 @@ function damp(cur, target, lambda, dt) {
 
 function wrapAngle(a) {
   return Math.atan2(Math.sin(a), Math.cos(a));
+}
+
+/** Vertical FOV for the screen's aspect: below 1.15 (portrait / square) widened to keep ~46° across, capped */
+function portraitFov(fov, aspect) {
+  if (aspect >= 1.15) return fov;
+  const keepAcross = 2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(Math.min(fov, 56) * 0.82 / 2)) / aspect) * 180 / Math.PI;
+  return Math.max(fov, Math.min(keepAcross, PORTRAIT_MAX_FOV));
 }
 
 class GameCamera {
@@ -229,8 +240,7 @@ class GameCamera {
     );
     cam.lookAt(_c);
     cam.rotateZ(sh * 0.06 * Math.sin(t * 0.9));
-    // Portrait phones: widen the vertical FOV so the view keeps at least ~52° across (the chase spreads sideways)
-    const fovOut = cam.aspect < 1.15 ? Math.max(this.fov, 2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(Math.min(this.fov, 60) * 0.85 / 2)) / cam.aspect) * 180 / Math.PI) : this.fov;
+    const fovOut = portraitFov(this.fov, cam.aspect);
     if (Math.abs(cam.fov - fovOut) > 0.01) {
       cam.fov = fovOut;
       cam.updateProjectionMatrix();
