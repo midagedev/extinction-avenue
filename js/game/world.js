@@ -28,8 +28,11 @@ const QUALITY = {
   high: { pixelRatio: 1.5, ssr: true, shadows: true, bloomScale: 0.5 },
   medium: { pixelRatio: 1.0, ssr: false, shadows: true, bloomScale: 0.5 },
   low: { pixelRatio: 0.75, ssr: false, shadows: false, bloomScale: 0.35 },
-  // Phones / low-memory devices (js/device-profile.js LOWMEM): no SSR targets, no shadow atlas, a small bloom chain
-  phone: { pixelRatio: 1.25, ssr: false, shadows: false, bloomScale: 0.3 }
+  // Phones / low-memory devices (js/device-profile.js LOWMEM): no SSR targets, a small bloom chain, and cheap sun
+  // shadows near the cab only: 1024² cascades over the first ~140 m (vs 3072² over 300+ m), no shadow stand-ins.
+  // The streamed city (city-stream.js) paid for the pixel ratio and the shadows; js/game/quality-governor.js steps
+  // them back down when frames run long.
+  phone: { pixelRatio: 1.6, ssr: false, shadows: true, shadowMap: 1024, shadowFar: 140, bloomScale: 0.35 }
 };
 
 const LOOKS = {
@@ -113,7 +116,9 @@ function createGamePost(renderer, sceneColor, reflections, quality) {
  * Returns { renderer, scene, lighting, city, post, renderPipeline, compile(camera), update(camera, elapsed), render() }
  */
 async function createWorld(container, camera, { quality: qualityId = 'high', forceWebGL = false, onStatus = () => {} } = {}) {
-  const quality = QUALITY[qualityId] || QUALITY.high;
+  const quality = { ...(QUALITY[qualityId] || QUALITY.high) };
+  const shadowParam = new URLSearchParams(location.search).get('shadows'); // ?shadows=0|1 overrides the preset
+  if (shadowParam === '0' || shadowParam === '1') quality.shadows = shadowParam === '1';
   const renderer = new THREE.WebGPURenderer({
     antialias: true,
     powerPreference: 'high-performance',
@@ -123,6 +128,7 @@ async function createWorld(container, camera, { quality: qualityId = 'high', for
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, quality.pixelRatio));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = quality.shadows;
+  quality.id = qualityId in QUALITY ? qualityId : 'high';
   renderer.lighting = new ClusteredLighting(256, 32, 28, 48);
   container.appendChild(renderer.domElement);
   onStatus('Starting the renderer…', null);
@@ -130,6 +136,8 @@ async function createWorld(container, camera, { quality: qualityId = 'high', for
 
   const scene = new THREE.Scene();
   const lighting = new LightingSystem(scene, renderer);
+  if (quality.shadowMap) lighting.sunLight.shadow.mapSize.set(quality.shadowMap, quality.shadowMap);
+  if (quality.shadowFar) lighting.shadowFarMax = quality.shadowFar;
   lighting.applyPreset('twilight');
 
   onStatus('Rebuilding Manhattan…', null);
@@ -155,7 +163,8 @@ async function createWorld(container, camera, { quality: qualityId = 'high', for
     .map((name) => scene.getObjectByName(name))
     .filter(Boolean);
   // (no shadow stand-ins without shadows: they are position copies of the big casters)
-  setupSceneCulling(scene, cullingRoots, quality.shadows ? lighting.sunLight.shadow : null);
+  // (no stand-ins on phones either: they are position copies of the big casters, and the near cascades are small)
+  setupSceneCulling(scene, cullingRoots, quality.shadows && !LOWMEM ? lighting.sunLight.shadow : null);
   // City instanced meshes are static: storage buffers upload once (see js/main.js)
   if (renderer.backend.isWebGPUBackend) {
     scene.traverse((object) => {

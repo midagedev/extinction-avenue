@@ -314,7 +314,8 @@ class LightingSystem {
     // logarithmic split (the near cascade ends at ~far / 4). Keep far at 300 m at street level so the near cascade
     // stays sharp, and expand it with altitude (helicopter / observatory) so shadows reach all the way down to street level.
     const altitude = focusPos && Number.isFinite(focusPos.y) ? Math.max(0, focusPos.y) : 0;
-    this.sunLight.shadow.camera.far = Math.max(300, Math.min(720, 260 + altitude * 1.6));
+    // (phones cap it: shadowFarMax, see js/game/world.js QUALITY.phone)
+    this.sunLight.shadow.camera.far = Math.min(this.shadowFarMax ?? Infinity, Math.max(300, Math.min(720, 260 + altitude * 1.6)));
   }
 }
 

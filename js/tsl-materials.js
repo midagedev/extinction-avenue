@@ -1661,6 +1661,7 @@ function createRoadSurfaceMaterial() {
     metalness: 0.24,
     roughness: 0.48
   });
+  mat.userData.groundSurface = true; // phones: one of the few shadow receivers (js/game/world.js)
 
   const cAsphaltDark = color(0x2b2e33);
   const cAsphaltLight = color(0x464a51);
@@ -1814,6 +1815,7 @@ function createSidewalkMaterial() {
     metalness: 0.0,
     roughness: 0.88
   });
+  mat.userData.groundSurface = true; // phones: one of the few shadow receivers (js/game/world.js)
 
   const cConcreteA = color(0x8e8d85);
   const cConcreteB = color(0x73726b);

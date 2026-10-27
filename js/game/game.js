@@ -18,6 +18,7 @@ import { rollChoices } from './upgrades.js';
 import { iconSVG } from './icons.js';
 import { pickBackend, fallbackURL, retryURL } from './backend.js';
 import { LOWMEM, PROFILE } from '../device-profile.js';
+import { QualityGovernor } from './quality-governor.js';
 
 // js/game/game.js
 // EXTINCTION AVENUE — entry point and game state machine. A first-person arcade rail shooter: Unit 77 drives itself
@@ -286,6 +287,8 @@ class Game {
     window.addEventListener('resize', () => this.onResize());
     this.onResize();
 
+    // Phones: graphics step down while playing when frames run long or memory runs short (?governor=0: off)
+    if (LOWMEM && !this.testMode && params.get('governor') !== '0') this.governor = new QualityGovernor({ world: this.world, onResize: () => this.onResize() });
     this.lastNow = performance.now();
     if (!this.testMode) {
       this.world.renderer.setAnimationLoop((now) => this.frame(now));
@@ -573,6 +576,7 @@ class Game {
     this.lastNow = now;
     this.tick(Math.min(0.05, Math.max(0.0005, rawDt)));
     this.renderFrame();
+    if (this.governor && this.state === 'playing') this.governor.update(rawDt);
     // START watchdog: a frame that completed (one slow software-rendered frame is not a hang, a throwing one is)
     this.frames++;
     this.lastFrameAt = performance.now();
