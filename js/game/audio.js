@@ -17,6 +17,7 @@
 
 import { MusicDirector } from './audio-music.js';
 import { ProcSynth, RECIPES } from './audio-recipes.js';
+import { isWebKitOnly } from './backend.js';
 
 const MANIFEST = 'assets/audio/manifest.json';
 const CODEC_DELAY = 1105 / 44100; // LAME encoder + decoder delay of our MP3s (compensated when the decoder keeps it)
@@ -96,6 +97,8 @@ const ALIAS = { fossilize_big: 'shatter_big', ui: 'ui_click', gem: 'xp', crate: 
 const BUS_GAIN = { weapons: 0.9, impacts: 1, creatures: 1, ui: 0.8, ambience: 0.7, voice: 1 };
 
 const isMobile = typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
+// Safari kills (and reloads) WebContent processes that hold too much memory: WebKit browsers get the phone music budget
+const tightMemory = isMobile || (typeof navigator !== 'undefined' && isWebKitOnly(navigator.userAgent || ''));
 
 class GameAudio {
   constructor() {
@@ -125,7 +128,7 @@ class GameAudio {
     // so decoded cues live under a budget: the least recently used long cue that isn't needed is dropped and decoded
     // again from its kept MP3 bytes (≈ 10 MB in total) when it is wanted. ?musicbudget=<MB> overrides (tests).
     const mb = typeof location !== 'undefined' && /[?&]musicbudget=(\d+)/.exec(location.search);
-    this.musicBudget = (mb ? +mb[1] : isMobile ? 140 : 320) * 1e6;
+    this.musicBudget = (mb ? +mb[1] : tightMemory ? 140 : 320) * 1e6;
     this.musicUsed = new Map(); // cue id → last use (ms)
     this.failed = new Map(); // load key → time of the last failure (retry after a pause)
     try {
@@ -143,7 +146,7 @@ class GameAudio {
   }
 
   get supported() {
-    return typeof window !== 'undefined' && !!(window.AudioContext || window.webkitAudioContext);
+    return !this.broken && typeof window !== 'undefined' && !!(window.AudioContext || window.webkitAudioContext);
   }
 
   async _fetchManifest() {
@@ -177,7 +180,14 @@ class GameAudio {
       // "The AudioContext was not allowed to start": wait for the next gesture instead
       const ua = navigator.userActivation;
       if (ua && !ua.isActive) return;
-      this._build();
+      // A context that can't be built leaves the game silent, never stuck (START calls this)
+      try { this._build(); } catch (err) {
+        console.warn('Web Audio unavailable, continuing without sound:', err.message || err);
+        try { this.ctx?.close(); } catch { /* ignore */ }
+        this.ctx = null;
+        this.broken = true;
+        return;
+      }
     }
     const s = this.ctx.state;
     if (s !== 'running' && s !== 'closed' && this.enabled && !document.hidden) this.ctx.resume().catch(() => {});

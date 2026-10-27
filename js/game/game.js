@@ -16,6 +16,7 @@ import { HUD, fmtTime } from './hud.js';
 import { Input } from './input.js';
 import { rollChoices } from './upgrades.js';
 import { iconSVG } from './icons.js';
+import { pickBackend, fallbackURL, retryURL } from './backend.js';
 
 // js/game/game.js
 // EXTINCTION AVENUE — entry point and game state machine. A first-person arcade rail shooter: Unit 77 drives itself
@@ -26,11 +27,14 @@ import { iconSVG } from './icons.js';
 //   playing → dead (wreck) → continue (10 s countdown; continuing is free but resets the combo multiplier) → playing
 //                                                   └ time out → results (game over)
 //
-// URL parameters (handy for testing and clips): ?quality=high|medium|low  ?webgl (force WebGL2)
+// URL parameters (handy for testing and clips): ?quality=high|medium|low  ?webgl (force WebGL2)  ?webgpu (WebGPU on Safari)
 //   ?boss (start just before GRIDLOCK with a mid-game build)  ?t=SECONDS (start later in the run)  ?nointro
 //   ?god (invulnerable)  ?test (no animation loop: drive the game from window.__game.step()/render(), headless tests)
+//   ?autostart (skip the title; set by the WebGPU → WebGL2 fallback when the device died after START)
 
 const params = new URLSearchParams(location.search);
+// WebGPU on Chromium; WebGL2 on Safari / iOS (see backend.js) and wherever navigator.gpu is missing
+const BACKEND = pickBackend(navigator.userAgent || '', params, !!navigator.gpu);
 const START_S = 120; // 5th Ave, a few blocks south of 57th St, heading downtown
 const CONTINUE_SECONDS = 10;
 const GAME_URL = location.protocol.startsWith('http') ? `${location.origin}${location.pathname}` : 'https://midagedev.github.io/extinction-avenue/';
@@ -54,6 +58,34 @@ const _hit = {};
 function loadSettings() {
   const def = { shake: 1, numbers: true, autoFire: false, quality: 'high', touchAim: 'drag', touchSens: 1.5, aimAssist: true };
   try { return { ...def, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') }; } catch { return def; }
+}
+
+/** Every public GameAudio method swallows (and logs once) its own exceptions: sound must never break START or a frame */
+function guardAudio(audio) {
+  const proto = Object.getPrototypeOf(audio);
+  for (const k of Object.getOwnPropertyNames(proto)) {
+    const fn = Object.getOwnPropertyDescriptor(proto, k).value;
+    if (k === 'constructor' || k.startsWith('_') || typeof fn !== 'function') continue;
+    let warned = false;
+    audio[k] = (...a) => {
+      try { return fn.apply(audio, a); } catch (err) {
+        if (!warned) { warned = true; console.warn(`[audio] ${k}() failed, continuing:`, err); }
+        return undefined;
+      }
+    };
+  }
+  return audio;
+}
+
+/** Back to the loading screen with a message (and the Retry button for errors). Used for the backend fallback and
+ *  every fatal error, so a failure is never a silent black screen. */
+function showLoadingScreen(text, error = false) {
+  for (const sc of document.querySelectorAll('.screen.open')) sc.classList.remove('open');
+  document.body.className = document.body.className.replace(/\bs-\S+/g, '').replace(/\bcine\b/g, '').trim() + ' s-loading';
+  const st = document.getElementById('load-status');
+  if (st) st.textContent = text;
+  const box = document.getElementById('load-error');
+  if (box) box.hidden = !error;
 }
 
 function makeLivery() {
@@ -104,6 +136,50 @@ class Game {
     this.assist = false;
     this.aimRay = new THREE.Ray();
     this.calloutT = {};
+    this.frames = 0;
+    this.lastFrameAt = 0;
+    this.runRequested = false; // the player pressed START (a backend fallback then lands straight back in a run)
+  }
+
+  /** Unrecoverable: stop rendering and show the error with "Retry (compatibility mode)" */
+  fatal(msg, err) {
+    if (this.dead) return;
+    this.dead = true;
+    if (err) console.error('[fatal]', msg, err);
+    try { this.world?.renderer.setAnimationLoop(null); } catch { /* ignore */ }
+    showLoadingScreen(msg, true);
+  }
+
+  /** WebGPU device lost / erroring: reload on WebGL2 (never loops — on WebGL2 already this becomes a fatal error) */
+  gpuFallback(reason) {
+    if (this.dead) return;
+    const url = fallbackURL(location.href, { autostart: this.runRequested });
+    if (!url) { this.fatal(`Graphics error (${reason}).`); return; }
+    console.warn(`[webgpu] ${reason} — restarting on WebGL2`);
+    this.dead = true;
+    try { this.world?.renderer.setAnimationLoop(null); } catch { /* ignore */ }
+    showLoadingScreen('Graphics driver reset — restarting in compatibility mode (WebGL2)…');
+    setTimeout(() => location.replace(url), 1200);
+  }
+
+  /** After START: if the run hasn't reached 'playing' ~15 s later and frames stopped (or the intro never ends), say so */
+  _armWatchdog() {
+    clearInterval(this._wd);
+    if (this.testMode) return;
+    const t0 = performance.now(), f0 = this.frames;
+    let hiddenFor = 0, last = t0;
+    this._wd = setInterval(() => {
+      const now = performance.now();
+      if (document.hidden) hiddenFor += now - last; // rAF pauses in background tabs: not a hang
+      last = now;
+      if (this.dead || this.state !== 'intro') { clearInterval(this._wd); return; }
+      const since = now - t0 - hiddenFor;
+      const stalled = !document.hidden && now - Math.max(this.lastFrameAt, t0) > 8000;
+      if (since > 15000 && (stalled || this.frames - f0 > 600)) {
+        clearInterval(this._wd);
+        this.fatal('Something went wrong — the game stopped responding.', new Error(`watchdog: state ${this.state}, ${this.frames - f0} frames since START`));
+      }
+    }, 1000);
   }
 
   async init() {
@@ -116,25 +192,34 @@ class Game {
       if (p !== null && p !== undefined) fill.style.transform = `scaleX(${Math.max(0.02, Math.min(1, p))})`;
     };
     if (!navigator.gpu && !params.has('webgl')) setStatus('WebGPU unavailable — using WebGL2 fallback…', 0.05);
+    console.info(`[init] renderer backend: ${BACKEND}`);
 
     this.cam = new GameCamera();
     this.cam.shakeScale = this.settings.shake;
     const quality = params.get('quality') || this.settings.quality;
     let stage = 0.05;
     this.world = await createWorld(document.getElementById('canvas-container'), this.cam.camera, {
-      quality, forceWebGL: params.has('webgl'),
+      quality, forceWebGL: BACKEND === 'webgl',
       onStatus: (t) => { stage = Math.min(0.45, stage + 0.08); setStatus(t, stage); }
     });
     const scene = this.world.scene;
-    // A lost WebGPU device (driver reset, broken adapter) restarts the game on the WebGL2 backend
-    this.world.renderer.backend.device?.lost?.then((info) => {
+    // A lost WebGPU device (driver reset, broken adapter) restarts the game on the WebGL2 backend, and so does a device
+    // that keeps reporting validation/out-of-memory errors (> 20 within 10 s)
+    const gpu = this.world.renderer.backend.device;
+    gpu?.lost?.then((info) => {
       console.warn('[webgpu] device lost:', info?.reason, info?.message);
-      if (info?.reason !== 'destroyed' && !params.has('webgl')) {
-        const q = new URLSearchParams(location.search);
-        q.set('webgl', '');
-        location.search = q.toString();
-      }
+      if (info?.reason !== 'destroyed') this.gpuFallback(`device lost${info?.message ? `: ${info.message}` : ''}`);
     });
+    if (gpu?.addEventListener) {
+      let total = 0, recent = [];
+      gpu.addEventListener('uncapturederror', (e) => {
+        const now = performance.now();
+        if (++total <= 5) console.warn(`[webgpu] uncaptured error #${total}:`, e.error?.message || e.error);
+        recent = recent.filter((t) => now - t < 10000);
+        recent.push(now);
+        if (recent.length > 20) this.gpuFallback(`${recent.length} GPU errors in 10 s`);
+      });
+    }
     setStatus('Thawing specimens…', 0.5);
     this.assets = await loadAssets(ASSET_MANIFEST);
     this.route = new Route();
@@ -145,7 +230,7 @@ class Game {
     this.gunner = new GunnerView(this.cam.camera, this.assets, this.player.propMaterial);
     this.vfx = new VFX(scene, this.assets);
     this.vfx.showNumbers = this.settings.numbers;
-    this.audio = new GameAudio();
+    this.audio = guardAudio(new GameAudio());
     this.hud = new HUD(this);
     this.enemies = new EnemyManager(this, this.assets);
     scene.add(this.enemies.group);
@@ -191,6 +276,7 @@ class Game {
   }
 
   setState(s) {
+    if (this.dead) return;
     this.state = s;
     document.body.className = document.body.className.replace(/\bs-\S+/g, '').trim() + ` s-${s}`;
     if (this.input?.touchMode) document.body.classList.add('touch');
@@ -378,6 +464,9 @@ class Game {
   }
 
   startRun() {
+    if (this.dead) return;
+    this.runRequested = true;
+    this._armWatchdog();
     this.audio.unlock();
     this._resetRun();
     this.setState('intro');
@@ -447,6 +536,8 @@ class Game {
 
   // ------------------------------------------------------------------------------------------------------------------
   frame(now) {
+    this.frames++;
+    this.lastFrameAt = performance.now();
     const rawDt = (now - this.lastNow) / 1000;
     this.lastNow = now;
     this.tick(Math.min(0.05, Math.max(0.0005, rawDt)));
@@ -1175,8 +1266,16 @@ class Game {
 
 const game = new Game();
 window.__game = game.testAPI();
+document.getElementById('btn-retry')?.addEventListener('click', () => location.replace(retryURL(location.href)));
+// Uncaught errors while loading (or repeatedly during the intro, where the frame loop keeps throwing) end on the error
+// screen instead of a black or frozen view
+let introErrors = 0;
+const onUncaught = (err) => {
+  if (game.state === 'loading') game.fatal(`Could not start: ${err?.message || err}`, err);
+  else if (game.state === 'intro' && ++introErrors >= 3) game.fatal(`Something went wrong: ${err?.message || err}`, err);
+};
+window.addEventListener('error', (e) => onUncaught(e.error || e.message));
+window.addEventListener('unhandledrejection', (e) => onUncaught(e.reason));
 game.init().catch((err) => {
-  console.error(err);
-  const s = document.getElementById('load-status');
-  if (s) s.textContent = `Could not start: ${err.message}. Try a recent Chrome, Edge or Safari (WebGPU / WebGL2).`;
+  game.fatal(`Could not start: ${err?.message || err}. Try a recent Chrome, Edge or Safari (WebGPU / WebGL2).`, err);
 });

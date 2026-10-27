@@ -291,6 +291,8 @@ body.s-loading #s-loading, body.s-title #s-title { display: flex; }
 .loading-bar i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, var(--orange), var(--orange-2)); transform-origin: left; transform: scaleX(0.02); transition: transform 0.3s; box-shadow: 0 0 12px var(--orange); }
 .loading-status { margin-top: 14px; font: 600 13px var(--ui); letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-2); }
 .loading-tip { margin-top: 26px; font: 500 15px var(--ui); color: var(--text-3); min-height: 3em; }
+.loading-error { margin-top: 8px; }
+.loading-error[hidden] { display: none; }
 
 /* Logo */
 .logo { text-align: center; line-height: 1; }
