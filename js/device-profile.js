@@ -45,6 +45,56 @@ export function inWindow(w, x0, z0, x1 = x0, z1 = z0) {
   return x1 >= w.minX && x0 <= w.maxX && z1 >= w.minZ && z0 <= w.maxZ;
 }
 
+// ---- City chunk streaming (lowmem) -------------------------------------------------------------------------------
+// js/game/city-stream.js keeps only the city cells around the cab resident (in the scene and on the GPU). The window is
+// a band along the route: the gunner faces BACKWARDS, so it reaches far behind the cab (the street it is looking down)
+// and less far ahead (prefetch, the intro swoop, corners swinging into view). Cells are CELL m squares of the world.
+// A cell leaves only once it is HYSTERESIS m outside the window, so a cab idling on a boundary does not thrash it.
+export const STREAM = { cell: 200, behind: 900, ahead: 450, side: 260, hysteresis: 120 };
+
+/** Integer cell coordinates of a world point */
+export function cellOf(x, z, cell = STREAM.cell) {
+  return [Math.floor(x / cell), Math.floor(z / cell)];
+}
+
+export const cellKey = (cx, cz) => `${cx},${cz}`;
+
+/**
+ * The cells within `side` m of the route between `behind` m before and `ahead` m after arc length s.
+ * `sample(s)` returns { x, z } on the route (Route.sample, or any polyline in tests). Returns a Set of cellKey()s.
+ */
+export function streamCells(sample, s, { cell = STREAM.cell, behind = STREAM.behind, ahead = STREAM.ahead, side = STREAM.side, pad = 0 } = {}) {
+  const out = new Set();
+  const r = side + pad;
+  const step = Math.max(10, Math.min(cell / 2, r));
+  const p = {};
+  for (let d = -(behind + pad); d <= ahead + pad + 1e-6; d += step) {
+    const q = sample(s + d, p);
+    const cx0 = Math.floor((q.x - r) / cell), cx1 = Math.floor((q.x + r) / cell);
+    const cz0 = Math.floor((q.z - r) / cell), cz1 = Math.floor((q.z + r) / cell);
+    for (let cx = cx0; cx <= cx1; cx++) {
+      for (let cz = cz0; cz <= cz1; cz++) {
+        // nearest point of the cell to q, within r?
+        const nx = Math.max(cx * cell, Math.min(q.x, (cx + 1) * cell));
+        const nz = Math.max(cz * cell, Math.min(q.z, (cz + 1) * cell));
+        if ((nx - q.x) ** 2 + (nz - q.z) ** 2 <= r * r) out.add(cellKey(cx, cz));
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * One streaming step: which cells to build and which to drop. `resident` is the Set of cells now in memory. Cells
+ * inside the window (want) that are not resident are built nearest-first (by `dist(key)`); resident cells outside
+ * the window grown by the hysteresis (keep) are dropped. Returns { add: key[], drop: key[] }.
+ */
+export function streamDiff(resident, want, keep, dist = () => 0) {
+  const add = [...want].filter((k) => !resident.has(k)).sort((a, b) => dist(a) - dist(b));
+  const drop = [...resident].filter((k) => !want.has(k) && !keep.has(k));
+  return { add, drop };
+}
+
 // ---- The live profile of this page -------------------------------------------------------------------------------
 const nav = typeof navigator !== 'undefined' ? navigator : {};
 const loc = typeof location !== 'undefined' ? location : { search: '', pathname: '' };

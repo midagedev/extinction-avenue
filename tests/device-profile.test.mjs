@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { detectProfile, cityWindow, inWindow, cityKeep, LOWMEM } from '../js/device-profile.js';
+import { detectProfile, cityWindow, inWindow, cityKeep, LOWMEM, STREAM, cellOf, cellKey, streamCells, streamDiff } from '../js/device-profile.js';
 
 const UA = {
   iPhone: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1',
@@ -62,4 +62,53 @@ test('cityWindow covers the whole patrol loop with the margin, inWindow tests bo
 test('cityKeep is always true off the lowmem profile (node has no navigator)', () => {
   assert.equal(LOWMEM, false);
   assert.equal(cityKeep(-300, 6000), true);
+});
+
+// ---- City chunk streaming window (js/game/city-stream.js) -----------------------------------------------------------
+
+// A straight route along +z through x = 0 (s = z), like a leg of the loop
+const straight = (s, out = {}) => { out.x = 0; out.z = s; out.hx = 0; out.hz = 1; return out; };
+
+test('cellOf / cellKey: floor-based cells, negative coordinates included', () => {
+  assert.deepEqual(cellOf(0, 0, 200), [0, 0]);
+  assert.deepEqual(cellOf(199.9, -0.1, 200), [0, -1]);
+  assert.deepEqual(cellOf(-200, 400, 200), [-1, 2]);
+  assert.equal(cellKey(-1, 2), '-1,2');
+});
+
+test('streamCells: reaches far behind the cab (the gunner looks back) and less far ahead', () => {
+  const opts = { cell: 100, behind: 600, ahead: 200, side: 50 };
+  const w = streamCells(straight, 1000, opts);
+  assert.ok(w.has(cellKey(0, 4)), 'cell 600 m behind'); // z 400..500
+  assert.ok(w.has(cellKey(0, 11)), 'cell 150 m ahead'); // z 1100..1200
+  assert.ok(!w.has(cellKey(0, 2)), 'nothing beyond behind + side (z < 350)');
+  assert.ok(!w.has(cellKey(0, 13)), 'nothing 300 m ahead');
+  // lateral: within `side` of the street only
+  assert.ok(w.has(cellKey(-1, 10)) && w.has(cellKey(0, 10)), 'both sides of the street (x = 0 is a cell edge)');
+  assert.ok(!w.has(cellKey(1, 10)) && !w.has(cellKey(-2, 10)), 'not a block further out');
+});
+
+test('streamCells: the padded (hysteresis) window contains the window', () => {
+  const opts = { cell: 200, behind: 900, ahead: 450, side: 260 };
+  const w = streamCells(straight, 5000, opts);
+  const keep = streamCells(straight, 5000, { ...opts, pad: STREAM.hysteresis });
+  for (const k of w) assert.ok(keep.has(k));
+  assert.ok(keep.size > w.size);
+});
+
+test('streamCells: the window moves with the cab, its size stays bounded', () => {
+  const sizes = [];
+  for (let s = 0; s < 5000; s += 200) sizes.push(streamCells(straight, s).size);
+  assert.ok(Math.max(...sizes) - Math.min(...sizes) <= 6, `about constant along a straight street: ${sizes}`);
+  // default window: (900 + 450 + 2 * 260) m of street x (2 * 260) m ≈ 10 x 4 cells
+  assert.ok(Math.max(...sizes) <= 44, `${Math.max(...sizes)} cells`);
+});
+
+test('streamDiff: adds the missing cells nearest first, drops only outside the hysteresis band', () => {
+  const resident = new Set(['a', 'b', 'c']);
+  const want = new Set(['b', 'c', 'd', 'e']);
+  const dist = (k) => ({ d: 5, e: 1 })[k];
+  assert.deepEqual(streamDiff(resident, want, new Set(['a', 'b', 'c', 'd', 'e']), dist), { add: ['e', 'd'], drop: [] });
+  assert.deepEqual(streamDiff(resident, want, new Set(['b', 'c', 'd', 'e']), dist).drop, ['a']);
+  assert.deepEqual(streamDiff(new Set(), new Set(), new Set()), { add: [], drop: [] });
 });

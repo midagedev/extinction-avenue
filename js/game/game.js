@@ -265,12 +265,21 @@ class Game {
     // Title scene, then compile every pipeline behind the loading screen (with one instance in every batch/rig)
     this.setupTitle();
     this.cam.update(0.016, this.player);
+    // Phones: only the city cells around the cab are resident (+ one piece of every material for the compile)
+    const stream = this.world.stream;
+    if (stream) {
+      stream.setRoute(this.route);
+      stream.prime(this.player.s);
+      stream.addRepresentatives();
+    }
     const batches = [];
     scene.traverse((o) => { if (o.isInstancedMesh && o.count === 0 && o.name && !o.name.startsWith('Manhattan')) batches.push(o); });
     for (const m of batches) m.count = 1;
     setStatus('Compiling shaders…', 0.55);
     await this.world.compile((p) => setStatus(`Compiling shaders… ${Math.round(p * 100)}%`, 0.55 + p * 0.4));
     this.world.warmup();
+    stream?.dropStrays();
+    if (stream) console.info('[lowmem] city stream', JSON.stringify(stream.info()));
     for (const m of batches) m.count = 0;
     if (LOWMEM) console.info(`[lowmem] released ${(this.world.releaseStaticArrays() / 1e6).toFixed(1)} MB of uploaded city vertex data`);
     setStatus('Ready', 1);
@@ -499,6 +508,7 @@ class Game {
     if (LOWMEM && !this._released) { this._released = true; setTimeout(() => this.world.releaseStaticArrays(), 12000); }
     const p = this.player;
     p.update(0.016, 0);
+    this.world.stream?.prime(p.s);
     this.gunner.setVisible(true);
     if (params.has('nointro') || this.testMode) {
       this.cam.setMode('gunner', true);
@@ -665,6 +675,7 @@ class Game {
   }
 
   renderFrame() {
+    this.world.stream?.update(this.player.s);
     if (this.state !== 'playing' && this.state !== 'title' && this.state !== 'intro' && this.state !== 'bossintro' && this.state !== 'dead') this.enemies.render(this.elapsed);
     this.world.update(this.cam.camera, this.elapsed);
     this.world.render();

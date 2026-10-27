@@ -13,8 +13,9 @@ import { buildStreetDetails } from '../street-details.js';
 import { buildRoadNetwork } from '../road-network.js';
 import { buildRoadPaint } from '../road-paint.js';
 import { LightingSystem } from '../lighting.js';
-import { setupSceneCulling, updateSceneCulling } from '../scene-culling.js';
+import { setupSceneCulling, updateSceneCulling, sceneCullingList } from '../scene-culling.js';
 import { LOWMEM } from '../device-profile.js';
+import { CityStream } from './city-stream.js';
 
 // js/game/world.js
 // The stage: the renderer, slop-newyork's Manhattan (grid, blocks, landmarks, street furniture, road paint; no ambient
@@ -162,6 +163,18 @@ async function createWorld(container, camera, { quality: qualityId = 'high', for
     });
   }
   if (!quality.shadows) lighting.sunLight.castShadow = false;
+  // Phones: only the cab and the creatures cast, and only the street (asphalt, sidewalks) receives. Every material that
+  // casts or receives gets a heavier shader build per pipeline: the whole city doing so cost ~160 MB of JS heap (three's
+  // node builds) and ~75 extra programs; this way it costs a few MB.
+  else if (LOWMEM) {
+    for (const r of cullingRoots) r.traverse((o) => { o.castShadow = false; o.receiveShadow = !!o.material?.userData?.groundSurface; });
+  }
+  // Phones: the static city streams in cells along the cab's route (js/game/city-stream.js; ?stream=0 turns it off)
+  const streamParam = new URLSearchParams(location.search).get('stream');
+  const stream = LOWMEM && streamParam !== '0' && !/sim\.html$/.test(location.pathname)
+    ? new CityStream(['ManhattanCityGrid', 'ManhattanCityBlocks', 'ManhattanStreetDetails', 'RoadMarkings'].map((n) => scene.getObjectByName(n)).filter(Boolean),
+      { storageInstances: !!renderer.backend.isWebGPUBackend, culled: sceneCullingList() })
+    : null;
 
   // --- Post-processing --------------------------------------------------------------------------------------------
   const scenePass = pass(scene, camera);
@@ -209,6 +222,7 @@ async function createWorld(container, camera, { quality: qualityId = 'high', for
     if (streetDetails.update) streetDetails.update(cam);
     lighting.update(cam.position);
     updateSceneCulling(cam.position);
+    stream?.updateCulling(cam.position.x, cam.position.y, cam.position.z);
     post.uniforms.time.value = elapsed;
   }
 
@@ -285,7 +299,7 @@ async function createWorld(container, camera, { quality: qualityId = 'high', for
     };
     for (const name of ['ManhattanCityGrid', 'ManhattanCityBlocks', 'ManhattanStreetDetails', 'ManhattanLandmarks', 'Boroughs']) {
       scene.getObjectByName(name)?.traverse((o) => {
-        if (!o.isMesh || o.isInstancedMesh || o.isSkinnedMesh) return;
+        if (!o.isMesh || o.isInstancedMesh || o.isSkinnedMesh || o.userData.streamed) return; // streamed: re-uploads
         const g = o.geometry;
         if (!g.attributes.position?.array?.length) return;
         if (!g.boundingSphere) g.computeBoundingSphere();
@@ -307,7 +321,7 @@ async function createWorld(container, camera, { quality: qualityId = 'high', for
   }
 
   return {
-    renderer, scene, lighting, post, renderPipeline, quality, cityBlocks, streetDetails,
+    renderer, scene, lighting, post, renderPipeline, quality, cityBlocks, streetDetails, stream,
     update, compile, warmup, setTimeOfDay, resize, releaseStaticArrays,
     render: () => renderPipeline.render()
   };

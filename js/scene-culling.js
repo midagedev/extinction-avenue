@@ -331,4 +331,9 @@ function updateSceneCulling(cameraPosition) {
   }
 }
 
-export { setupSceneCulling, updateSceneCulling, SHADOW_PROXY_LAYER };
+/** The distance-culled chunk list ({ mesh, x, y, z, r, d }); js/game/city-stream.js takes over the chunks it re-cuts */
+function sceneCullingList() {
+  return state.culled;
+}
+
+export { setupSceneCulling, updateSceneCulling, sceneCullingList, SHADOW_PROXY_LAYER };
