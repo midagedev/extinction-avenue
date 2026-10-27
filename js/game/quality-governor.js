@@ -4,7 +4,9 @@
 //   - memory: where the browser tells (performance.memory: Chrome on Android) the JS heap above 70 % of its limit, and
 //     everywhere the GPU allocations the renderer counts (renderer.info.memory.total) above GPU_BUDGET → one step down
 //     (iOS has no memory API: the renderer's own counts are the budget there)
-// Steps, in order: pixel ratio 1.6 → 1.35 → 1.15 → 1.0, sun shadows off, the city stream window to 70 %, then 50 %.
+// Steps, in order: sun shadows off, the city stream window to 70 %, pixel ratio 2.2 → 1.85, the stream window to
+// 50 %, pixel ratio 1.5. A sharp picture is what makes the dinosaurs readable on a phone, so everything else goes
+// first and the pixel ratio never drops below PIXEL_RATIO_FLOOR (1.5).
 // It never steps back up during a session (no oscillation); `?governor=0` turns it off.
 
 const FRAME_SLOW = 1 / 36; // s
@@ -12,13 +14,14 @@ const WINDOW = 3; // s
 const GPU_BUDGET = 260e6; // bytes the renderer may hold (buffers + textures + render targets)
 const HEAP_FRACTION = 0.7;
 
+const PIXEL_RATIO_FLOOR = 1.5;
+
 const STEPS = [
-  { pixelRatio: 1.35 },
-  { pixelRatio: 1.15 },
-  { pixelRatio: 1.0 },
   { shadows: false },
   { streamReach: 0.7 },
-  { streamReach: 0.5 }
+  { pixelRatio: 1.85 },
+  { streamReach: 0.5 },
+  { pixelRatio: PIXEL_RATIO_FLOOR }
 ];
 
 class QualityGovernor {
@@ -67,7 +70,9 @@ class QualityGovernor {
     if (!s) return;
     const w = this.world;
     if (s.pixelRatio) {
-      w.renderer.setPixelRatio(Math.min(globalThis.devicePixelRatio || 1, s.pixelRatio));
+      // never up (a device whose own ratio is lower keeps it), never below the floor
+      const pr = Math.min(globalThis.devicePixelRatio || 1, Math.max(PIXEL_RATIO_FLOOR, s.pixelRatio), w.renderer.getPixelRatio());
+      w.renderer.setPixelRatio(pr);
       this.onResize();
     }
     if (s.shadows === false) w.lighting.sunLight.castShadow = false;
@@ -76,4 +81,4 @@ class QualityGovernor {
   }
 }
 
-export { QualityGovernor, STEPS as GOVERNOR_STEPS };
+export { QualityGovernor, STEPS as GOVERNOR_STEPS, PIXEL_RATIO_FLOOR };

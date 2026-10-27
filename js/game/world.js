@@ -17,35 +17,13 @@ import { setupSceneCulling, updateSceneCulling, sceneCullingList } from '../scen
 import { LOWMEM, loopReach, setCityReach } from '../device-profile.js';
 import { CityStream } from './city-stream.js';
 import { Route } from './route.js';
+import { QUALITY, LOOKS } from './quality-presets.js';
 
 // js/game/world.js
 // The stage: the renderer, slop-newyork's Manhattan (grid, blocks, landmarks, street furniture, road paint; no ambient
 // traffic or pedestrians — the city has been evacuated), the lighting rig, and the game's post-processing chain:
 // optional SSR (High quality), HDR bloom tuned for the neon-emissive art direction, color grade, vignette, and the
 // gameplay-driven effects (hurt vignette + chromatic aberration, slow-motion desaturation, white flash).
-
-const QUALITY = {
-  // pixel ratio cap, SSR, shadows, bloom resolution, MSAA samples of the scene pass (the canvas itself only receives
-  // the post-processing quad, so it never multisamples), sharpen = contrast-adaptive sharpening amount (0 = off)
-  high: { pixelRatio: 2.0, ssr: true, shadows: true, bloomScale: 0.5, samples: 4, sharpen: 0 },
-  medium: { pixelRatio: 1.25, ssr: false, shadows: true, bloomScale: 0.5, samples: 4, sharpen: 0.25 },
-  low: { pixelRatio: 0.75, ssr: false, shadows: false, bloomScale: 0.35, samples: 0, sharpen: 0.3 },
-  // Phones / low-memory devices (js/device-profile.js LOWMEM): no SSR targets, a small bloom chain, and cheap sun
-  // shadows near the cab only: 1024² cascades over the first ~120 m, no shadow stand-ins. A sharp picture comes first:
-  // 2.2× pixel ratio (≈ 54 % of an iPhone's 3× pixels; 1.6× was 28 % and read as blurry) with 2× MSAA on the scene
-  // pass and a light sharpening pass. js/game/quality-governor.js gives up shadows and stream reach before resolution
-  // when frames run long, and never drops below 1.5×.
-  phone: { pixelRatio: 2.2, ssr: false, shadows: true, shadowMap: 1024, shadowFar: 120, bloomScale: 0.35, samples: 2, sharpen: 0.35 }
-};
-
-const LOOKS = {
-  // Twilight "neon Cretaceous": cool blue hour with saturated emissive accents. Bloom thresholds sit above what lit
-  // surfaces reach (sky, sunlit facades, the wet street), so only emissives bloom — tracers, muzzle flashes,
-  // explosions, lamps, creature eyes — instead of a low-resolution haze over the whole frame.
-  twilight: { exposure: 1.1, contrast: 1.16, saturation: 1.14, balance: [1.0, 0.99, 1.03], bloom: 0.3, threshold: 1.45 },
-  midnight: { exposure: 1.18, contrast: 1.14, saturation: 1.14, balance: [0.98, 1.0, 1.04], bloom: 0.34, threshold: 1.3 },
-  golden: { exposure: 1.04, contrast: 1.14, saturation: 1.12, balance: [1.04, 1.0, 0.96], bloom: 0.28, threshold: 1.6 }
-};
 
 function createGamePost(renderer, sceneColor, reflections, quality) {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
