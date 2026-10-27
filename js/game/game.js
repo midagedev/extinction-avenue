@@ -33,9 +33,11 @@ import { LOWMEM, PROFILE } from '../device-profile.js';
 //   ?boss (start just before GRIDLOCK with a mid-game build)  ?t=SECONDS (start later in the run)  ?nointro
 //   ?god (invulnerable)  ?test (no animation loop: drive the game from window.__game.step()/render(), headless tests)
 //   ?autostart (skip the title; set by the WebGPU → WebGL2 fallback when the device died after START)
+//   ?autoplay (test only: the game plays itself — aims at the nearest threat, fires, picks cards, continues, goes endless)
 
 const params = new URLSearchParams(location.search);
 // WebGPU on Chromium; WebGL2 on Safari / iOS (see backend.js) and wherever navigator.gpu is missing
+const AUTOPLAY = params.has('autoplay');
 const BACKEND = pickBackend(navigator.userAgent || '', params, !!navigator.gpu);
 const START_S = 120; // 5th Ave, a few blocks south of 57th St, heading downtown
 const CONTINUE_SECONDS = 10;
@@ -569,6 +571,7 @@ class Game {
   tick(dt) {
     this.realTime += dt;
     this.input.update(dt);
+    if (AUTOPLAY) this._autoplay(dt);
     // Slow motion & hit-stop operate on game time only; camera and UI run in real time
     if (this.slow) {
       this.slow.t -= dt;
@@ -1238,6 +1241,25 @@ class Game {
     this.cam.onResize(w, h);
     this.world.resize(w, h);
     this.vfx.resizeOverlay();
+  }
+
+  /** ?autoplay (memory soaks, tools/mem-long-probe.mjs): aim at the closest threat and fire, take the first card, continue
+   *  after a wreck and go endless after the boss. Inert without the flag. */
+  _autoplay(dt) {
+    const st = this.state;
+    if (st === 'levelup') return this.pick(0);
+    if (st === 'continue') return this.doContinue();
+    if (st === 'results' && this.victory) return this.continueEndless();
+    if (st === 'results') return this.startRun();
+    if (st !== 'playing') return;
+    this._apT = (this._apT || 0) - dt;
+    if (this._apT > 0) return;
+    this._apT = 0.1;
+    const t = this.threats().filter((o) => !o.type.startsWith('pickup')).sort((a, b) => (b.attacking - a.attacking) || (a.dist - b.dist))[0];
+    const m = this.input.mouse;
+    const aim = t && (t.head || t);
+    if (aim) { m.x = aim.x; m.y = aim.y; }
+    m.down = !!t;
   }
 
   // ------------------------------------------------------------------------------------------------------------------
