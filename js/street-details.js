@@ -16,6 +16,7 @@ import {
 } from './city-config.js';
 import { cityUniforms, createSteamMaterial, createTreeGrateMaterial, createGodRayMaterial } from './tsl-materials.js';
 import { createTreeField } from './trees.js';
+import { cityKeep } from './device-profile.js';
 import { pavedPlazaRects, centralParkClearings, parkTreeSites, sidewalkBlocks, parkLampSites } from './city-grid.js';
 import { bryantParkLawn } from './landmarks.js';
 
@@ -210,6 +211,7 @@ function buildStreetDetails(scene) {
 
   // True only when (x, z) and its surrounding pad-meter footprint sit on a real curb island (never in a road or median)
   const isOnCurbIsland = (x, z, pad = 0.55) => {
+    if (!cityKeep(x, z)) return false; // lowmem: only around the game's patrol loop (device-profile.js)
     const b = blockAt(x, z);
     if (!b || b.median) return false;
     if (pad <= 0) return true;
@@ -243,6 +245,7 @@ function buildStreetDetails(scene) {
   for (const ave of ALL_AVENUES) {
     if (ave.isHighway) continue;
     for (const st of ALL_STREETS) {
+      if (!cityKeep(ave.x, st.z)) continue;
       const avenueRun = ave.segs?.find((s) => st.z >= s.z0 && st.z <= s.z1);
       const streetRun = st.runs?.find((s) => ave.x >= s[0] && ave.x <= s[1]);
       if (!avenueRun || !streetRun) continue;

@@ -1,5 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { createTreeMaterial } from './tsl-materials.js';
+import { cityKeep } from './device-profile.js';
 
 // js/trees.js
 // Procedural NYC street & park trees, planted by street-details.js (section 7):
@@ -828,6 +829,7 @@ function hashPos(x, y, z) {
  * { group, material, atlas, update(cameraPosition) }.
  */
 function createTreeField(scene, sites) {
+  sites = sites.filter((t) => cityKeep(t.x, t.z)); // lowmem: only around the game's patrol loop (device-profile.js)
   const group = new THREE.Group();
   group.name = 'Trees';
   const atlas = createLeafAtlas();

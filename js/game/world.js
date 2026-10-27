@@ -25,7 +25,9 @@ const QUALITY = {
   // pixel ratio cap, SSR, shadows, bloom resolution
   high: { pixelRatio: 1.5, ssr: true, shadows: true, bloomScale: 0.5 },
   medium: { pixelRatio: 1.0, ssr: false, shadows: true, bloomScale: 0.5 },
-  low: { pixelRatio: 0.75, ssr: false, shadows: false, bloomScale: 0.35 }
+  low: { pixelRatio: 0.75, ssr: false, shadows: false, bloomScale: 0.35 },
+  // Phones / low-memory devices (js/device-profile.js LOWMEM): no SSR targets, no shadow atlas, a small bloom chain
+  phone: { pixelRatio: 1.25, ssr: false, shadows: false, bloomScale: 0.3 }
 };
 
 const LOOKS = {

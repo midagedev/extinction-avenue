@@ -40,6 +40,7 @@ import {
   WALL_KINDS
 } from './tsl-materials.js';
 import { GEO } from './nyc-geodata.js';
+import { cityKeep } from './device-profile.js';
 import { fdrViaduct, pavedPlazaRects, parkTreeSites, sidewalkBlocks } from './city-grid.js';
 
 // js/buildings.js
@@ -1990,6 +1991,7 @@ function buildCityBlocks(scene) {
   }
   for (const b of BLOCKS) {
     if (b.park > 0.6 || b.median) continue;
+    if (!cityKeep(b.minX, b.minZ, b.maxX, b.maxZ)) continue; // lowmem: only around the game's patrol loop
     minLot = b.frames ? 12 : 15;
     for (const [th, px, pz, rects] of b.frames || [[0, 0, 0, b.rects]]) {
       xf = th ? { th, cs: Math.cos(th), sn: Math.sin(th), px, pz } : null;

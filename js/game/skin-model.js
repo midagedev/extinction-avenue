@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { LOWMEM } from '../device-profile.js';
 
 // js/game/skin-model.js
 // Loads a rigged glTF/GLB creature into the SKINNED MODEL format drawn by skin-rig.js, and bakes its animation clips.
@@ -52,7 +53,11 @@ async function rawSkin(url, skin) {
   const key = `${url}|${skin.rotY || 0}|${skin.importScale || 1}|${skin.ground !== false}`;
   if (geoCache.has(key)) return geoCache.get(key);
   const p = (async () => {
-    const gltf = await loadGLTF(url);
+    let gltf = await loadGLTF(url);
+    const { mergeGeometries } = await import('three/addons/utils/BufferGeometryUtils.js');
+    // (no await from here to the release of the meshes below, so concurrent imports of one file can't race)
+    // A previous import transform already merged (and released) this file's meshes: load it again
+    for (let k = 0; k < 3 && !gltf.scene.getObjectByProperty('isSkinnedMesh', true)?.geometry.getAttribute('position'); k++) { gltfCache.delete(url); gltf = await loadGLTF(url); }
     const scene = gltf.scene;
     scene.updateMatrixWorld(true);
     const meshes = [];
@@ -70,7 +75,6 @@ async function rawSkin(url, skin) {
     // Group meshes into LODs by name suffix (_LOD1), everything else is LOD0
     const lods = [[], []];
     for (const m of meshes) lods[/LOD1$/i.test(m.name) ? 1 : 0].push(m);
-    const { mergeGeometries } = await import('three/addons/utils/BufferGeometryUtils.js');
     const geometries = [];
     for (const list of lods) {
       if (!list.length) continue;
@@ -115,6 +119,12 @@ async function rawSkin(url, skin) {
     const tmp = new THREE.Matrix4(), v = new THREE.Vector3();
     bones.forEach((b, i) => { tmp.copy(skeleton.boneInverses[i]).invert(); v.setFromMatrixPosition(tmp).applyMatrix4(Tg); rest.set([v.x, v.y, v.z], i * 3); });
     void Ainv;
+    // The merged copies above are all that is drawn: release the GLB's own mesh data (only its clips are read later)
+    for (const m of meshes) {
+      m.geometry.dispose();
+      m.geometry = new THREE.BufferGeometry();
+      for (const mat of [].concat(m.material)) mat.dispose();
+    }
     return { gltf, skeleton, bones, names, parent, rest, T, TgInv: Tg.clone().invert(), geometries };
   })();
   geoCache.set(key, p);
@@ -127,9 +137,26 @@ function withWhite(g) {
 }
 
 const texCache = new Map();
+// Phones (js/device-profile.js LOWMEM): creature textures are drawn down to at most 1024 px and the full-size decoded
+// image is dropped (2048² albedo + normal ≈ 43 MB with mipmaps on the GPU plus 32 MB of decoded images; ≈ 19 MB at 1024²)
+const LOWMEM_TEX = 1024;
+async function loadCappedTexture(url) {
+  const img = await new THREE.ImageLoader().loadAsync(url);
+  const k = Math.min(1, LOWMEM_TEX / Math.max(img.width, img.height));
+  if (k >= 1) return new THREE.Texture(img);
+  const c = document.createElement('canvas');
+  c.width = Math.round(img.width * k);
+  c.height = Math.round(img.height * k);
+  const x = c.getContext('2d');
+  x.imageSmoothingQuality = 'high';
+  x.drawImage(img, 0, 0, c.width, c.height);
+  img.src = '';
+  return new THREE.CanvasTexture(c);
+}
 function loadTexture(url, srgb) {
   if (!texCache.has(url)) {
-    texCache.set(url, new THREE.TextureLoader().loadAsync(url).then((t) => {
+    const p = LOWMEM ? loadCappedTexture(url).then((t) => { t.needsUpdate = true; return t; }) : new THREE.TextureLoader().loadAsync(url);
+    texCache.set(url, p.then((t) => {
       if (srgb) t.colorSpace = THREE.SRGBColorSpace;
       t.anisotropy = 4;
       return t;

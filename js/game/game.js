@@ -17,6 +17,7 @@ import { Input } from './input.js';
 import { rollChoices } from './upgrades.js';
 import { iconSVG } from './icons.js';
 import { pickBackend, fallbackURL, retryURL } from './backend.js';
+import { LOWMEM, PROFILE } from '../device-profile.js';
 
 // js/game/game.js
 // EXTINCTION AVENUE — entry point and game state machine. A first-person arcade rail shooter: Unit 77 drives itself
@@ -27,7 +28,8 @@ import { pickBackend, fallbackURL, retryURL } from './backend.js';
 //   playing → dead (wreck) → continue (10 s countdown; continuing is free but resets the combo multiplier) → playing
 //                                                   └ time out → results (game over)
 //
-// URL parameters (handy for testing and clips): ?quality=high|medium|low  ?webgl (force WebGL2)  ?webgpu (WebGPU on Safari)
+// URL parameters (handy for testing and clips): ?quality=high|medium|low|phone  ?webgl (force WebGL2)  ?webgpu (WebGPU on Safari)
+//   ?lowmem / ?lowmem=0 (force the phone memory profile on / off, see js/device-profile.js)
 //   ?boss (start just before GRIDLOCK with a mid-game build)  ?t=SECONDS (start later in the run)  ?nointro
 //   ?god (invulnerable)  ?test (no animation loop: drive the game from window.__game.step()/render(), headless tests)
 //   ?autostart (skip the title; set by the WebGPU → WebGL2 fallback when the device died after START)
@@ -56,8 +58,17 @@ const _v2 = new THREE.Vector3();
 const _hit = {};
 
 function loadSettings() {
-  const def = { shake: 1, numbers: true, autoFire: false, quality: 'high', touchAim: 'drag', touchSens: 1.5, aimAssist: true };
-  try { return { ...def, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') }; } catch { return def; }
+  const def = { shake: 1, numbers: true, autoFire: false, quality: LOWMEM ? 'phone' : 'high', touchAim: 'drag', touchSens: 1.5, aimAssist: true };
+  let s = def;
+  try { s = { ...def, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') }; } catch { /* storage unavailable */ }
+  s.quality = qualityFor(s.quality);
+  return s;
+}
+
+/** Low-memory devices only get the Phone and Low presets: High / Medium (an old saved setting, ?quality=high) become
+ *  Phone, so a phone never allocates SSR targets or the shadow atlas. ?lowmem=0 lifts the cap. */
+function qualityFor(q) {
+  return LOWMEM && q !== 'low' ? 'phone' : q;
 }
 
 /** Every public GameAudio method swallows (and logs once) its own exceptions: sound must never break START or a frame */
@@ -197,7 +208,8 @@ class Game {
 
     this.cam = new GameCamera();
     this.cam.shakeScale = this.settings.shake;
-    const quality = params.get('quality') || this.settings.quality;
+    const quality = qualityFor(params.get('quality') || this.settings.quality);
+    if (LOWMEM) console.info(`[lowmem] phone memory profile (${PROFILE.reason}): quality ${quality}, city around the loop, streamed music`);
     let stage = 0.05;
     this.world = await createWorld(document.getElementById('canvas-container'), this.cam.camera, {
       quality, forceWebGL: BACKEND === 'webgl',
@@ -327,6 +339,12 @@ class Game {
     $('set-shake').value = String(s.shake);
     $('set-numbers').checked = s.numbers;
     $('set-autofire').checked = s.autoFire;
+    if (LOWMEM) {
+      // Phones: Phone (default) or Low; the desktop presets need more memory than iOS allows a tab
+      const sel = $('set-quality');
+      for (const o of [...sel.options]) if (o.value === 'high' || o.value === 'medium') o.remove();
+      sel.insertBefore(new Option('Phone', 'phone'), sel.firstChild);
+    }
     $('set-quality').value = s.quality;
     $('set-touchaim').value = s.touchAim;
     $('set-touchsens').value = String(s.touchSens);

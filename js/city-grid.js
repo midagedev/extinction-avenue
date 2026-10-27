@@ -58,6 +58,7 @@ import {
   createTunnelShadeMaterial
 } from './tsl-materials.js';
 import { GEO } from './nyc-geodata.js';
+import { cityKeep } from './device-profile.js';
 
 // Live construction data consumed by the building and street-detail builders after buildCityGrid().
 let centralParkClearings;
@@ -2645,6 +2646,8 @@ function buildManhattanWaterfrontEdge(group, { blockSidewalks, treeSites, lawnMa
   const _n = new THREE.Vector3();
   // Quad a-b-c-d (either winding) turned to face `hint`; uv.x runs u0..u1 along a->b, uv.y 0..1 from a-b to d-c
   function quad(A, a, b, c, d, hint, u0 = 0, u1 = 1) {
+    // lowmem: only around the game's patrol loop (device-profile.js)
+    if (!cityKeep(Math.min(a.x, b.x, c.x, d.x), Math.min(a.z, b.z, c.z, d.z), Math.max(a.x, b.x, c.x, d.x), Math.max(a.z, b.z, c.z, d.z))) return;
     _n.crossVectors(_e1.subVectors(b, a), _e2.subVectors(c, a)).normalize();
     let pts = [[a, u0, 0], [b, u1, 0], [c, u1, 1], [d, u0, 1]];
     if (_n.dot(hint) < 0) {
