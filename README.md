@@ -72,6 +72,17 @@ iPadOS (including iPads that report themselves as a Mac), Android / mobile brows
 Desktop browsers are unchanged. `?lowmem` forces the profile on any device; `?lowmem=0` turns it off (a phone then gets
 the full desktop build). The console logs `[lowmem] phone memory profile (<reason>)` when it is on.
 
+Measured in Chromium with iPhone emulation (393×852 @3x, iOS UA, WebGL2, SwiftShader), resident memory of the page's
+renderer process / the GPU process / the JS heap:
+
+| | Title screen | After START (intro / run) | Peak |
+|---|---|---|---|
+| Before (live site, c491168) | 1079 / 771 / 792 MB | 1194 / up to 1595 / 669 MB | renderer 1194, GPU 1612 MB |
+| Low-memory profile | 622 / 494 / 335 MB | ≈ 470 / 550 / 188 MB | renderer 679, GPU 558 MB |
+
+Playwright WebKit with `devices['iPhone 15']` reaches gameplay from START with the profile on and no page errors. A real
+iPhone hasn't been measured.
+
 ## Controls
 
 | | Desktop | Touch |
