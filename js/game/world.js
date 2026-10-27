@@ -14,6 +14,7 @@ import { buildRoadNetwork } from '../road-network.js';
 import { buildRoadPaint } from '../road-paint.js';
 import { LightingSystem } from '../lighting.js';
 import { setupSceneCulling, updateSceneCulling } from '../scene-culling.js';
+import { LOWMEM } from '../device-profile.js';
 
 // js/game/world.js
 // The stage: the renderer, slop-newyork's Manhattan (grid, blocks, landmarks, street furniture, road paint; no ambient
@@ -152,7 +153,8 @@ async function createWorld(container, camera, { quality: qualityId = 'high', for
   const cullingRoots = ['ManhattanCityGrid', 'ManhattanCityBlocks', 'ManhattanStreetDetails', 'ManhattanLandmarks', 'Boroughs']
     .map((name) => scene.getObjectByName(name))
     .filter(Boolean);
-  setupSceneCulling(scene, cullingRoots, lighting.sunLight.shadow);
+  // (no shadow stand-ins without shadows: they are position copies of the big casters)
+  setupSceneCulling(scene, cullingRoots, quality.shadows ? lighting.sunLight.shadow : null);
   // City instanced meshes are static: storage buffers upload once (see js/main.js)
   if (renderer.backend.isWebGPUBackend) {
     scene.traverse((object) => {
@@ -265,6 +267,36 @@ async function createWorld(container, camera, { quality: qualityId = 'high', for
     for (const o of culled) o.frustumCulled = true;
   }
 
+  /** Phones (js/device-profile.js LOWMEM): once the static city meshes are on the GPU, drop the CPU copies of their
+   *  vertex data (three.js keeps them only for re-uploads, and these never change; nothing raycasts the city). Bounds
+   *  are computed first, culling needs them. Instanced meshes keep theirs (building props stream through pools).
+   *  Called after the warm-up frame and again once the run is under way (chunks that were hidden at the title). */
+  function releaseStaticArrays() {
+    if (!LOWMEM) return 0;
+    let bytes = 0;
+    const backend = renderer.backend;
+    const release = (a) => {
+      if (!a || !a.isBufferAttribute || a.isInterleavedBufferAttribute || a.isStorageBufferAttribute || a.isInstancedBufferAttribute) return;
+      if (a.usage !== THREE.StaticDrawUsage || !a.array || a.array.length === 0) return;
+      const d = backend.has?.(a) ? backend.get(a) : null;
+      if (!d || !(d.bufferGPU || d.buffer)) return; // not uploaded yet
+      bytes += a.array.byteLength;
+      a.array = new a.array.constructor(0); // count, itemSize and the GPU buffer stay
+    };
+    for (const name of ['ManhattanCityGrid', 'ManhattanCityBlocks', 'ManhattanStreetDetails', 'ManhattanLandmarks', 'Boroughs']) {
+      scene.getObjectByName(name)?.traverse((o) => {
+        if (!o.isMesh || o.isInstancedMesh || o.isSkinnedMesh) return;
+        const g = o.geometry;
+        if (!g.attributes.position?.array?.length) return;
+        if (!g.boundingSphere) g.computeBoundingSphere();
+        if (!g.boundingBox) g.computeBoundingBox();
+        for (const a of Object.values(g.attributes)) release(a);
+        release(g.index);
+      });
+    }
+    return bytes;
+  }
+
   function setTimeOfDay(id) {
     lighting.applyPreset(id);
     post.applyLook(id);
@@ -276,7 +308,7 @@ async function createWorld(container, camera, { quality: qualityId = 'high', for
 
   return {
     renderer, scene, lighting, post, renderPipeline, quality, cityBlocks, streetDetails,
-    update, compile, warmup, setTimeOfDay, resize,
+    update, compile, warmup, setTimeOfDay, resize, releaseStaticArrays,
     render: () => renderPipeline.render()
   };
 }

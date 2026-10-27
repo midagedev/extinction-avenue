@@ -14,14 +14,23 @@
 // (PannerNode + listener from the camera) with distance attenuation and air absorption, and music ducking for big
 // moments. Until a sample group has decoded, the old procedural recipe (audio-recipes.js) stands in.
 // Audio starts only after the first user gesture; everything loads lazily in priority order (boss music last).
+//
+// Phones (device-profile.js LOWMEM, iOS kills tabs that hold too much): the long looping music cues stream through a
+// pool of two <audio> elements routed into the music bus (MediaElementSource) instead of being decoded (a decoded
+// minute of stereo is ≈ 23 MB); only the short stingers decode. MP3 bytes are never kept, SFX decode on first use (the
+// frequent ones up front), downmixed to mono, under SFX_BUDGET_LOWMEM (least recently used groups are dropped).
 
 import { MusicDirector } from './audio-music.js';
 import { ProcSynth, RECIPES } from './audio-recipes.js';
 import { isWebKitOnly } from './backend.js';
+import { LOWMEM } from '../device-profile.js';
 
 const MANIFEST = 'assets/audio/manifest.json';
 const CODEC_DELAY = 1105 / 44100; // LAME encoder + decoder delay of our MP3s (compensated when the decoder keeps it)
 const STORE = 'ea-audio';
+const SFX_BUDGET_LOWMEM = 24e6; // decoded SFX bytes on phones
+// Played from the first second of a run: decoded up front (everything else on phones decodes on first use)
+const FIRST_SFX = ['ui_click', 'ui_hover', 'ui_back', 'gun', 'hitmarker', 'fossilize', 'casing', 'xp', 'compy_chirp', 'raptor_screech', 'hurt', 'danger', 'vo_go', 'bell'];
 
 // name: { g group, vol, pitch [lo, hi], limit, gap (s), bus, prio 1–5, steal, range (m), verb, duck [dB, hold s],
 //         also [{ name, chance, delay [a, b], vol }], proc (fallback recipe), pick (opts) => variation index,
@@ -130,6 +139,10 @@ class GameAudio {
     const mb = typeof location !== 'undefined' && /[?&]musicbudget=(\d+)/.exec(location.search);
     this.musicBudget = (mb ? +mb[1] : tightMemory ? 140 : 320) * 1e6;
     this.musicUsed = new Map(); // cue id → last use (ms)
+    this.stream = LOWMEM && typeof Audio !== 'undefined'; // long music cues stream from <audio> elements (see header)
+    this.streams = []; // pool: { el, node, busy, since, timer }
+    this.sfxBudget = LOWMEM ? SFX_BUDGET_LOWMEM : Infinity;
+    this.sfxUsed = new Map(); // group → last use (ms)
     this.failed = new Map(); // load key → time of the last failure (retry after a pause)
     try {
       const saved = JSON.parse(localStorage.getItem(STORE) || 'null');
@@ -155,7 +168,7 @@ class GameAudio {
       if (!r.ok) throw new Error(r.status);
       this.manifest = await r.json();
       // Prefetch (network only, no decoding before the first gesture) what the title screen needs
-      this._prefetch(this.manifest.music?.title?.file);
+      if (!this.isStream('title')) this._prefetch(this.manifest.music?.title?.file);
       for (const g of ['ui_click', 'ui_hover']) for (const f of this.manifest.sfx?.[g]?.files || []) this._prefetch(f.file);
     } catch (err) {
       console.warn('Audio manifest unavailable, using procedural sound only:', err.message || err);
@@ -283,6 +296,7 @@ class GameAudio {
     this.stingBus = ctx.createGain();
     this.stingBus.connect(this.musicVol);
     this.proc = new ProcSynth(ctx);
+    if (this.stream) this._buildStreams();
     this.applyVolumes();
     this._buildLoops();
     if (ctx.listener.positionX === undefined) this._legacyListener = true;
@@ -291,6 +305,7 @@ class GameAudio {
       if (!this.ctx) return;
       if (document.hidden) this.ctx.suspend().catch(() => {});
       else if (this.enabled) { this.ctx.resume().catch(() => {}); this.armGesture(); }
+      for (const s of this.streams) if (s.busy) { if (document.hidden) s.el.pause(); else s.el.play().catch(() => {}); }
     });
     ctx.onstatechange = () => { if (ctx.state !== 'running' && ctx.state !== 'closed' && !document.hidden) this.armGesture(); };
     // Start loading: title + UI + the most frequent sounds first, then everything except the boss music
@@ -321,8 +336,15 @@ class GameAudio {
   _queueAll() {
     const m = this.manifest;
     if (!m) return;
-    const first = ['ui_click', 'ui_hover', 'ui_back', 'gun', 'hitmarker', 'fossilize', 'casing', 'xp', 'compy_chirp', 'raptor_screech', 'hurt', 'danger', 'vo_go', 'bell'];
+    const first = FIRST_SFX;
     const add = (kind, id) => { if (!this.queue.some((q) => q.kind === kind && q.id === id)) this.queue.push({ kind, id }); };
+    if (LOWMEM) {
+      // Phones: the frequent SFX and the stingers; music streams, the rest of the SFX decode on first use
+      for (const g of first) if (m.sfx[g]) add('sfx', g);
+      for (const id of ['boss_sting', 'victory', 'gameover']) if (m.music[id]) add('music', id);
+      this._pump();
+      return;
+    }
     add('music', 'title');
     for (const g of first) if (m.sfx[g]) add('sfx', g);
     add('music', 'combat');
@@ -338,7 +360,7 @@ class GameAudio {
   /** Request music cues (front of the queue); boss cues only load through here */
   loadMusic(ids) {
     for (const id of ids) {
-      if (!this.manifest?.music?.[id] || this.music.has(id) || this.loading.has('music:' + id)) continue;
+      if (!this.manifest?.music?.[id] || this.isStream(id) || this.music.has(id) || this.loading.has('music:' + id)) continue;
       if (performance.now() - (this.failed.get('music:' + id) ?? -1e9) < 10000) continue;
       this.queue = this.queue.filter((q) => !(q.kind === 'music' && q.id === id));
       this.queue.unshift({ kind: 'music', id });
@@ -361,8 +383,9 @@ class GameAudio {
   async _decode(url, n, keepRaw = false) {
     let data;
     try { data = await this._prefetch(url); } catch (err) { this.raw.delete(url); throw err; } // refetch on a retry
-    if (!keepRaw) this.raw.delete(url); // decoded copies only from here on (music keeps its MP3 bytes, see musicBudget)
-    const buffer = await this.ctx.decodeAudioData(data.slice(0));
+    if (!keepRaw || LOWMEM) this.raw.delete(url); // decoded copies only from here on (music keeps its MP3 bytes, see musicBudget)
+    let buffer = await this.ctx.decodeAudioData(LOWMEM ? data : data.slice(0));
+    if (LOWMEM && !keepRaw && buffer.numberOfChannels > 1) buffer = this._mono(buffer);
     // MP3 decoders that ignore the encoder delay return it as extra leading samples: skip them
     const extra = buffer.length - (n || 0) * (buffer.sampleRate / 44100);
     const offset = n && extra > 0.015 * buffer.sampleRate ? CODEC_DELAY : 0;
@@ -383,11 +406,116 @@ class GameAudio {
         for (const f of e.files) list.push(await this._decode(f.file, f.n));
         this.sfxBuf.set(job.id, list);
         if (job.id === 'flamer_loop') this._sampleFlamer();
+        if (LOWMEM) this._trimSfx(job.id);
       }
     } catch (err) {
       this.failed.set(job.kind + ':' + job.id, performance.now());
       console.warn(`Audio: could not load ${job.kind} "${job.id}":`, err.message || err);
     }
+  }
+
+  /** Decoded SFX group `g` is wanted (phones decode on first use; the procedural recipe stands in meanwhile) */
+  _wantSfx(g) {
+    this.sfxUsed.set(g, performance.now());
+    if (!LOWMEM || this.sfxBuf.has(g) || this.loading.has('sfx:' + g) || !this.manifest?.sfx?.[g]) return;
+    if (performance.now() - (this.failed.get('sfx:' + g) ?? -1e9) < 10000) return;
+    if (!this.queue.some((q) => q.kind === 'sfx' && q.id === g)) this.queue.unshift({ kind: 'sfx', id: g });
+    this._pump();
+  }
+
+  /** Phones: keep decoded SFX under sfxBudget by dropping the least recently used groups (never the frequent ones) */
+  _trimSfx(loaded) {
+    const bytes = (list) => list.reduce((n, s) => n + s.buffer.length * s.buffer.numberOfChannels * 4, 0);
+    let total = 0;
+    for (const list of this.sfxBuf.values()) total += bytes(list);
+    if (total <= this.sfxBudget) return;
+    const looping = new Set([...this.loopVoices.values()].map((v) => v.name));
+    const order = [...this.sfxBuf.keys()]
+      .filter((g) => g !== loaded && !FIRST_SFX.includes(g) && !looping.has(g) && g !== 'flamer_loop')
+      .sort((a, b) => (this.sfxUsed.get(a) ?? 0) - (this.sfxUsed.get(b) ?? 0));
+    for (const g of order) {
+      if (total <= this.sfxBudget) break;
+      total -= bytes(this.sfxBuf.get(g));
+      this.sfxBuf.delete(g);
+    }
+  }
+
+  /** Phones: a stereo buffer folded to mono (half the memory; voices are panned or centred anyway) */
+  _mono(buf) {
+    const n = buf.length, out = this.ctx.createBuffer(1, n, buf.sampleRate), d = out.getChannelData(0);
+    const ch = buf.numberOfChannels;
+    for (let c = 0; c < ch; c++) { const s = buf.getChannelData(c); for (let i = 0; i < n; i++) d[i] += s[i] / ch; }
+    return out;
+  }
+
+  /** Phones: long looping music cues stream (see the header); short cues and the heat layer decode */
+  isStream(id) {
+    const e = this.manifest?.music?.[id];
+    return !!(this.stream && e && e.loop && e.dur > 20);
+  }
+
+  /** Two <audio> elements (crossfades) routed into the graph. Built inside the unlocking gesture: iOS lets an element
+   *  play later without a gesture once it has played inside one (the source node isn't connected yet → silent). */
+  _buildStreams() {
+    for (let i = 0; i < 2; i++) {
+      try {
+        const el = new Audio();
+        el.preload = 'auto';
+        el.setAttribute('playsinline', '');
+        el.setAttribute('webkit-playsinline', '');
+        const node = this.ctx.createMediaElementSource(el);
+        const file = this.manifest?.music?.[i ? 'combat' : 'title']?.file;
+        if (file) {
+          el.src = file;
+          el.play().then(() => { if (!this.streams[i]?.busy) el.pause(); }).catch(() => {});
+        }
+        this.streams.push({ el, node, busy: false, since: 0, timer: 0, stopT: 0 });
+      } catch (err) {
+        console.warn('Audio: streaming music unavailable, decoding instead:', err.message || err);
+        this.stream = false;
+        return;
+      }
+    }
+  }
+
+  /** A source-like object for a streamed cue: connect(node), start(when), stop(when) in AudioContext time */
+  streamSource(e) {
+    const ctx = this.ctx;
+    let s = this.streams.find((p) => !p.busy) || this.streams.slice().sort((a, b) => a.since - b.since)[0];
+    this._releaseStream(s);
+    s.busy = true;
+    s.since = performance.now();
+    const el = s.el;
+    const url = new URL(e.file, location.href).href;
+    if (el.src !== url) { el.src = e.file; el.load(); }
+    try { el.pause(); } catch { /* ignore */ }
+    const seek = (t) => { try { el.currentTime = t; } catch { /* metadata not loaded yet */ } };
+    const at = (when, fn) => setTimeout(fn, Math.max(0, (when - ctx.currentTime) * 1000));
+    return {
+      connect: (node) => { try { s.node.disconnect(); } catch { /* not connected */ } s.node.connect(node); return node; },
+      start: (when) => {
+        seek(e.loopStart);
+        if (el.readyState < 1) el.addEventListener('loadedmetadata', () => { if (s.busy && el.paused) seek(e.loopStart); }, { once: true });
+        clearTimeout(s.startT);
+        s.startT = at(when, () => { if (s.busy && !document.hidden) el.play().catch(() => {}); });
+        // Loop between loopStart and loopEnd (the files carry 0.25 s of padding at both ends)
+        clearInterval(s.timer);
+        s.timer = setInterval(() => {
+          if (!s.busy) return;
+          if (el.ended || el.currentTime >= e.loopEnd - 0.03) { seek(e.loopStart); if (el.paused && !document.hidden) el.play().catch(() => {}); }
+        }, 40);
+      },
+      stop: (when = 0) => { const mine = s.since; clearTimeout(s.stopT); s.stopT = at(when, () => { if (s.since === mine) this._releaseStream(s); }); }
+    };
+  }
+
+  _releaseStream(s) {
+    if (!s) return;
+    clearInterval(s.timer);
+    clearTimeout(s.startT);
+    s.busy = false;
+    try { s.el.pause(); } catch { /* ignore */ }
+    try { s.node.disconnect(); } catch { /* not connected */ }
   }
 
   /** Keep decoded music under musicBudget: drop the least recently used long cues that nothing needs right now */
@@ -527,6 +655,7 @@ class GameAudio {
     const pr = def.pitch ? def.pitch[0] + Math.random() * (def.pitch[1] - def.pitch[0]) : 1;
     const p = opts.pitch ?? 1;
     const list = this.sfxBuf.get(def.g || name);
+    if (LOWMEM) this._wantSfx(def.g || name);
     const rate = (list ? (def.pmap ? 1 + (p - def.pmap[0]) * def.pmap[1] : p) : p) * pr;
     const when = now + 0.004 + (opts.delay || 0);
     const v = list ? this._sampleVoice(name, def, list, vol, rate, when, opts, dist) : this._recipeVoice(name, def, vol, rate, when, opts, dist);
@@ -632,6 +761,7 @@ class GameAudio {
   loopStart(key, name, opts = {}) {
     if (!this.ctx || this.loopVoices.has(key) || this.ctx.state !== 'running') return;
     const list = this.sfxBuf.get(name);
+    if (LOWMEM) this._wantSfx(name);
     if (!list) return;
     const def = SFX[name] || { bus: 'creatures', range: 110 };
     const ctx = this.ctx;

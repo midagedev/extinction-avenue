@@ -36,7 +36,7 @@ export class MusicDirector {
 
   get ctx() { return this.a.ctx; }
   entry(id) { return this.a.manifest?.music?.[id]; }
-  ready(id) { return !!this.a.music.get(id); }
+  ready(id) { return this.a.isStream(id) || !!this.a.music.get(id); }
 
   // ------------------------------------------------------------------------------------------------------------------
   /** High-level state from the game (see the header) */
@@ -258,15 +258,23 @@ export class MusicDirector {
       srcs.push(s);
       loopAt = when + intro.buffer.duration - intro.offset - 0.002;
     }
-    const s = ctx.createBufferSource();
-    s.buffer = m.buffer;
-    if (e.loop) {
+    // Phones: long loops stream from an <audio> element (GameAudio.streamSource), no heat layer
+    const stream = this.a.isStream(id);
+    const s = stream ? this.a.streamSource(e) : ctx.createBufferSource();
+    if (stream) {
+      len = e.loopEnd - e.loopStart;
+      s.start(loopAt);
+    } else if (e.loop) {
+      s.buffer = m.buffer;
       s.loop = true;
       s.loopStart = e.loopStart + m.offset;
       s.loopEnd = e.loopEnd + m.offset;
       len = e.loopEnd - e.loopStart;
       s.start(loopAt, e.loopStart + m.offset);
-    } else s.start(loopAt, m.offset);
+    } else {
+      s.buffer = m.buffer;
+      s.start(loopAt, m.offset);
+    }
     s.connect(gain);
     srcs.push(s);
     t0 = loopAt;
@@ -274,7 +282,7 @@ export class MusicDirector {
     this.a.musicUsed.set(id, performance.now());
     if (intro) this.a.musicUsed.set('boss2_intro', performance.now());
     // Heat layer: same tempo, 4-bar loop that divides the combat loop exactly → started on the same grid
-    if (id === 'combat') this._attachLayer(cue);
+    if (id === 'combat' && !stream) this._attachLayer(cue);
     return cue;
   }
 
@@ -302,7 +310,7 @@ export class MusicDirector {
 
   /** The layer finished loading after the combat cue started */
   onLoaded(id) {
-    if (id === 'combat_heat' && this.cur && this.cur.id === 'combat' && !this.cur.layer) this._attachLayer(this.cur);
+    if (id === 'combat_heat' && this.cur && this.cur.id === 'combat' && !this.cur.layer && !this.a.isStream('combat')) this._attachLayer(this.cur);
     // The cue we were waiting for: start it right away (don't wait for the next frame update)
     if (this.want === id && (!this.cur || this.cur.id !== id)) this._to(id, { quant: this.cur ? 'bar' : 'now', fadeIn: 0.4, fadeOut: 0.6 });
     if (this.state === 'boss' && id === this._bossCueId() && this.cur && this.cur.id !== id) this._to(id, { quant: 'bar', fadeIn: 0.1, fadeOut: 0.5 });

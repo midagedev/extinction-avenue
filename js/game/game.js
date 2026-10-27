@@ -270,6 +270,7 @@ class Game {
     await this.world.compile((p) => setStatus(`Compiling shaders… ${Math.round(p * 100)}%`, 0.55 + p * 0.4));
     this.world.warmup();
     for (const m of batches) m.count = 0;
+    if (LOWMEM) console.info(`[lowmem] released ${(this.world.releaseStaticArrays() / 1e6).toFixed(1)} MB of uploaded city vertex data`);
     setStatus('Ready', 1);
     window.addEventListener('resize', () => this.onResize());
     this.onResize();
@@ -493,6 +494,7 @@ class Game {
     this.director.reset(start);
     if (start > 0) this._grantBuild(start);
     this.audio.setMusic('run');
+    if (LOWMEM && !this._released) { this._released = true; setTimeout(() => this.world.releaseStaticArrays(), 12000); }
     const p = this.player;
     p.update(0.016, 0);
     this.gunner.setVisible(true);

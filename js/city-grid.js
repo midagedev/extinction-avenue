@@ -2944,6 +2944,7 @@ function buildManhattanWaterfrontEdge(group, { blockSidewalks, treeSites, lawnMa
     g.setAttribute('position', new THREE.Float32BufferAttribute(A.pos, 3));
     g.setAttribute('normal', new THREE.Float32BufferAttribute(A.nor, 3));
     g.setAttribute('uv', new THREE.Float32BufferAttribute(A.uv, 2));
+    A.pos = []; A.nor = []; A.uv = []; // copied: release the JS arrays (closures of this scope outlive the build)
     const m = new THREE.Mesh(g, mat);
     m.castShadow = cast;
     m.receiveShadow = true;
@@ -2971,6 +2972,7 @@ function buildManhattanWaterfrontEdge(group, { blockSidewalks, treeSites, lawnMa
     g.setAttribute('side', new THREE.Float32BufferAttribute(paint.side, 2));
     g.setAttribute('paint', new THREE.Float32BufferAttribute(paint.paint, 3));
     g.setIndex(paint.idx);
+    for (const k of ['pos', 'col', 'side', 'paint', 'idx']) paint[k] = []; // copied: release the JS arrays
     const m = new THREE.Mesh(g, createRoadPaintMaterial());
     m.name = 'ShoreHighwayMarkings';
     m.receiveShadow = true;
@@ -3389,6 +3391,7 @@ function buildSouthStreetViaduct(group, opts) {
     g.setAttribute('position', new THREE.Float32BufferAttribute(A.pos, 3));
     g.setAttribute('normal', new THREE.Float32BufferAttribute(A.nor, 3));
     g.setAttribute('uv', new THREE.Float32BufferAttribute(A.uv, 2));
+    A.pos = []; A.nor = []; A.uv = []; // copied: release the JS arrays (closures of this scope outlive the build)
     const m = new THREE.Mesh(g, mat);
     m.name = name;
     m.castShadow = cast;
