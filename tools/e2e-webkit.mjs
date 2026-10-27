@@ -5,6 +5,8 @@
 //   no pageerror, the WebKit UA picks the WebGL2 backend even when navigator.gpu exists, the error screen never showed,
 //   and the screenshot's 3D view is not black (mean luminance of the centre of the PNG).
 // BASE_URL=https://midagedev.github.io/extinction-avenue/ runs it against the live site.
+// IPHONE=1 (or extraParams containing `iphone`): devices['iPhone 15'] (iOS UA → the lowmem profile, Phone quality,
+// city streaming), START by tap, plus a check that the phone profile and the city stream are on.
 
 import zlib from 'node:zlib';
 
@@ -13,7 +15,8 @@ const fs = await import('node:fs');
 const path = await import('node:path');
 const { webkit } = await import(process.env.PLAYWRIGHT || (fs.existsSync(localPW) ? localPW.href : 'playwright'));
 const out = process.argv[2] || './.tools/shots-webkit';
-const extra = process.argv[3] || '';
+const IPHONE = process.env.IPHONE === '1' || /(^|&)iphone(&|$)/.test(process.argv[3] || '');
+const extra = (process.argv[3] || '').replace(/(^|&)iphone(?=&|$)/, '');
 const BASE_PATH = '/extinction-avenue/';
 let base = process.env.BASE_URL;
 if (!base) {
@@ -74,14 +77,15 @@ function pngLuma(buf, frac = 0.5) {
 const t0 = Date.now();
 const log = (...a) => console.log(`[${((Date.now() - t0) / 1000).toFixed(0)}s]`, ...a);
 const browser = await webkit.launch();
-const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+const { devices } = await import(process.env.PLAYWRIGHT || (fs.existsSync(localPW) ? localPW.href : 'playwright'));
+const page = IPHONE ? await (await browser.newContext({ ...devices['iPhone 15'] })).newPage() : await browser.newPage({ viewport: { width: 1440, height: 900 } });
 const errors = [];
 page.on('pageerror', (e) => { errors.push(e.message); log('[pageerror]', e.message); });
 page.on('console', (m) => { const t = m.text(); if (m.type() === 'error' || /\[(init|webgpu|fatal|audio)\]/.test(t)) log(`[console.${m.type()}]`, t.slice(0, 300)); });
 const results = [];
 const check = (name, ok, detail = '') => { results.push(ok); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `  (${detail})` : ''}`); };
 
-const url = `${base}?quality=low${extra}`;
+const url = IPHONE ? `${base}${extra ? `?${extra.replace(/^&/, '')}` : ''}` : `${base}?quality=low${extra}`;
 log('open', url);
 await page.goto(url);
 await page.waitForFunction(() => window.__game?.game?.state === 'title' || window.__game?.game?.dead, null, { timeout: 600000 });
@@ -92,7 +96,12 @@ check('WebKit UA picks WebGL2 even with navigator.gpu', await page.evaluate(asyn
 }, new URL(base).pathname), await page.evaluate(() => navigator.userAgent));
 check('renderer runs the WebGL2 backend', await page.evaluate(() => !window.__game.game.world.renderer.backend.isWebGPUBackend));
 
-await page.click('#btn-play', { timeout: 60000 });
+if (IPHONE) {
+  const p = await page.evaluate(() => { const w = window.__game.game.world; return { quality: w.quality.id, pr: w.renderer.getPixelRatio(), stream: w.stream?.info() }; });
+  check('iPhone: phone profile, Phone quality, city streaming on', p.quality === 'phone' && !!p.stream && p.stream.resident > 0 && p.stream.resident < p.stream.cells, JSON.stringify(p));
+  await page.locator('#btn-play').scrollIntoViewIfNeeded().catch(() => {});
+  await page.tap('#btn-play', { force: true, timeout: 60000 });
+} else await page.click('#btn-play', { timeout: 60000 });
 log('START clicked');
 const reached = await page.waitForFunction(() => window.__game.game.state === 'playing' || window.__game.game.dead, null, { timeout: 300000, polling: 1000 })
   .then(() => true, () => false);
@@ -101,7 +110,7 @@ log('after START', JSON.stringify(st));
 check('START reaches playing', reached && st.state === 'playing' && !st.dead, JSON.stringify(st));
 // A few more real frames of the run before the picture
 await page.waitForFunction((f) => window.__game.game.frames >= f + 3, st.frames, { timeout: 120000, polling: 500 }).catch(() => {});
-const file = path.join(out, 'webkit-playing.png');
+const file = path.join(out, IPHONE ? 'webkit-iphone-playing.png' : 'webkit-playing.png');
 const png = await page.screenshot({ path: file });
 const luma = pngLuma(png, 0.5);
 check('3D view is not black', luma > 12, `centre mean luma ${luma.toFixed(1)}/255, ${file}`);
