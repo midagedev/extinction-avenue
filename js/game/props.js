@@ -283,6 +283,41 @@ const BUILDERS = {
     prim(box(1.6, 0.55, 2.0), [0.12, 0.13, 0.15], null, { p: [0, 0.6, -0.2], r: [0.05, 0, 0.04] }),
     ...[-0.85, 0.85].flatMap((x) => [-1.4, 1.4].map((z) => prim(cyl(0.36, 0.36, 0.25, 8), C.dark, null, { p: [x, -0.35, z], r: [0, 0, X] }))),
     prim(box(1.5, 0.12, 0.1), C.dark, C.orangeGlow, { p: [0, 0.05, -2.2] })
+  ]),
+  // Street props the tail gun can break. Origins on the ground (glass pane is centred).
+  hydrant: () => merge([
+    prim(cyl(0.28, 0.34, 0.12, 8), C.dark, null, { p: [0, 0.06, 0] }),
+    prim(cyl(0.22, 0.24, 0.55, 8), C.red, null, { p: [0, 0.38, 0] }),
+    prim(cyl(0.26, 0.22, 0.16, 8), C.red, null, { p: [0, 0.7, 0] }),
+    prim(cyl(0.1, 0.1, 0.28, 6), C.steel, null, { p: [0.22, 0.48, 0], r: [0, 0, X] }),
+    prim(cyl(0.1, 0.1, 0.28, 6), C.steel, null, { p: [-0.22, 0.48, 0], r: [0, 0, X] }),
+    prim(cyl(0.08, 0.1, 0.16, 6), C.steel, null, { p: [0, 0.86, 0] })
+  ]),
+  streetPost: () => merge([
+    prim(cyl(0.09, 0.12, 4.2, 6), C.dark, null, { p: [0, 2.1, 0] }),
+    prim(box(0.7, 0.12, 0.7), C.dark, null, { p: [0, 4.15, 0] }),
+    prim(box(0.55, 0.28, 0.55), C.steel, C.orangeGlow, { p: [0, 4.35, 0] }),
+    prim(box(1.1, 0.7, 0.08), [0.1, 0.35, 0.22], null, { p: [0, 2.6, 0] })
+  ]),
+  kiosk: () => merge([
+    prim(box(2.2, 1.5, 1.15), [0.18, 0.2, 0.24], null, { p: [0, 0.75, 0] }),
+    prim(box(2.35, 0.12, 1.3), C.yellow, null, { p: [0, 1.52, 0] }),
+    prim(box(1.5, 0.7, 0.06), [0.05, 0.35, 0.55], [0.2, 0.6, 1.2], { p: [0, 1.05, 0.58] }),
+    prim(box(0.9, 0.35, 0.9), C.dark, null, { p: [0.7, 0.18, 0.35] })
+  ]),
+  glassPane: () => merge([
+    prim(box(2.4, 2.6, 0.08), [0.55, 0.75, 0.85], [0.35, 0.55, 0.7]),
+    prim(box(2.55, 0.08, 0.12), C.dark, null, { p: [0, 1.3, 0] }),
+    prim(box(2.55, 0.08, 0.12), C.dark, null, { p: [0, -1.3, 0] })
+  ]),
+  streetChunk: () => merge([
+    prim(box(2.4, 5.5, 0.35), [0.45, 0.38, 0.3], null, { p: [0, 2.8, 0] }),
+    prim(box(0.18, 5.2, 1.6), C.dark, null, { p: [-1.05, 2.6, 0.4] }),
+    prim(box(0.18, 5.2, 1.6), C.dark, null, { p: [1.05, 2.6, 0.4] }),
+    prim(box(2.6, 0.16, 1.8), C.steel, null, { p: [0, 4.6, 0.3] }),
+    prim(box(2.2, 0.16, 1.6), C.steel, null, { p: [0, 2.4, 0.3] }),
+    prim(cyl(0.7, 0.7, 1.3, 8), [0.35, 0.4, 0.42], null, { p: [0, 6.3, 0] }),
+    prim(cyl(0.78, 0.78, 0.16, 8), C.dark, null, { p: [0, 7.0, 0] })
   ])
 };
 

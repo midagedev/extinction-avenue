@@ -113,7 +113,12 @@ const ASSET_MANIFEST = {
   saw: { kind: 'prop', url: null, placeholder: 'saw' },
   shard: { kind: 'prop', url: null, placeholder: 'shard' },
   boulder: { kind: 'prop', url: null, placeholder: 'boulder' },
-  wreck: { kind: 'prop', url: null, placeholder: 'wreck' }
+  wreck: { kind: 'prop', url: null, placeholder: 'wreck' },
+  hydrant: { kind: 'prop', url: null, placeholder: 'hydrant' },
+  streetPost: { kind: 'prop', url: null, placeholder: 'streetPost' },
+  kiosk: { kind: 'prop', url: null, placeholder: 'kiosk' },
+  glassPane: { kind: 'prop', url: null, placeholder: 'glassPane' },
+  streetChunk: { kind: 'prop', url: null, placeholder: 'streetChunk' }
 };
 
 // ?procedural: draw the v2 procedural creature rigs instead of the rigged models (comparison / very old devices)

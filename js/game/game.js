@@ -10,6 +10,11 @@ import { WeaponSystem } from './weapons.js';
 import { Pickups } from './pickups.js';
 import { TRexBoss } from './boss.js';
 import { Director, BOSS_TIME } from './director.js';
+import { STAGES, stageById } from './stages.js';
+import { loadProgress, saveProgress, isUnlocked, applyResult } from './campaign.js';
+import { Destructibles } from './destructibles.js';
+import { HighlightReel } from './highlight.js';
+import { MapScreen } from './map.js';
 import { GameAudio } from './audio.js';
 import { GameCamera } from './camera.js';
 import { GunnerView } from './gunner.js';
@@ -40,6 +45,8 @@ import { QualityGovernor } from './quality-governor.js';
 const params = new URLSearchParams(location.search);
 // WebGPU on Chromium; WebGL2 on Safari / iOS (see backend.js) and wherever navigator.gpu is missing
 const AUTOPLAY = params.has('autoplay');
+// QA, soaks and the WebGL fallback skip the outbreak map and play the classic midtown run.
+const SKIP_MAP = params.has('test') || params.has('nointro') || params.has('autoplay') || params.has('autostart') || params.has('boss') || params.has('t') || params.has('classic');
 const BACKEND = pickBackend(navigator.userAgent || '', params, !!navigator.gpu);
 const START_S = 120; // 5th Ave, a few blocks south of 57th St, heading downtown
 const CONTINUE_SECONDS = 10;
@@ -258,7 +265,12 @@ class Game {
     for (const m of this.pickups.meshes()) scene.add(m);
     this.boss = new TRexBoss(this, this.assets);
     for (const m of this.boss.meshes()) scene.add(m);
+    this.destruct = new Destructibles(this, this.assets);
     this.director = new Director(this);
+    this.progress = loadProgress();
+    this.campaignStage = null;
+    this.map = new MapScreen(this);
+    this.highlight = new HighlightReel(this, { disabled: this.testMode || AUTOPLAY, lowmem: LOWMEM });
     this.input = new Input(this);
     this.input.onAction = (a) => this.onAction(a);
     this._applyTouchSettings();
@@ -298,7 +310,7 @@ class Game {
     const device = this.world.renderer.backend.device;
     await Promise.resolve(device && device.queue.onSubmittedWorkDone()).catch(() => {});
     this.setState('title');
-    if (params.has('boss') || params.has('t') || params.has('autostart')) this.startRun();
+    if (params.has('boss') || params.has('t') || params.has('autostart')) this.startRun(params.get('stage'));
   }
 
   _freshStats() {
@@ -316,13 +328,19 @@ class Game {
   _bindUI() {
     const $ = (id) => document.getElementById(id);
     const click = (id, fn) => $(id)?.addEventListener('click', () => { this.audio.unlock(); this.audio.play('ui'); fn(); });
-    click('btn-play', () => this.startRun());
+    click('btn-play', () => this._pressStart());
+    click('btn-map-back', () => this.closeMap());
+    click('btn-deploy', () => this.map.deploy());
+    click('btn-tomap', () => this.openMap());
+    click('btn-next', () => { this.hud.open('s-results', false); if (this._nextStage) this.startRun(this._nextStage); });
+    click('btn-clip', () => this.highlight?.shareClip());
+    click('btn-card', () => this.highlight?.shareCard());
     click('btn-howto', () => this.hud.open('s-howto'));
     click('btn-settings', () => this.openSettings());
     click('btn-pause-settings', () => this.openSettings());
     click('btn-resume', () => this.togglePause(false));
     click('btn-quit', () => { this.togglePause(false); this.endRun(false, true); });
-    click('btn-again', () => { this.hud.open('s-results', false); this.startRun(); });
+    click('btn-again', () => { this.hud.open('s-results', false); this.startRun(this.campaignStage?.id || null); });
     click('btn-menu', () => { this.hud.open('s-results', false); this.setupTitle(); this.setState('title'); });
     click('btn-endless', () => this.continueEndless());
     click('btn-share', () => this.share());
@@ -410,7 +428,13 @@ class Game {
       return;
     }
     if (a === 'pause' && (st === 'playing' || st === 'paused')) { this.togglePause(st === 'playing'); return; }
-    if (st === 'title' && (a === 'confirm' || a === 'special')) { this.audio.unlock(); this.startRun(); return; }
+    if (a === 'clip' && (st === 'playing' || st === 'bossintro')) { this._armClip(); return; }
+    if (st === 'map') {
+      if (a === 'confirm' || a === 'special') this.map.deploy();
+      if (a === 'pause') this.closeMap();
+      return;
+    }
+    if (st === 'title' && (a === 'confirm' || a === 'special')) { this.audio.unlock(); this._pressStart(); return; }
     if (st === 'playing' && (a === 'reroll' || a === 'reload')) { if (this.weapons.reload()) this.hud.callout('RELOAD!', 'reload'); return; }
     if (st === 'playing' && a === 'special') {
       if (!this.weapons.triggerSpecial() && this.weapons.special.charge < 1) this.hud.prompt('SKYHAMMER CHARGING', '');
@@ -472,9 +496,47 @@ class Game {
     this.quietT = 0;
     this.bossMusicAsked = false;
     this.audio.setBossPhase(1);
+    this._stageCleared = false;
+    this.destruct?.reset();
+  }
+
+  _prepareRun(stageId) {
+    const stage = stageId ? stageById(stageId) : null;
+    if (stage) {
+      this.campaignStage = stage;
+      this.director.useStage(stage);
+    } else {
+      this.campaignStage = null;
+      this.director.useClassic();
+    }
+  }
+
+  _pressStart() {
+    const stage = params.get('stage');
+    if (stage) { this.startRun(stage); return; }
+    if (SKIP_MAP) { this.startRun(null); return; }
+    this.openMap();
+  }
+
+  openMap() {
+    this.hud.open('s-results', false);
+    this.hud.open('s-pause', false);
+    this.hud.open('s-howto', false);
+    this.hud.open('s-settings', false);
+    this.setState('map');
+    this.map.refresh();
+    this.hud.open('s-map', true);
+  }
+
+  closeMap() {
+    this.hud.open('s-map', false);
+    this.setupTitle();
   }
 
   setupTitle() {
+    this.campaignStage = null;
+    this.director.useClassic();
+    this.hud?.open('s-map', false);
     this._resetRun();
     this.director.reset(0);
     this.player.update(0.016, 0);
@@ -499,16 +561,20 @@ class Game {
     this.audio.setMusic('title');
   }
 
-  startRun() {
+  startRun(stageId = null) {
     if (this.dead) return;
+    this._prepareRun(stageId);
     this.runRequested = true;
     this._armWatchdog();
     this.audio.unlock();
+    this.hud.open('s-map', false);
+    this.hud.open('s-results', false);
     this._resetRun();
     this.setState('intro');
-    const start = params.has('boss') ? BOSS_TIME - 6 : Math.max(0, +(params.get('t') || 0));
+    const start = this.campaignStage ? 0 : (params.has('boss') ? BOSS_TIME - 6 : Math.max(0, +(params.get('t') || 0)));
     this.director.reset(start);
     if (start > 0) this._grantBuild(start);
+    if (this.campaignStage) this.player.reset(this.campaignStage.startS);
     this.audio.setMusic('run');
     if (LOWMEM && !this._released) { this._released = true; setTimeout(() => this.world.releaseStaticArrays(), 12000); }
     const p = this.player;
@@ -533,7 +599,8 @@ class Game {
       this.cam.setMode('gunner');
       this._beginPlay();
     });
-    this.hud.banner('MIDTOWN · 7:14 PM', 'Unit 77 — you\'re on the tail gun', 'wave', true);
+    const card = this.campaignStage;
+    this.hud.banner(card ? card.name : 'MIDTOWN · 7:14 PM', card ? card.objective : 'Unit 77 — you\'re on the tail gun', 'wave', true);
   }
 
   _beginPlay() {
@@ -541,6 +608,7 @@ class Game {
     this.hud.callout('GO!', 'good');
     this.audio.play('bell');
     this.audio.play('vo_go');
+    this.highlight?.beginRolling();
     this.hintStep = 0;
     this.hintT = 1.2;
   }
@@ -613,11 +681,12 @@ class Game {
     const c = this.cam.camera;
     c.getWorldDirection(_v);
     this.audio.setListener(c.position.x, c.position.y, c.position.z, _v.x, _v.y, _v.z);
-    this.audio.updateLoops(p.speed, false, this.weapons.flaming, simulating && st !== 'title' && p.alive);
+    this.audio.updateLoops(p.speed, false, this.weapons.flaming, simulating && st !== 'title' && p.alive, this.weapons.spin || 0);
+    this.highlight?.update(dt);
     this.audio.update(dt, st === 'playing' || st === 'intro' ? this._musicInfo(dt) : null);
     if (st !== 'loading' && st !== 'title') this.hud.update(dt);
     // Queued level-ups open as soon as the action allows
-    if (this.state === 'playing' && (this.pendingLevels > 0 || this.pendingCrates > 0) && p.alive && this.cam.mode === 'gunner' && this.enemies.attackers === 0) this.openLevelUp();
+    if (this.state === 'playing' && this.victoryT === undefined && (this.pendingLevels > 0 || this.pendingCrates > 0) && p.alive && this.cam.mode === 'gunner' && this.enemies.attackers === 0) this.openLevelUp();
     this._hints(dt);
   }
 
@@ -658,6 +727,7 @@ class Game {
     this.enemies.update(dt);
     this.boss.update(dt);
     this.pickups.update(dt);
+    this.destruct?.update(dt);
     // Pose every rig now (cheap CPU work): hit spheres and the boss weak points need it even when nothing renders
     this.enemies.render(this.elapsed);
     // Combo decay
@@ -675,8 +745,11 @@ class Game {
       if (this.deadT <= 0) this.openContinue();
     }
     if (this.victoryT !== undefined && this.victoryT > 0) {
-      this.victoryT -= realDt;
-      if (this.victoryT <= 0) this.endRun(true);
+      if (!p.alive) this.victoryT = undefined;
+      else {
+        this.victoryT -= realDt;
+        if (this.victoryT <= 0) this.endRun(true);
+      }
     }
   }
 
@@ -712,7 +785,7 @@ class Game {
     // Touch trigger: drag mode fires only while the crosshair is on something shootable (a short grace bridges gaps
     // between pellets and twitchy targets); offset mode fires whenever the finger is down, like the classic light gun
     let onShootable = !!h;
-    if (!onShootable && inp.touching) onShootable = !!(this.boss.raycastWrecks(ray, t + 1) || this.pickups.raycast(ray, t + 1));
+    if (!onShootable && inp.touching) onShootable = !!(this.boss.raycastWrecks(ray, t + 1) || this.pickups.raycast(ray, t + 1) || this.destruct?.raycast(ray, t + 1));
     this.touchOnT = onShootable ? 0.14 : Math.max(0, (this.touchOnT || 0) - realDt);
     this.touchFire = inp.touching && (inp.touchSettings.mode === 'offset' || this.touchOnT > 0);
     // Aim-assist friction: the crosshair slows down over a target (touch drag only)
@@ -896,12 +969,17 @@ class Game {
     this.addScore(pts);
     this.vfx.number(e.hx ?? e.x, (e.hy ?? 1.5) + 1.1, e.hz ?? e.z, `+${pts}`, 3);
     this.weapons.addCharge((e.elite ? 0.12 : 0.012) * (e.sp.mass > 3 ? 3 : 1));
+    const spraying = (this.weapons.spin || 0) > 0.55 && !e.elite && !e.miniboss;
     if (e.sp.mass * e.scale > 3) this.hitStop(e.elite ? 0.08 : 0.045);
-    else this.hitStop(0.015);
+    else if (!spraying) this.hitStop(0.012);
     if (e.miniboss) {
       this.hud.banner('MINI-BOSS DOWN', e.name, 'good', true);
-      this.flash(0.25);
-      this.cam.addTrauma(0.5);
+      this.hud.callout('FOSSILIZED', 'combo');
+      this.flash(0.35);
+      this.cam.addTrauma(0.55);
+      this.cam.fovKick -= 5.5;
+      this.slowmo(0.35, 1.25);
+      this.highlight?.mark('finale');
     }
     void cause;
   }
@@ -1048,6 +1126,37 @@ class Game {
     this.enemies.attackGrace = Math.max(this.enemies.attackGrace, 0.8);
   }
 
+  whoaPunch(trauma = 0.4, fov = 3, stop = 0.04) {
+    this.cam.addTrauma(trauma);
+    if (fov) this.cam.fovKick -= fov;
+    if (stop) this.hitStop(stop);
+  }
+
+  _armClip() {
+    if (!this.highlight || this.highlight.disabled || !this.highlight.can) {
+      this.hud.prompt('SCREENSHOT THE RESULTS CARD', '');
+      return;
+    }
+    this.highlight.mark('finale');
+    this.hud.prompt(this.highlight.lowmem ? 'RECORDING THE NEXT 14s' : 'CLIP ROLLING', 'good');
+  }
+
+  /** A map sector's script is done (no T. rex on this one). */
+  onStageClear() {
+    if (this._stageCleared) return;
+    this._stageCleared = true;
+    this.whoaPunch(0.55, 5.5, 0.1);
+    this.slowmo(0.4, 1.4);
+    this.flash(0.3);
+    this.audio.play('zone_clear');
+    this.audio.play('vo_mission', { delay: 0.35 });
+    const name = this.campaignStage?.name || 'SECTOR';
+    this.hud.banner('SECTOR CLEAR', name, 'good', true);
+    this.hud.callout('CLEAR!', 'good');
+    this.addScore(20000);
+    this.victoryT = 2.2;
+  }
+
   // ------------------------------------------------------------------------------------------------------------------
   startBoss() {
     this.bossStartT = this.director.time;
@@ -1189,13 +1298,33 @@ class Game {
   endRun(win, quit = false) {
     if (this.state === 'results') return;
     this.victoryT = undefined;
+    this.highlight?.cut();
     const best = this._best();
     const time = this.director.time;
+    const stage = this.campaignStage;
+    let stars = 0;
+    let nextId = null;
+    if (stage) {
+      const applied = applyResult(this.progress, stage, { win: !!win && !quit, score: this.score, time, continues: this.stats.continues });
+      stars = applied.stars;
+      saveProgress(this.progress);
+      const idx = STAGES.findIndex((s) => s.id === stage.id);
+      if (win && !quit && STAGES[idx + 1] && isUnlocked(this.progress, STAGES, idx + 1)) nextId = STAGES[idx + 1].id;
+    }
+    this._nextStage = nextId;
+    const finale = !stage || stage.finale === 'trex';
     const r = {
       win, score: this.score, time, kills: this.stats.kills, level: this.level, maxCombo: this.maxCombo, headshots: this.stats.headshots, staggers: this.stats.staggers,
       continues: this.stats.continues, boss: this.stats.bossKilled, bossTime: this.stats.bossKillTime, build: this.weapons.buildList(), endless: this.director.endless,
-      title: win ? 'CITY SAVED' : quit ? 'OFF DUTY' : 'GAME OVER',
-      sub: win ? `GRIDLOCK fossilized in ${fmtTime(this.stats.bossKillTime)} · ${this.stats.kills.toLocaleString('en-US')} dinosaurs down${this.stats.continues ? ` · ${this.stats.continues} continue${this.stats.continues > 1 ? 's' : ''}` : ' · NO CONTINUES'}` : `Unit 77 held Midtown for ${fmtTime(time)}`,
+      stars, stageName: stage?.name || '',
+      nextId,
+      endlessOffer: !!(win && !quit && !this.director.endless && finale),
+      title: win ? (stage && stage.finale !== 'trex' ? 'SECTOR CLEAR' : 'CITY SAVED') : quit ? 'OFF DUTY' : 'GAME OVER',
+      sub: win
+        ? (stage && stage.finale !== 'trex'
+          ? `${stage.place} · ${fmtTime(time)} · ${this.stats.kills.toLocaleString('en-US')} fossilized${this.stats.continues ? '' : ' · NO CONTINUES'}`
+          : `GRIDLOCK fossilized in ${fmtTime(this.stats.bossKillTime)} · ${this.stats.kills.toLocaleString('en-US')} dinosaurs down${this.stats.continues ? ` · ${this.stats.continues} continue${this.stats.continues > 1 ? 's' : ''}` : ' · NO CONTINUES'}`)
+        : `Unit 77 held ${stage?.place || 'Midtown'} for ${fmtTime(time)}`,
       best: best.score, newBest: this.score > (best.score || 0)
     };
     if (r.newBest) {
@@ -1219,11 +1348,16 @@ class Game {
   }
 
   shareText(r = this.lastResult) {
-    const weapons = r.build.filter((b) => b.kind === 'weapon').map((b) => b.name).slice(0, 3).join(' + ');
+    if (!r) return 'EXTINCTION AVENUE — rush hour just went Cretaceous. #ExtinctionAvenue';
+    const weapons = (r.build || []).filter((b) => b.kind === 'weapon').map((b) => b.name).slice(0, 3).join(' + ');
+    const stars = r.stars ? `${'★'.repeat(r.stars)}${'☆'.repeat(3 - r.stars)} ` : '';
+    const where = r.stageName ? `${r.stageName} · ` : '';
     const head = r.win
-      ? `I put down GRIDLOCK the T. rex in ${fmtTime(r.bossTime)}${r.continues ? '' : ' with no continues'} 🦖💥`
-      : `I held the tailgate for ${fmtTime(r.time)} of the Manhattan dinosaur outbreak 🦖🚕`;
-    return `${head}\n${r.score.toLocaleString('en-US')} pts · ${r.kills.toLocaleString('en-US')} dinos fossilized · ${r.headshots} headshots · ${r.maxCombo}x combo\nBuild: ${weapons}\nCan you beat it? #ExtinctionAvenue`;
+      ? (r.stageName && r.stageName !== 'GRIDLOCK'
+        ? `${stars}I cleared ${r.stageName} in EXTINCTION AVENUE`
+        : `I put down GRIDLOCK the T. rex in ${fmtTime(r.bossTime)}${r.continues ? '' : ' with no continues'}`)
+      : `I held the tailgate for ${fmtTime(r.time)} of the Manhattan dinosaur outbreak`;
+    return `${head}\n${where}${r.score.toLocaleString('en-US')} pts · ${r.kills.toLocaleString('en-US')} dinos fossilized · ${r.headshots} headshots · ${r.maxCombo}x combo\nBuild: ${weapons}\nCan you beat it? #ExtinctionAvenue`;
   }
 
   shareURL(r = this.lastResult) {
@@ -1284,7 +1418,7 @@ class Game {
   testAPI() {
     return {
       game: this,
-      start: () => this.startRun(),
+      start: () => this.startRun(params.get('stage')),
       step: (seconds, dt = 1 / 30) => { const n = Math.round(seconds / dt); for (let i = 0; i < n; i++) this.tick(dt); return this.summary(); },
       render: () => { this.renderFrame(); return true; },
       summary: () => this.summary(),

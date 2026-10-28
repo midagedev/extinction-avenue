@@ -834,6 +834,21 @@ class GameAudio {
     wn.connect(whp).connect(wg).connect(amb);
     wn.start();
     this.loops.wind = { gain: wg, filter: whp };
+    // Minigun body: one noise loop, one low saw, one square LFO. Created once — never per shot.
+    const mg = ctx.createGain(); mg.gain.value = 0;
+    const mn = ctx.createBufferSource(); mn.buffer = this.proc.noise; mn.loop = true;
+    const mbp = ctx.createBiquadFilter(); mbp.type = 'bandpass'; mbp.frequency.value = 1800; mbp.Q.value = 0.7;
+    const chop = ctx.createGain(); chop.gain.value = 0.55;
+    const lfo = ctx.createOscillator(); lfo.type = 'square'; lfo.frequency.value = 22;
+    const lfoG = ctx.createGain(); lfoG.gain.value = 0.4;
+    lfo.connect(lfoG).connect(chop.gain);
+    const mo = ctx.createOscillator(); mo.type = 'sawtooth'; mo.frequency.value = 74;
+    const moG = ctx.createGain(); moG.gain.value = 0.28;
+    mn.connect(mbp).connect(chop).connect(mg);
+    mo.connect(moG).connect(mg);
+    mg.connect(this.buses.weapons);
+    mn.start(); lfo.start(); mo.start();
+    this.loops.minigun = { gain: mg, lfo };
   }
 
   _sampleFlamer() {
@@ -853,7 +868,7 @@ class GameAudio {
     f.sampleGain = g;
   }
 
-  updateLoops(speed, boosting, flamer, active) {
+  updateLoops(speed, boosting, flamer, active, spin = 0) {
     if (!this.ctx || !this.loops.engine) return;
     this.loopsActive = active; // positional loops (stampede) fall silent while paused / levelling up / dead
     const t = this.ctx.currentTime;
@@ -867,6 +882,11 @@ class GameAudio {
     this.loops.flamer.gain.gain.setTargetAtTime(active && flamer ? 0.14 : 0, t, 0.08);
     this.loops.wind.gain.gain.setTargetAtTime(active ? Math.min(0.09, speed * 0.0025) + (boosting ? 0.1 : 0) : 0, t, 0.2);
     this.loops.wind.filter.frequency.setTargetAtTime(800 + speed * 40, t, 0.2);
+    const gun = this.loops.minigun;
+    if (gun) {
+      gun.gain.gain.setTargetAtTime(active && spin > 0.04 ? 0.04 + spin * 0.16 : 0, t, 0.04);
+      gun.lfo.frequency.setTargetAtTime(16 + spin * 20, t, 0.05);
+    }
   }
 
   // ------------------------------------------------------------------------------------------------------------------

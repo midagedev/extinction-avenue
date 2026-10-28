@@ -49,6 +49,7 @@ class WeaponSystem {
     this.firing = false;
     this.burnDps = 10;
     this.shotsFired = 0;
+    this.spin = 0;
     this.ammo = 30;
     this.reloadT = 0;
     this.heat = 0;
@@ -71,6 +72,7 @@ class WeaponSystem {
     this.reloadT = 0;
     this.heat = 0;
     this.overdrive = 0;
+    this.spin = 0;
     this.recomputeStats();
     this.ammo = this.magSize;
   }
@@ -168,7 +170,7 @@ class WeaponSystem {
   get magSize() {
     if (this.evolved.has('railgun')) return Math.round(10 * (1 + (this.passives.get('turbo') || 0) * 0.2));
     const lvl = this.level('cannon');
-    return Math.round((lvl >= 3 ? 45 : 30) * (1 + (this.passives.get('turbo') || 0) * 0.2));
+    return Math.round((lvl >= 3 ? 220 : 160) * (1 + (this.passives.get('turbo') || 0) * 0.2));
   }
 
   get reloadDur() {
@@ -213,22 +215,35 @@ class WeaponSystem {
     if (wantFire && this.reloadT <= 0) {
       if (this.ammo <= 0) {
         this.reload();
-      } else if (this.cd.main <= 0) {
-        if (E('railgun')) {
+      } else if (E('railgun')) {
+        if (this.cd.main <= 0) {
           this.cd.main = 0.3 * this.cdMult;
           this._fireRail();
-        } else {
+          this.firing = true;
+        }
+        this.heat = Math.min(1, this.heat + dt * 1.2);
+      } else {
+        // Spin up (~0.3 s), then a minigun stream. Per-round damage is lower so DPS stays near the old 9 Hz gun.
+        this.spin = Math.min(1, this.spin + dt * 3.5);
+        if (this.spin > 0.22 && this.cd.main <= 0) {
           const lvl = L('cannon');
-          const rate = 9 * (lvl >= 4 ? 1.3 : 1) * (this.overdrive > 0 ? 1.5 : 1) / this.cdMult;
+          const rate = (8 + 14 * this.spin) * (lvl >= 4 ? 1.22 : 1) * (this.overdrive > 0 ? 1.3 : 1) / this.cdMult;
           this.cd.main = Math.max(this.cd.main + 1 / rate, 0);
           this._fireGun(lvl);
+          this.firing = true;
         }
-        this.firing = true;
-        if (this.overdrive <= 0) this.ammo--;
-        if (this.ammo <= 0) { this.ammo = 0; g.onEmpty?.(); this.reload(); }
+        this.heat = Math.min(1, this.heat + dt * 0.55);
+        if (this.spin > 0.35) {
+          g.cam.trauma = Math.max(g.cam.trauma, 0.18 + this.spin * 0.22);
+          g.cam.fovKick = Math.min(g.cam.fovKick, -0.7 - this.spin * 1.3);
+        }
       }
-      this.heat = Math.min(1, this.heat + dt * 1.2);
-    } else this.heat = Math.max(0, this.heat - dt * 2.5);
+      if (this.firing && this.overdrive <= 0) this.ammo--;
+      if (this.firing && this.ammo <= 0) { this.ammo = 0; g.onEmpty?.(); this.reload(); }
+    } else {
+      this.heat = Math.max(0, this.heat - dt * 2.5);
+      this.spin = Math.max(0, this.spin - dt * 2.8);
+    }
     if (this.cd.main < -0.1) this.cd.main = -0.1;
 
     // --- Hood Gatlings / Storm Gatlings ----------------------------------------------------------------------------
@@ -452,19 +467,25 @@ class WeaponSystem {
   _fireGun(lvl) {
     const g = this.game;
     const ray = this._shotRay(0.0035 + this.heat * 0.011);
-    const dmgBase = 12 * (lvl >= 2 ? 1.3 : 1) * this.dmgMult;
+    const dmgBase = 5.2 * (lvl >= 2 ? 1.3 : 1) * this.dmgMult;
     const pierce = lvl >= 3 ? 1 : 0;
     g.gunner.muzzleWorld(_pos);
     let endT = this._groundT(ray);
     let hitSomething = false;
-    // Shootable things that aren't dinosaurs: floating supply drops and the T. rex's thrown wrecks
+    // Shootable things that aren't dinosaurs: street props, floating supply drops, the T. rex's thrown wrecks
     const ph = g.pickups.raycast(ray, endT);
     const wh = g.boss.raycastWrecks(ray, endT);
+    const h0 = g.enemies.raycast(ray, endT, _hit);
+    const dh = g.destruct?.raycast(ray, endT);
+    if (dh && (!h0 || dh.t < h0.t) && (!ph || dh.t < ph.t) && (!wh || dh.t < wh.t)) {
+      const stop = g.destruct.hit(dh.p, dmgBase);
+      if (stop) { endT = dh.t; hitSomething = true; }
+    }
     let skip = null;
     for (let k = 0; k <= pierce; k++) {
       const h = g.enemies.raycast(ray, endT, _hit, skip);
       const tOther = Math.min(ph ? ph.t : Infinity, wh ? wh.t : Infinity);
-      if (k === 0 && tOther < (h ? h.t : Infinity)) {
+      if (k === 0 && tOther <= endT && tOther < (h ? h.t : Infinity)) {
         endT = tOther;
         if (ph && ph.t <= tOther) g.pickups.shoot(ph.item);
         else g.boss.shootWreck(wh.w, dmgBase);
@@ -479,7 +500,7 @@ class WeaponSystem {
       const fall = Math.max(0.55, Math.min(1, 1.3 - h.t / 60));
       const killed = g.enemies.damage(e, dmgBase * crit * fall, { source: 'gun', crit: crit > 1, head: h.head, stagger: 1, kx: ray.direction.x * 6, kz: ray.direction.z * 6 });
       g.vfx.hitSpark(x, y, z, h.head ? 7 : 5, h.head ? 6 : 3.2, h.head ? 2 : 1);
-      if (lvl >= 5) this.blast(x, z, 2.6 * this.areaMult, dmgBase * 0.55, 1, 'blast', false, y);
+      if (lvl >= 5 && this.shotsFired % 8 === 0) this.blast(x, z, 2.4 * this.areaMult, dmgBase * 3.2, 1, 'blast', true, y);
       g.onGunHit(e, h, killed, x, y, z);
       endT = h.t;
       hitSomething = true;
@@ -487,16 +508,19 @@ class WeaponSystem {
     }
     const ex = ray.origin.x + ray.direction.x * endT, ey = ray.origin.y + ray.direction.y * endT, ez = ray.origin.z + ray.direction.z * endT;
     if (!hitSomething && endT < 159) { g.vfx.hitSpark(ex, Math.max(0.1, ey), ez, 3, 2.6, 1.6); g.vfx.dust(ex, ez, 0.25, 1); }
-    // Tracer from the muzzle to the impact, flash at the muzzle
-    g.vfx.beam(_pos.x, _pos.y, _pos.z, ex, ey, ez, 0.035, 9, 5.5, 1.6, 0.045);
-    this.bullet(_pos.x, _pos.y, _pos.z, ex - _pos.x, ey - _pos.y, ez - _pos.z, 1 / 0.07, 0, { visual: true, life: 0.07, color: [9, 6, 2], width: 0.06, len: 3.5 });
-    g.gunner.fire(1);
-    // Long bursts ease off by up to −2 dB (with the variation rotation and pitch jitter: no machine-gun fatigue)
-    g.audio.play('gun', { volume: 1 - Math.min(0.22, (this.burst || 0) * 0.018) });
+    // Chunky tracer. The beam list allocates per shot; at minigun rate that becomes garbage, so the
+    // instanced tracer plus a pooled muzzle flash carry the round.
+    g.vfx.muzzle(_pos.x, _pos.y, _pos.z, ray.direction.x, ray.direction.y, ray.direction.z, 1.15, 11, 6.5, 1.5);
+    this.bullet(_pos.x, _pos.y, _pos.z, ex - _pos.x, ey - _pos.y, ez - _pos.z, 1 / 0.08, 0, { visual: true, life: 0.08, color: [12, 7.2, 1.8], width: 0.13, len: 5.4 });
+    g.gunner.fire(0.72);
+    if ((this.shotsFired & 1) === 0) {
+      g.audio.play('gatling', { volume: 0.55, pitch: 0.9 + this.spin * 0.16 });
+      const p = g.player;
+      g.vfx.shell(_pos.x, _pos.y, _pos.z, -p.rx, -p.rz);
+    }
     this.burst = (this.burst || 0) + 1;
     this.sinceShot = 0;
-    g.cam.kick += 0.0045;
-    g.cam.addTrauma(0.012);
+    g.cam.kick += 0.011;
     this.shotsFired++;
   }
 
@@ -552,6 +576,7 @@ class WeaponSystem {
       g.audio.play('explosion', { x, z, volume: Math.min(1, 0.35 + radius * 0.06), pitch: 1.2 - Math.min(0.5, radius * 0.04) });
       g.cam.addTrauma(Math.min(0.2, radius * 0.015));
     }
+    g.destruct?.shock(x, z, radius);
   }
 
   _updateProjectiles(dt) {

@@ -38,7 +38,7 @@ class Input {
       this.keys.add(e.code);
       const act = {
         Escape: 'pause', KeyP: 'pause', Space: 'special', KeyE: 'special', KeyQ: 'special', KeyM: 'mute',
-        Digit1: 'pick1', Digit2: 'pick2', Digit3: 'pick3', Digit4: 'pick4', KeyR: 'reroll', Enter: 'confirm', KeyF: 'autofire'
+        Digit1: 'pick1', Digit2: 'pick2', Digit3: 'pick3', Digit4: 'pick4', KeyR: 'reroll', Enter: 'confirm', KeyF: 'autofire', KeyC: 'clip'
       }[e.code];
       if (act && !e.repeat) this.onAction?.(act, e);
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
@@ -82,6 +82,7 @@ class Input {
     tap('t-reload', () => this.onAction?.('reroll'));
     tap('t-special', () => this.onAction?.('special'));
     tap('t-pause', () => this.onAction?.('pause'));
+    tap('t-clip', () => this.onAction?.('clip'));
     window.addEventListener('touchstart', () => { if (!this.touchMode) this.setTouchMode(true); }, { passive: true });
   }
 

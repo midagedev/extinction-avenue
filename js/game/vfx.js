@@ -173,6 +173,11 @@ class VFX {
     L.max = life;
   }
 
+  /** One brass casing. Uses the shard pool — no extra geometry, and the pool recycles. */
+  shell(x, y, z, rx, rz) {
+    this.shards.spawn(x, y, z, rx * 4.2, 3.4, rz * 4.2, 0.85, 0.055, 0.03, 0.72, 0.55, 0.22, { grav: 16, spin: 11, bounce: 0.42 });
+  }
+
   muzzle(x, y, z, dx, dy, dz, size = 1, r = 6, g = 3.2, b = 0.8) {
     this.glow.spawn(x, y, z, dx * 4, dy * 4, dz * 4, 0.06, 0.55 * size, 0.2 * size, r, g, b);
     this.glow.spawn(x + dx * 0.4 * size, y + dy * 0.4 * size, z + dz * 0.4 * size, dx * 8, dy * 8, dz * 8, 0.05, 0.4 * size, 0.1 * size, r, g * 0.8, b * 0.5);
