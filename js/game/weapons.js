@@ -292,7 +292,7 @@ class WeaponSystem {
             boom: dragon ? 1.6 * this.areaMult : 0, burn: dragon ? 2 : 0
           });
         }
-        g.vfx.muzzle(_pos.x, _pos.y, _pos.z, -p.fx, 0, -p.fz, 2.4, 8, dragon ? 2.5 : 4, dragon ? 0.4 : 1);
+        g.vfx.muzzle(_pos.x, _pos.y, _pos.z, -p.fx, 0, -p.fz, 0.55, 8, dragon ? 2.5 : 4, dragon ? 0.4 : 1);
         g.vfx.light(_pos.x, _pos.y, _pos.z, 0xffaa44, 80, 14, 0.08);
         g.audio.play('shotgun');
         g.cam.addTrauma(0.06);
@@ -375,14 +375,18 @@ class WeaponSystem {
     if (fl || E('inferno')) {
       const inferno = E('inferno');
       const range = (inferno ? 14 : 8 * (fl >= 2 ? 1.3 : 1) * (fl >= 4 ? 1.3 : 1)) * this.areaMult;
-      p.toWorld(_pos.set(0, 0.45, -2.5), _pos);
+      // Low, short tongue along the asphalt. The jet used to grow into a white ball over the crosshair.
+      // Same random draws per particle as before so the fixed-seed shots stay on the same scene.
+      p.toWorld(_pos.set(0, 0.16, -2.9), _pos);
       const bx = -p.fx, bz = -p.fz;
-      // Flame particles stream out of the exhaust
       for (let k = 0; k < 3; k++) {
-        const sp = 12 + Math.random() * 6;
-        const a = Math.atan2(bx, bz) + (Math.random() - 0.5) * 0.5;
-        g.vfx.glow.spawn(_pos.x + (Math.random() - 0.5) * 0.8, _pos.y, _pos.z, Math.sin(a) * sp + p.vx * 0.85, 0.5 + Math.random() * 1.5, Math.cos(a) * sp + p.vz * 0.85,
-          range / 16, 0.35, 1.4 * (inferno ? 1.4 : 1), 7, 2.4, 0.4, { r1: 1.5, g1: 0.2, b1: 0.05, drag: 1.2 });
+        const sp = 8 + Math.random() * 4;
+        const a = Math.atan2(bx, bz) + (Math.random() - 0.5) * 0.16;
+        const jx = (Math.random() - 0.5) * 0.22;
+        const vy = -0.15 - Math.random() * 0.35;
+        g.vfx.glow.spawn(_pos.x + jx * -bz, _pos.y, _pos.z + jx * bx, Math.sin(a) * sp + p.vx * 0.85, vy, Math.cos(a) * sp + p.vz * 0.85,
+          inferno ? 0.32 : 0.24, 0.07, (inferno ? 0.48 : 0.34) * (k === 0 ? 1.1 : 0.8),
+          k === 0 ? 4.0 : 2.4, k === 0 ? 1.25 : 0.62, 0.1, { r1: 1.0, g1: 0.16, b1: 0.02, drag: 0.55 });
       }
       this.flaming = true;
       if (this._ready('flamer', 0.15)) {
@@ -516,7 +520,7 @@ class WeaponSystem {
     if (!hitSomething && endT < 159) { g.vfx.hitSpark(ex, Math.max(0.1, ey), ez, 3, 2.6, 1.6); g.vfx.dust(ex, ez, 0.25, 1); }
     // Chunky tracer. The beam list allocates per shot; at minigun rate that becomes garbage, so the
     // instanced tracer plus a pooled muzzle flash carry the round.
-    g.vfx.muzzle(_pos.x, _pos.y, _pos.z, ray.direction.x, ray.direction.y, ray.direction.z, 0.85, 8, 4.2, 1.1);
+    g.vfx.muzzle(_pos.x, _pos.y, _pos.z, ray.direction.x, ray.direction.y, ray.direction.z, 0.5, 8, 4.2, 1.1);
     this.bullet(_pos.x, _pos.y, _pos.z, ex - _pos.x, ey - _pos.y, ez - _pos.z, 1 / 0.08, 0, { visual: true, life: 0.08, color: [12, 7.2, 1.8], width: 0.13, len: 5.4 });
     g.gunner.fire(0.72);
     if ((this.shotsFired & 1) === 0) {
@@ -726,7 +730,7 @@ class WeaponSystem {
       f.life -= dt;
       if (f.life <= 0) { this.fires.splice(i, 1); continue; }
       if (Math.random() < dt * 14) {
-        g.vfx.glow.spawn(f.x + (Math.random() - 0.5) * f.r, 0.3, f.z + (Math.random() - 0.5) * f.r, 0, 2 + Math.random() * 2, 0, 0.5, 0.6, 1.4, 6, 1.8, 0.3, { r1: 1, g1: 0.15, b1: 0.02 });
+        g.vfx.glow.spawn(f.x + (Math.random() - 0.5) * f.r, 0.16, f.z + (Math.random() - 0.5) * f.r, 0, 1.1 + Math.random() * 1.1, 0, 0.32, 0.16, 0.46, 3.4, 1.05, 0.16, { r1: 0.85, g1: 0.12, b1: 0.02 });
       }
       f.tick = (f.tick || 0) - dt;
       if (f.tick <= 0) {

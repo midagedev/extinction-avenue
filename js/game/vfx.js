@@ -34,6 +34,11 @@ class ParticlePool {
     this.stretch = f();
     this.bounce = f();
     this.puff = !!opts.puff; // grow in, shrink out (dust & smoke)
+    // 'fade': additive glow, transparent against the lens. 'clip': lit smoke/debris, which cannot fade (the
+    // material is opaque) so a puff that would fill the view is dropped. 'off': always draw.
+    this.near = opts.near || (opts.additive ? 'fade' : 'clip');
+    this.cap = opts.cap !== false && this.near !== 'off';
+    this.geoR = opts.geoR ?? 0.5; // geometry radius; world radius ≈ scale * geoR
     this.alive = 0;
     this.cursor = 0;
     this.active = new Uint8Array(capacity);
@@ -59,8 +64,11 @@ class ParticlePool {
     return i;
   }
 
-  update(dt) {
+  update(dt, cam) {
     const b = this.batch;
+    const cp = cam?.position;
+    // ~7° angular radius. A glow this size stays a flame, not a wall in front of the pack.
+    const TAN = 0.1228;
     b.begin();
     for (let i = 0; i < this.n; i++) {
       if (!this.active[i]) continue;
@@ -85,11 +93,27 @@ class ParticlePool {
       const cr = this.r[i] + (this.r1[i] - this.r[i]) * t;
       const cg = this.g[i] + (this.g1[i] - this.g[i]) * t;
       const cb = this.b[i] + (this.b1[i] - this.b[i]) * t;
+      let a = 1;
+      if (cp && this.near !== 'off') {
+        const dist = Math.hypot(this.x[i] - cp.x, this.y[i] - cp.y, this.z[i] - cp.z);
+        if (this.near === 'fade') {
+          if (dist < 1.5) continue;
+          const f = Math.min(1, (dist - 1.5) / 2.2);
+          a = f * f;
+        } else if (dist < 1.8) continue;
+        if (this.cap) {
+          const maxS = (dist * TAN) / this.geoR;
+          // Opaque puffs cannot go transparent. Drop the ones that would still be a billboard.
+          if (this.near === 'clip' && s > maxS * 1.15 && dist < 10) continue;
+          if (s > maxS) s = maxS;
+        }
+      }
+      if (a < 0.02) continue;
       if (this.stretch[i] > 0) {
         const k = this.stretch[i];
-        b.addSegment(this.x[i], this.y[i], this.z[i], this.x[i] - this.vx[i] * k, this.y[i] - this.vy[i] * k, this.z[i] - this.vz[i] * k, s, s, cr, cg, cb, 1);
+        b.addSegment(this.x[i], this.y[i], this.z[i], this.x[i] - this.vx[i] * k, this.y[i] - this.vy[i] * k, this.z[i] - this.vz[i] * k, s, s, cr, cg, cb, a);
       } else {
-        b.add(this.x[i], this.y[i], this.z[i], this.rot[i], this.rot[i] * 0.7, 0, s, s, s, cr, cg, cb, 1);
+        b.add(this.x[i], this.y[i], this.z[i], this.rot[i], this.rot[i] * 0.7, 0, s, s, s, cr, cg, cb, a);
       }
     }
     b.end();
@@ -110,16 +134,16 @@ class VFX {
     scene.add(this.group);
 
     // Additive glow blobs (fire, sparks, muzzle flashes, gene-energy wisps)
-    this.glow = new ParticlePool(attrGeo(new THREE.IcosahedronGeometry(0.5, 0)), 2200, { additive: true, name: 'vfx.glow' });
-    // Streaks (sparks with motion stretch) share the unit box
-    this.streak = new ParticlePool(attrGeo(new THREE.BoxGeometry(1, 1, 1)), 900, { additive: true, name: 'vfx.streak' });
-    // Lit solids: fossil shards & debris (stone colored), smoke & dust puffs
-    this.shards = new ParticlePool(assets.get('shard').geometry, 1400, { roughness: 0.95, metalness: 0, name: 'vfx.shards' });
-    this.smoke = new ParticlePool(attrGeo(new THREE.IcosahedronGeometry(0.5, 1)), 500, { roughness: 1, metalness: 0, name: 'vfx.smoke', puff: true });
-    // Shockwave rings (flat, additive)
+    this.glow = new ParticlePool(attrGeo(new THREE.IcosahedronGeometry(0.5, 0)), 2200, { additive: true, name: 'vfx.glow', near: 'fade', geoR: 0.5 });
+    // Streaks (sparks with motion stretch) share the unit box. geoR 0.5: addSegment thickness is the full width.
+    this.streak = new ParticlePool(attrGeo(new THREE.BoxGeometry(1, 1, 1)), 900, { additive: true, name: 'vfx.streak', near: 'fade', geoR: 0.5 });
+    // Lit solids: fossil shards & debris (stone colored), smoke & dust puffs. Opaque, so near ones are clipped.
+    this.shards = new ParticlePool(assets.get('shard').geometry, 1400, { roughness: 0.95, metalness: 0, name: 'vfx.shards', near: 'clip', geoR: 0.5 });
+    this.smoke = new ParticlePool(attrGeo(new THREE.IcosahedronGeometry(0.5, 1)), 500, { roughness: 1, metalness: 0, name: 'vfx.smoke', puff: true, near: 'clip', geoR: 0.5 });
+    // Shockwave rings (flat, additive). No angular cap: a ring is supposed to spread across the street.
     const ring = new THREE.RingGeometry(0.82, 1, 40, 1);
     ring.rotateX(-Math.PI / 2);
-    this.rings = new ParticlePool(attrGeo(ring), 96, { additive: true, doubleSide: true, name: 'vfx.rings' });
+    this.rings = new ParticlePool(attrGeo(ring), 96, { additive: true, doubleSide: true, name: 'vfx.rings', near: 'fade', cap: false });
     for (const p of [this.glow, this.streak, this.shards, this.smoke, this.rings]) this.group.add(p.batch.mesh);
 
     // Immediate-mode ground telegraphs and beams (re-submitted every frame)
@@ -157,6 +181,7 @@ class VFX {
     this._v = new THREE.Vector3();
     this.speedLines = 0;
     this.threats = []; // off-screen arrows: { x, z, color }
+    this._cam = null;
   }
 
   // ---------------------------------------------------------------------------------------------------------------
@@ -179,8 +204,12 @@ class VFX {
   }
 
   muzzle(x, y, z, dx, dy, dz, size = 1, r = 6, g = 3.2, b = 0.8) {
-    this.glow.spawn(x, y, z, dx * 4, dy * 4, dz * 4, 0.06, 0.55 * size, 0.2 * size, r, g, b);
-    this.glow.spawn(x + dx * 0.4 * size, y + dy * 0.4 * size, z + dz * 0.4 * size, dx * 8, dy * 8, dz * 8, 0.05, 0.4 * size, 0.1 * size, r, g * 0.8, b * 0.5);
+    // Down the barrel, not on the lens, and never a screen-filling flash. Callers may still pass a big size.
+    const adv = 1.15;
+    const s = Math.min(size, 0.62);
+    const px = x + dx * adv, py = y + dy * adv, pz = z + dz * adv;
+    this.glow.spawn(px, py, pz, dx * 3, dy * 3, dz * 3, 0.045, 0.32 * s, 0.1 * s, r * 0.5, g * 0.5, b * 0.5);
+    this.glow.spawn(px + dx * 0.3, py + dy * 0.3, pz + dz * 0.3, dx * 6, dy * 6, dz * 6, 0.035, 0.16 * s, 0.05 * s, r * 0.32, g * 0.22, b * 0.12);
   }
 
   sparks(x, y, z, count, speed, r = 6, g = 3, b = 0.6, life = 0.35) {
@@ -199,36 +228,47 @@ class VFX {
   }
 
   explosion(x, y, z, size = 1, color = 0) {
+    // A blast under the cab used to put a white ball over the pack. Scales shrink; spawn counts stay on `size`
+    // so the fixed-seed shot sequence does not move.
+    let vis = size;
+    const cam = this._cam;
+    if (cam) {
+      const d = Math.hypot(x - cam.position.x, y + 0.5 - cam.position.y, z - cam.position.z);
+      if (d < 14) {
+        const cap = Math.max(0.2, d * 0.11);
+        if (vis > cap) vis = cap;
+      }
+    }
     // color 0 = fire, 1 = cyan plasma, 2 = magenta
     const pal = color === 1 ? [1.2, 5, 6] : color === 2 ? [6, 1, 5] : [8, 3.2, 0.7];
     // Core flash
-    this.glow.spawn(x, y + 0.5, z, 0, 0, 0, 0.12, 2.2 * size, 3.4 * size, 14, 12, 9);
+    this.glow.spawn(x, y + 0.5, z, 0, 0, 0, 0.12, 2.2 * vis, 3.4 * vis, 14, 12, 9);
     // Fireball blobs
     const nb = Math.round(7 + 5 * size);
     for (let i = 0; i < nb; i++) {
       const a = Math.random() * Math.PI * 2;
-      const r = Math.random() * 1.2 * size;
-      this.glow.spawn(x + Math.cos(a) * r, y + 0.6 + Math.random() * 1.2 * size, z + Math.sin(a) * r,
-        Math.cos(a) * 3 * size, 2 + Math.random() * 3 * size, Math.sin(a) * 3 * size,
-        0.35 + Math.random() * 0.3, 1.1 * size, 2.4 * size, pal[0], pal[1], pal[2],
+      const r = Math.random() * 1.2 * vis;
+      this.glow.spawn(x + Math.cos(a) * r, y + 0.6 + Math.random() * 1.2 * vis, z + Math.sin(a) * r,
+        Math.cos(a) * 3 * vis, 2 + Math.random() * 3 * vis, Math.sin(a) * 3 * vis,
+        0.35 + Math.random() * 0.3, 1.1 * vis, 2.4 * vis, pal[0], pal[1], pal[2],
         { r1: 0.5, g1: 0.08, b1: 0.02, drag: 3 });
     }
-    this.sparks(x, y + 0.5, z, Math.round(10 + 14 * size), 14 * Math.sqrt(size), pal[0], pal[1] * 0.9, pal[2]);
+    this.sparks(x, y + 0.5, z, Math.round(10 + 14 * size), 14 * Math.sqrt(vis), pal[0], pal[1] * 0.9, pal[2]);
     // Smoke
     for (let i = 0; i < Math.min(8, 3 + 3 * size); i++) {
       const a = Math.random() * Math.PI * 2;
-      this.smoke.spawn(x + Math.cos(a) * size, y + 0.8, z + Math.sin(a) * size, Math.cos(a) * 1.5, 1.6 + Math.random() * 1.5, Math.sin(a) * 1.5,
-        1.0 + Math.random() * 0.8, Math.min(2, 0.9 * size), Math.min(3.2, 2.4 * size), 0.07, 0.065, 0.06, { drag: 1.2, r1: 0.04, g1: 0.04, b1: 0.04 });
+      this.smoke.spawn(x + Math.cos(a) * vis, y + 0.8, z + Math.sin(a) * vis, Math.cos(a) * 1.5, 1.6 + Math.random() * 1.5, Math.sin(a) * 1.5,
+        1.0 + Math.random() * 0.8, Math.min(2, 0.9 * vis), Math.min(3.2, 2.4 * vis), 0.07, 0.065, 0.06, { drag: 1.2, r1: 0.04, g1: 0.04, b1: 0.04 });
     }
     // Debris
     for (let i = 0; i < 3 + 3 * size; i++) {
       const a = Math.random() * Math.PI * 2;
-      const sp = 6 + Math.random() * 8 * size;
-      this.shards.spawn(x, y + 0.5, z, Math.cos(a) * sp, 5 + Math.random() * 8, Math.sin(a) * sp, 1.2 + Math.random(), 0.35 * size, 0.1,
+      const sp = 6 + Math.random() * 8 * vis;
+      this.shards.spawn(x, y + 0.5, z, Math.cos(a) * sp, 5 + Math.random() * 8, Math.sin(a) * sp, 1.2 + Math.random(), 0.35 * vis, 0.1,
         0.12, 0.1, 0.09, { grav: 22, spin: 9, bounce: 0.35 });
     }
-    this.rings.spawn(x, 0.12, z, 0, 0, 0, 0.42, 0.6 * size, 7.5 * size, pal[0] * 0.6, pal[1] * 0.6, pal[2] * 0.6, { r1: 0, g1: 0, b1: 0 });
-    this.light(x, y + 1.5, z, color === 1 ? 0x55eeff : color === 2 ? 0xff44dd : 0xff8833, 260 * size, 26 * Math.sqrt(size), 0.35);
+    this.rings.spawn(x, 0.12, z, 0, 0, 0, 0.42, 0.6 * vis, 7.5 * vis, pal[0] * 0.6, pal[1] * 0.6, pal[2] * 0.6, { r1: 0, g1: 0, b1: 0 });
+    this.light(x, y + 1.5, z, color === 1 ? 0x55eeff : color === 2 ? 0xff44dd : 0xff8833, 260 * vis, 26 * Math.sqrt(vis), 0.35);
   }
 
   /** A dinosaur turned to stone shattering into fossil shards (the signature, gore-free death) */
@@ -325,20 +365,31 @@ class VFX {
   }
 
   // ---------------------------------------------------------------------------------------------------------------
-  update(dt) {
-    this.glow.update(dt);
-    this.streak.update(dt);
-    this.shards.update(dt);
-    this.smoke.update(dt);
-    this.rings.update(dt);
-    // Beams fade
+  update(dt, cam) {
+    if (cam) this._cam = cam;
+    const c = this._cam;
+    this.glow.update(dt, c);
+    this.streak.update(dt, c);
+    this.shards.update(dt, c);
+    this.smoke.update(dt, c);
+    this.rings.update(dt, c);
+    // Beams fade. A beam that starts under the lens stays thin and transparent up close.
     this.beams.begin();
     let w = 0;
+    const cp = c?.position;
     for (const bm of this.beamList) {
       bm.life -= dt;
       if (bm.life <= 0) continue;
-      const a = bm.life / bm.max;
-      this.beams.addSegment(bm.x0, bm.y0, bm.z0, bm.x1, bm.y1, bm.z1, bm.width * (0.5 + a * 0.5), bm.width * (0.5 + a * 0.5), bm.r, bm.g, bm.b, a);
+      let a = bm.life / bm.max;
+      let width = bm.width * (0.5 + a * 0.5);
+      if (cp) {
+        const dist = Math.hypot((bm.x0 + bm.x1) * 0.5 - cp.x, (bm.y0 + bm.y1) * 0.5 - cp.y, (bm.z0 + bm.z1) * 0.5 - cp.z);
+        if (dist < 1.5) { this.beamList[w++] = bm; continue; }
+        if (dist < 3.4) a *= (dist - 1.5) / 1.9;
+        const maxW = dist * 0.14;
+        if (width > maxW) width = maxW;
+      }
+      this.beams.addSegment(bm.x0, bm.y0, bm.z0, bm.x1, bm.y1, bm.z1, width, width, bm.r, bm.g, bm.b, a);
       this.beamList[w++] = bm;
     }
     this.beamList.length = w;

@@ -667,9 +667,10 @@ class Game {
     const st = this.state;
     const simulating = st === 'playing' || st === 'intro' || st === 'bossintro' || st === 'title' || st === 'dead';
     if (simulating) this.simulate(sim, dt);
-    else this.vfx.update(0); // keeps telegraph batches stable while paused
     if (st === 'continue') this._continueTick(dt);
     this.cam.update(dt, this.player);
+    // After the camera, so near-lens fades use the pose that is about to be drawn.
+    this.vfx.update(simulating ? sim : 0, this.cam.camera);
     this.player.tailGun.visible = this.cam.mode !== 'gunner';
     const u = this.world.post.uniforms;
     const p = this.player;
@@ -733,15 +734,14 @@ class Game {
     // Combo decay
     if (this.comboT > 0) { this.comboT -= dt; if (this.comboT <= 0) this.combo = 0; }
     this.vfx.endTelegraphs();
-    this.vfx.update(dt);
     if (this.minibosses.length && !this.boss.active) {
       const mb = this.minibosses[0];
       if (!mb.alive || mb.hp <= 0) this.minibosses.shift();
     }
     if (st === 'dead') {
       this.deadT -= realDt;
-      if (Math.random() < 0.3) this.vfx.smoke.spawn(p.x, 1, p.z, (Math.random() - 0.5), 3, (Math.random() - 0.5), 1.6, 0.8, 3, 0.08, 0.08, 0.08, { drag: 1 });
-      if (Math.random() < 0.2) this.vfx.glow.spawn(p.x + (Math.random() - 0.5) * 2, 0.8, p.z + (Math.random() - 0.5) * 2, 0, 3, 0, 0.5, 0.8, 1.4, 7, 2.2, 0.4, { r1: 1, g1: 0.1, b1: 0 });
+      if (Math.random() < 0.3) this.vfx.smoke.spawn(p.x, 0.6, p.z, (Math.random() - 0.5), 2.2, (Math.random() - 0.5), 1.1, 0.35, 0.9, 0.08, 0.08, 0.08, { drag: 1 });
+      if (Math.random() < 0.2) this.vfx.glow.spawn(p.x + (Math.random() - 0.5) * 2, 0.4, p.z + (Math.random() - 0.5) * 2, 0, 1.6, 0, 0.4, 0.22, 0.55, 3.5, 1.2, 0.2, { r1: 0.9, g1: 0.12, b1: 0 });
       if (this.deadT <= 0) this.openContinue();
     }
     if (this.victoryT !== undefined && this.victoryT > 0) {

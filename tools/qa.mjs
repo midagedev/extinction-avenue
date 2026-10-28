@@ -7,7 +7,8 @@
 //            (tools/page-errors.mjs)
 //   shots    fixed-seed gameplay screenshots, desktop 1440x900 @2x (High) and iPhone 15 emulation (Phone), with
 //            readability metrics (tools/qa-shots.mjs: sharpness, luma spread, street veil, creature-vs-background
-//            contrast, enemy size in px), compared with tools/qa-baselines/baseline.json
+//            contrast, enemy size in px), compared with tools/qa-baselines/baseline.json. A final
+//            <profile>-flame frame forces the exhaust flamer and FAILs when weapon fx cover the aim.
 //   webkit   Playwright WebKit as an iPhone 15: real START flow, phone profile, pixel ratio, streaming, not black
 //            (IPHONE=1 tools/e2e-webkit.mjs)
 //   soak     opt-in (--soak[=gameSeconds], default 240): the phone-profile memory soak (tools/mem-long-probe.mjs);
@@ -86,6 +87,15 @@ const CHECKS = [
 function compareShots(metrics, baseline) {
   for (const [name, m] of Object.entries(metrics.shots)) {
     if (name.endsWith('-native')) continue;
+    // Absolute cap: the flame frame has no baseline, and a missing baseline would only log INFO.
+    if (m.weaponCover) {
+      const cov = m.weaponCover.cover;
+      row(`shots ${name}`, 'aim covered by weapon fx', cov > 0.12 ? 'FAIL' : cov > 0.07 ? 'WARN' : 'PASS', cov, '≤ 0.12');
+      const vis = m.weaponCover.enemyVis;
+      if (vis == null) row(`shots ${name}`, 'enemies visible while firing', 'INFO', `aim creature px ${m.weaponCover.enemyWithout}`, 'need ≥ 80');
+      else row(`shots ${name}`, 'enemies visible while firing', vis < 0.75 ? 'FAIL' : vis < 0.88 ? 'WARN' : 'PASS', vis, '≥ 0.75');
+      continue;
+    }
     const b = baseline?.shots?.[name];
     for (const [label, get, cmp] of CHECKS) {
       const v = get(m);

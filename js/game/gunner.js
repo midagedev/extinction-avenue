@@ -44,12 +44,12 @@ class GunnerView {
     this.rail = mk('tailRail');
     this.rail.visible = false;
     // Muzzle flash: additive star that pops for a frame or two
-    const flashMat = new THREE.MeshBasicNodeMaterial({ color: new THREE.Color(6, 3.6, 1.2), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+    const flashMat = new THREE.MeshBasicNodeMaterial({ color: new THREE.Color(3.2, 1.7, 0.55), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
     // 8-point star (long and short spikes), facing along the barrel
     const shape = new THREE.Shape();
     for (let i = 0; i < 16; i++) {
       const a = (i / 16) * Math.PI * 2;
-      const r = i % 2 ? 0.05 : i % 4 === 0 ? 0.3 : 0.16;
+      const r = i % 2 ? 0.028 : i % 4 === 0 ? 0.14 : 0.07;
       if (i === 0) shape.moveTo(Math.cos(a) * r, Math.sin(a) * r); else shape.lineTo(Math.cos(a) * r, Math.sin(a) * r);
     }
     const star = new THREE.ShapeGeometry(shape);
@@ -64,7 +64,7 @@ class GunnerView {
     this.flashB.rotation.y = Math.PI / 2;
     this.flashB.position.z += 0.15;
     this.pivot.add(this.flashB);
-    this.light = new THREE.PointLight(0xffb060, 0, 5, 2);
+    this.light = new THREE.PointLight(0xffb060, 0, 3.2, 2);
     this.light.position.copy(MUZZLE);
     this.pivot.add(this.light);
     this.recoil = 0;
@@ -91,9 +91,9 @@ class GunnerView {
     this.recoil = Math.min(1.4, this.recoil + 0.55 * strength);
     this.flashT = 0.045 + 0.02 * strength;
     this.flash.rotation.z = Math.random() * Math.PI;
-    const s = 0.75 + Math.random() * 0.45 * strength;
+    const s = 0.42 + Math.random() * 0.22 * strength;
     this.flash.scale.setScalar(s);
-    this.flashB.scale.set(s * 1.4, s * 0.5, 1);
+    this.flashB.scale.set(s * 1.15, s * 0.4, 1);
   }
 
   /**
@@ -122,7 +122,7 @@ class GunnerView {
     const on = this.flashT > 0 && this.visible;
     this.flash.visible = on;
     this.flashB.visible = on;
-    this.light.intensity = on ? 3 : 0;
+    this.light.intensity = on ? 0.85 : 0;
     void cam;
   }
 
