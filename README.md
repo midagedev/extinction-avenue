@@ -368,7 +368,7 @@ The individual drivers:
 
 ```bash
 node --experimental-vm-modules tools/check-syntax.mjs     # parse every game module
-node --test tests/                                         # unit tests (142: the city's 113 + backend choice / fallback URLs + phone profile / stream window + quality presets / governor)
+node --test tests/*.test.mjs tests/*.test.cjs             # unit tests (Node 22.23 does not scan a directory passed to --test)
 npm i -D playwright && npx playwright install chromium     # once (or keep it in .tools/node_modules)
 python3 -m http.server 8123 &
 node tools/e2e-v2.mjs smoke  ./shots          # title → start → 20 s of bot play → first-person screenshot

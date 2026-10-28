@@ -102,9 +102,11 @@ const STEPS = {
     row('syntax', 'game modules parse', r.code === 0 ? 'PASS' : 'FAIL', r.text.trim().split('\n').pop());
   },
   async unit() {
-    const r = await run(process.execPath, ['--test', 'tests/'], { logFile: path.join(out, 'unit.log') });
+    // Node 22.23 treats `node --test tests/` as a single module and fails to load the directory.
+    const testFiles = fs.readdirSync(path.join(ROOT, 'tests')).filter((f) => /\.test\.(mjs|cjs|js)$/.test(f)).map((f) => path.join('tests', f));
+    const r = await run(process.execPath, ['--test', ...testFiles], { logFile: path.join(out, 'unit.log') });
     const n = (k) => +(r.text.match(new RegExp(`# ${k} (\\d+)`))?.[1] ?? 0);
-    row('unit', 'node --test tests/', r.code === 0 ? 'PASS' : 'FAIL', `${n('pass')}/${n('tests')} pass`);
+    row('unit', 'node --test tests/*.test.*', r.code === 0 ? 'PASS' : 'FAIL', `${n('pass')}/${n('tests')} pass`);
   },
   async errors() {
     const r = await run(process.execPath, ['tools/page-errors.mjs', await base(), '60'], { logFile: path.join(out, 'page-errors.log') });
