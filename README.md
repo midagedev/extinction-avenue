@@ -320,14 +320,49 @@ tools/audio/          audio lab: music.js (CC0 track prep + original sting / hea
 
 ```bash
 node tools/qa.mjs                  # syntax + unit tests + page errors + fixed-seed shots with readability metrics vs tools/qa-baselines + WebKit iPhone e2e
-node tools/qa.mjs --soak           # + the phone memory soak (needed for anything touching render targets, resolution, shadows, streaming, audio buffers)
+node tools/qa.mjs --soak           # + the phone memory soak, then the frame-cost trend probe (fonts, audio nodes, draw calls, frame time)
 node tools/qa.mjs --url https://midagedev.github.io/extinction-avenue/   # the deployed build
 node tools/qa.mjs --steps shots --only phone [--update-baselines]       # one profile; refresh the baseline after a deliberate visual change
 ```
 
 It prints a PASS / WARN / FAIL table (sharpness, street veil, luma spread, creature-vs-street contrast, silhouette edge,
-enemy size in px, pixel ratio, page errors, WebKit checks, memory peaks) and exits 1 on a FAIL. Artifacts go to
-`.tools/qa/<timestamp>/`.
+enemy size in px, pixel ratio, page errors, WebKit checks, memory peaks, and — with `--soak` — whether frame time,
+draw calls, objects, programs, geometries, textures, audio nodes and canvas font keys trend up) and exits 1 on a FAIL.
+Artifacts go to `.tools/qa/<timestamp>/`.
+
+**Frame-time decay on iPhone Safari.** After a long session the game sped back up when Safari was backgrounded. Two
+things grew for the whole session and are the kind of cache Safari drops when a tab is hidden:
+
+- Damage numbers set `ctx.font` to a new fractional pixel size on every number, every frame. The set of distinct font
+  strings climbed 863 → 9108 over 15 minutes of play and was still rising. Rounded sizes plateau (65 by 30 s, 95 from
+  about 7 minutes, still 95 at 15 minutes).
+- A voice's air filter and reverb send stayed connected to the shared reverb after the sound ended, and `stop()` on a
+  sample that had not started yet never fired `onended`, so a voice stolen under the cap leaked its nodes. They are
+  disconnected with the voice. Held sends+filters over 15 minutes: 55 → 35 (first-third mean to last-third mean),
+  bouncing inside the 26-voice cap. Before the disconnect, the same counter climbed 47 → 109.
+
+Draw calls, scene objects and frame time were already flat (the cab drives into heavier blocks; they do not ratchet).
+Phone pixel ratio, FOV and dinosaur size are unchanged.
+
+```bash
+node tools/perf-decay-probe.mjs dino-game-shots/fps-decay/run 900 chromium
+# optional: HIDE_AT=450 to freeze the page mid-run (visibilitychange + CDP lifecycle)
+```
+
+iPhone emulation (393×852 @3x, iOS Safari UA), `?test&webgl&lowmem&god&autoplay&nointro&governor=0`. The sim is stepped
+at 30 Hz; a few real scene frames are rasterized per 30 s sample (SwiftShader cannot hold 30 fps at phone resolution).
+Samples, `trend.json` and `chart.png` land in the output directory. 15 min of game time, first third of the run after
+warmup versus the last third:
+
+| | frame ms | draw calls | objects | programs | geometries | textures | live audio nodes | font keys |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| before | 20.4 → 12.9 | 543 → 508 | 4812 → 4756 | 181 → 189 | 1611 → 1792 | 50 → 54 | 708 → 373 | 3282 → 8334 |
+| after | 19.9 → 17.6 | 545 → 497 | 4812 → 4772 | 181 → 191 | 1614 → 1826 | 50 → 54 | 700 → 349 | 85 → 95 |
+
+Geometries move with the streamed city along the lap (the same shape before and after). Live audio nodes are counted
+after a forced GC; on Chromium the unreleased graph was mostly collectable, which is why that column fell in both
+runs. Safari keeps those nodes, and the canvas font cache, until the tab is hidden — that half is not reproduced by
+this Linux probe. A hide/show at 7.5 min did not drop the font-key set or the audio graph here.
 
 The individual drivers:
 

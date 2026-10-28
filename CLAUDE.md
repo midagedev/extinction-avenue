@@ -42,5 +42,12 @@ street, not every kind of ugly.
 - **Dinosaur size on screen.** Gunner FOV 56°, portrait capped at 68° (`js/game/camera.js`); far creatures get a
   minimum on-screen size (`enemies.js` `minScreenBoost`). The QA shots fail if the enemy height in px drops (median
   < 75 % or min < 60 % of the baseline). `node tools/qa.mjs --fast` = syntax + unit + shots (~7 min).
+- **Everything spawned is pooled or released.** Particles, lights, beams and damage numbers already come from pools.
+  A canvas `font` string has to be reused too (round the pixel size — Safari caches each distinct font until the tab
+  is hidden, which is the "it gets slower until I background Safari" bug). Audio nodes a voice creates (the source,
+  the air filter, the reverb send) are disconnected when the voice ends; `stop()` before the scheduled start does not
+  fire `onended`, so a backup timer has to release a stolen voice. `node tools/qa.mjs --soak` runs
+  `tools/perf-decay-probe.mjs` after the memory soak and fails if frame time, draw calls, scene objects, programs,
+  geometries, textures, live audio nodes, held reverb sends or canvas font keys trend up.
 - Headless: SwiftShader WebGPU presents nothing — drivers use `?test&webgl` and step the sim (`window.__game.step()`,
   `.render()`). Playwright lives in `.tools/node_modules` (gitignored).
