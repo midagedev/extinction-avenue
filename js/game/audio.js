@@ -726,6 +726,10 @@ class GameAudio {
     src.start(when, offset);
     const v = { name, prio: def.prio ?? 2, t0: when, src, gain: c.gain, panner: c.panner, air: c.air, send: c.send, follow: opts.follow || null, dead: false };
     src.onended = () => this._release(v);
+    // stop() before the scheduled start does not fire onended, and a stolen voice would otherwise leave its
+    // air filter and reverb send connected. The timer is the backstop; onended usually wins and cancels it.
+    const dur = Math.max(0.05, (buffer.duration - Math.min(offset || 0, buffer.duration)) / Math.max(0.2, Math.abs(rate) || 1));
+    v.timer = setTimeout(() => this._release(v), (dur + 1 + Math.max(0, when - ctx.currentTime)) * 1000);
     return v;
   }
 
@@ -745,7 +749,9 @@ class GameAudio {
     v.gain.gain.cancelScheduledValues(t);
     v.gain.gain.setValueAtTime(v.gain.gain.value, t);
     v.gain.gain.linearRampToValueAtTime(0, t + fade);
-    if (v.src) { try { v.src.stop(t + fade + 0.01); } catch { /* not started */ } } else { clearTimeout(v.timer); setTimeout(() => this._release(v), (fade + 0.05) * 1000); }
+    clearTimeout(v.timer);
+    if (v.src) { try { v.src.stop(t + fade + 0.01); } catch { /* not started: onended will not fire */ } }
+    v.timer = setTimeout(() => this._release(v), (fade + 0.08) * 1000);
     this._release(v, true);
   }
 
@@ -759,6 +765,7 @@ class GameAudio {
       if (st) st.count = Math.max(0, st.count - 1);
     }
     if (soft) return;
+    clearTimeout(v.timer);
     this.heldNodes = Math.max(0, this.heldNodes - disconnectVoice(v));
   }
 

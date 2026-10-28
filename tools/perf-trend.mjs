@@ -37,13 +37,14 @@ const TRENDS = {
   frameMs: { rel: 0.18, abs: 8 },
   drawCalls: { rel: 0.12, abs: 40 },
   objects: { rel: 0.08, abs: 80 },
-  programs: { rel: 0.05, abs: 4 },
+  // A few pipelines compile as new creatures show up, then the count sits. A per-frame compile leak is much larger.
+  programs: { rel: 0.1, abs: 16 },
   // The streamed city along one lap moves resident geometries by ~10%. A leak that keeps them is larger.
   geometries: { rel: 0.18, abs: 80 },
   textures: { rel: 0.08, abs: 6 },
   audioLive: { rel: 0.25, abs: 24 },
-  // Air filters and reverb sends still connected. The voice cap is 26; anything still climbing past that was never disconnected.
-  audioHeld: { rel: 0.5, abs: 30 },
+  // Air filters and reverb sends still connected. 26 voices can hold an air filter and a send each (~52); a climb past that was never disconnected.
+  audioHeld: { rel: 0.5, abs: 52 },
   // Distinct canvas font strings. Safari caches each one until the tab is backgrounded; a quantized font set plateaus.
   fontKeys: { rel: 0.15, abs: 40 }
 };
