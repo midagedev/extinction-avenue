@@ -453,14 +453,14 @@ body.touch .special-label kbd, body.touch .bar-label kbd { display: none; }
 /* Outbreak map */
 #s-map { background: #07090f; }
 #s-map.open { align-items: stretch; justify-content: stretch; }
-.map-app { flex: 1; display: flex; flex-direction: column; width: 100%; min-height: 0; padding: calc(8px + var(--safe-t)) 12px calc(10px + var(--safe-b)); gap: 8px; }
-.map-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
-.map-top-kicker { font: 700 11px var(--ui); letter-spacing: 0.28em; color: var(--orange-2); }
+.map-app { flex: 1; display: flex; flex-direction: column; width: 100%; height: 100%; max-height: 100%; min-height: 0; padding: calc(8px + var(--safe-t)) 12px calc(10px + var(--safe-b)); gap: 8px; }
+.map-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex: 0 0 auto; }
+.map-top-kicker { font: 700 11px var(--ui); letter-spacing: 0.08em; color: var(--orange-2); }
 .map-top-title { font: 400 40px/0.9 var(--display); letter-spacing: 0.06em; }
 .map-top-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 #map-score { font: 700 11px var(--ui); letter-spacing: 0.16em; color: var(--text-2); }
-.map-stage { flex: 1; min-height: 0; display: grid; place-items: center; }
-.map-board { position: relative; height: 100%; max-height: 100%; max-width: 100%; aspect-ratio: 1000 / 1500; }
+.map-stage { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+.map-board { position: absolute; inset: 0; margin: auto; height: 100%; width: auto; max-width: 100%; max-height: 100%; aspect-ratio: 2 / 3; }
 .map-board svg { width: 100%; height: 100%; display: block; overflow: hidden; }
 #map-svg .water { fill: #071018; }
 #map-svg .island { fill: #1b2836; stroke: #8aa0b8; stroke-width: 3; }
@@ -478,7 +478,7 @@ body.touch .special-label kbd, body.touch .bar-label kbd { display: none; }
 .pin.locked { opacity: 0.45; }
 .pin.locked i { background: #3a4254; box-shadow: none; }
 .pin.done span { color: var(--green); }
-.map-sheet { flex: 0 0 auto; background: rgba(12, 16, 26, 0.92); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px 14px; text-align: left; }
+.map-sheet { position: relative; z-index: 2; flex: 0 0 auto; background: rgba(12, 16, 26, 0.96); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px 14px; text-align: left; }
 .map-sheet-kicker { font: 700 11px var(--ui); letter-spacing: 0.32em; color: var(--orange-2); }
 .map-sheet h2 { margin: 2px 0 0; font: 400 42px/0.9 var(--display); letter-spacing: 0.04em; }
 .map-place { font: 700 13px var(--ui); letter-spacing: 0.12em; text-transform: uppercase; color: var(--cyan); }
