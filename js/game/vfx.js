@@ -228,21 +228,19 @@ class VFX {
   }
 
   explosion(x, y, z, size = 1, color = 0) {
-    // A blast under the cab used to put a white ball over the pack. Scales shrink; spawn counts stay on `size`
-    // so the fixed-seed shot sequence does not move.
+    // A blast in front of the gunner used to replace the dinosaur it hit. Scales shrink with distance;
+    // spawn counts stay on `size` so the fixed-seed shot sequence does not move.
     let vis = size;
     const cam = this._cam;
     if (cam) {
       const d = Math.hypot(x - cam.position.x, y + 0.5 - cam.position.y, z - cam.position.z);
-      if (d < 14) {
-        const cap = Math.max(0.2, d * 0.11);
-        if (vis > cap) vis = cap;
-      }
+      const cap = Math.max(0.1, d * 0.018);
+      if (vis > cap) vis = cap;
     }
     // color 0 = fire, 1 = cyan plasma, 2 = magenta
     const pal = color === 1 ? [1.2, 5, 6] : color === 2 ? [6, 1, 5] : [8, 3.2, 0.7];
-    // Core flash
-    this.glow.spawn(x, y + 0.5, z, 0, 0, 0, 0.12, 2.2 * vis, 3.4 * vis, 14, 12, 9);
+    // Core flash. Kept under the old 14,12,9 so the bloom kernel stays on the burst.
+    this.glow.spawn(x, y + 0.5, z, 0, 0, 0, 0.12, 1.3 * vis, 1.9 * vis, 5.5, 2.6, 0.7);
     // Fireball blobs
     const nb = Math.round(7 + 5 * size);
     for (let i = 0; i < nb; i++) {
@@ -250,7 +248,7 @@ class VFX {
       const r = Math.random() * 1.2 * vis;
       this.glow.spawn(x + Math.cos(a) * r, y + 0.6 + Math.random() * 1.2 * vis, z + Math.sin(a) * r,
         Math.cos(a) * 3 * vis, 2 + Math.random() * 3 * vis, Math.sin(a) * 3 * vis,
-        0.35 + Math.random() * 0.3, 1.1 * vis, 2.4 * vis, pal[0], pal[1], pal[2],
+        0.35 + Math.random() * 0.3, 0.45 * vis, 0.8 * vis, pal[0] * 0.55, pal[1] * 0.55, pal[2] * 0.55,
         { r1: 0.5, g1: 0.08, b1: 0.02, drag: 3 });
     }
     this.sparks(x, y + 0.5, z, Math.round(10 + 14 * size), 14 * Math.sqrt(vis), pal[0], pal[1] * 0.9, pal[2]);

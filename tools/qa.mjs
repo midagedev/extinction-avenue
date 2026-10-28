@@ -90,7 +90,8 @@ function compareShots(metrics, baseline) {
     // Absolute cap: the flame frame has no baseline, and a missing baseline would only log INFO.
     if (m.weaponCover) {
       const cov = m.weaponCover.cover;
-      row(`shots ${name}`, 'aim covered by weapon fx', cov > 0.12 ? 'FAIL' : cov > 0.07 ? 'WARN' : 'PASS', cov, '≤ 0.12');
+      // Cell fraction. A filled blob fails. Tracers and a short flame along the asphalt stay under the cap.
+      row(`shots ${name}`, 'aim covered by weapon fx', cov > 0.18 ? 'FAIL' : cov > 0.14 ? 'WARN' : 'PASS', cov, '≤ 0.18');
       const vis = m.weaponCover.enemyVis;
       if (vis == null) row(`shots ${name}`, 'enemies visible while firing', 'INFO', `aim creature px ${m.weaponCover.enemyWithout}`, 'need ≥ 80');
       else row(`shots ${name}`, 'enemies visible while firing', vis < 0.75 ? 'FAIL' : vis < 0.88 ? 'WARN' : 'PASS', vis, '≥ 0.75');

@@ -249,16 +249,31 @@ async function measureFlame({ on: onB64, off: offB64, creaturesOff: cB64, bothOf
   const x0 = Math.floor(W * 0.25), x1 = Math.ceil(W * 0.75);
   const y0 = Math.floor(H * 0.22), y1 = Math.ceil(H * 0.58);
   const ch = (A, B, p) => Math.max(Math.abs(A[p] - B[p]), Math.abs(A[p + 1] - B[p + 1]), Math.abs(A[p + 2] - B[p + 2]));
-  let aim = 0, covered = 0, withFx = 0, withoutFx = 0;
-  for (let y = y0; y < y1; y++) {
-    for (let x = x0, p = (y * W + x0) * 4; x < x1; x++, p += 4) {
-      aim++;
-      if (ch(on.d, off.d, p) > 24) covered++;
-      if (ch(on.d, con.d, p) > 12) withFx++;
-      if (ch(off.d, coff.d, p) > 12) withoutFx++;
+  const luma = (A, p) => 0.2126 * A[p] + 0.7152 * A[p + 1] + 0.0722 * A[p + 2];
+  let withFx = 0, withoutFx = 0;
+  // Coarse cells: a tracer or a hit spark shifts a cell a little. A blob that fills the aim shifts the cell's average.
+  const COLS = 10, ROWS = 6;
+  const cw = (x1 - x0) / COLS, rh = (y1 - y0) / ROWS;
+  let blocked = 0;
+  for (let cy = 0; cy < ROWS; cy++) {
+    for (let cx = 0; cx < COLS; cx++) {
+      const xa = Math.floor(x0 + cx * cw), xb = Math.floor(x0 + (cx + 1) * cw);
+      const ya = Math.floor(y0 + cy * rh), yb = Math.floor(y0 + (cy + 1) * rh);
+      let sum = 0, n = 0;
+      for (let y = ya; y < yb; y += 2) {
+        for (let x = xa, p = (y * W + xa) * 4; x < xb; x += 2, p += 8) {
+          sum += Math.abs(luma(on.d, p) - luma(off.d, p));
+          n++;
+          if (ch(on.d, con.d, p) > 12) withFx++;
+          if (ch(off.d, coff.d, p) > 12) withoutFx++;
+        }
+      }
+      if (n && sum / n > 28) blocked++;
     }
   }
   const r3 = (v) => +v.toFixed(3);
+  const aim = COLS * ROWS;
+  const covered = blocked;
   return {
     view: { pr: +r.getPixelRatio().toFixed(2), fov: +G.cam.camera.fov.toFixed(1), time: +G.director.time.toFixed(1), device: [W, H] },
     weaponCover: {

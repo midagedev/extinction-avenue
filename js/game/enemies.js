@@ -887,8 +887,8 @@ class EnemyManager {
     const cam = this.game.cam?.camera;
     // Minimum on-screen size: an individual whose height would cover less than MIN_SCREEN of the view height is drawn
     // up to MAX_BOOST larger (far stragglers and fresh spawns never shrink to specks; raycast() scales its spheres too).
-    // Hits stay on the 5% / 1.45× rule. The picture uses a higher floor so a pack still down the avenue
-    // doesn't read as specks on a phone (e.vis).
+    // Hits stay on the 5% / 1.45× rule. The picture can grow up to 2× so a compy down the avenue
+    // still clears the shot height bar once it isn't buried in a muzzle flash (e.vis).
     const fovK = cam ? 2 * Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2) : 0;
     for (const id of SPECIES_IDS) {
       const rig = this.rigs[id];
@@ -928,7 +928,7 @@ class EnemyManager {
 }
 
 const MIN_SCREEN = 0.05, MAX_BOOST = 1.45;
-const DRAW_MIN = 0.28, DRAW_MAX = 1.6;
+const DRAW_MIN = 0.28, DRAW_MAX = 2;
 /** Scale factor (>= 1) that keeps a creature at least `minScreen` of the view height tall */
 function minScreenBoost(e, camPos, fovK, minScreen = MIN_SCREEN, maxBoost = MAX_BOOST) {
   const h = e.sp.flyer ? e.radius * 1.4 : e.sp.height * e.scale;

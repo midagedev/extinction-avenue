@@ -521,7 +521,7 @@ class WeaponSystem {
     // Chunky tracer. The beam list allocates per shot; at minigun rate that becomes garbage, so the
     // instanced tracer plus a pooled muzzle flash carry the round.
     g.vfx.muzzle(_pos.x, _pos.y, _pos.z, ray.direction.x, ray.direction.y, ray.direction.z, 0.5, 8, 4.2, 1.1);
-    this.bullet(_pos.x, _pos.y, _pos.z, ex - _pos.x, ey - _pos.y, ez - _pos.z, 1 / 0.08, 0, { visual: true, life: 0.08, color: [12, 7.2, 1.8], width: 0.13, len: 5.4 });
+    this.bullet(_pos.x, _pos.y, _pos.z, ex - _pos.x, ey - _pos.y, ez - _pos.z, 1 / 0.08, 0, { visual: true, life: 0.08, color: [4.8, 2.7, 0.75], width: 0.11, len: 4.6 });
     g.gunner.fire(0.72);
     if ((this.shotsFired & 1) === 0) {
       g.audio.play('gatling', { volume: 0.55, pitch: 0.9 + this.spin * 0.16 });
