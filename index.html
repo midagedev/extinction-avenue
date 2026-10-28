@@ -85,7 +85,7 @@
     <div class="hud-bl"><div class="build" id="h-build"></div></div>
     <div class="hud-br">
       <div class="ammo" id="ammo">
-        <div class="ammo-head"><span>TAIL GUN</span><b id="ammo-n">30</b><em id="ammo-max">/30</em></div>
+        <div class="ammo-head"><span>MINIGUN</span><b id="ammo-n">72</b><em id="ammo-max">/72</em></div>
         <div class="ammo-belt" id="ammo-belt"></div>
         <div class="reload-track"><i id="reload-bar"></i></div>
         <div class="ammo-key"><kbd>R</kbd> RELOAD</div>
@@ -108,6 +108,12 @@
     <div id="hint"></div>
   </div>
 
+  <div id="stagecard" aria-live="polite">
+    <div class="sc-kicker"></div>
+    <div class="sc-name"></div>
+    <div class="sc-sub"></div>
+  </div>
+
   <div id="namecard" aria-live="polite">
     <div class="nc-kicker">CRETAGEN APEX SPECIMEN T-01</div>
     <div class="nc-name">GRIDLOCK</div>
@@ -119,6 +125,7 @@
     <button id="t-reload" class="t-btn" type="button">RELOAD</button>
     <button id="t-special" class="t-btn" type="button">SKY<br />HAMMER</button>
     <button id="t-pause" class="t-btn small" type="button">II</button>
+    <button id="t-clip" class="t-btn small" type="button">CLIP</button>
   </div>
 
   <!-- ===================================================== SCREENS -->
@@ -158,6 +165,39 @@
       Built on <a href="https://github.com/mrdoob/slop-newyork" target="_blank" rel="noopener">Slop New York</a> by <a href="https://github.com/mrdoob" target="_blank" rel="noopener">mrdoob</a> · three.js WebGPU · Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> &amp; NYC Open Data ·
       <a href="sim.html">Free-roam the city</a>
     </footer>
+  </section>
+
+  <section id="s-map" class="screen" aria-label="Outbreak map">
+    <div class="map-app">
+      <header class="map-top">
+        <div>
+          <div class="map-top-kicker">CRETAGEN INCIDENT · MANHATTAN</div>
+          <div class="map-top-title">OUTBREAK MAP</div>
+        </div>
+        <div class="map-top-side">
+          <div id="map-score">CLEAR THEM IN ORDER</div>
+          <button class="btn small" id="btn-map-back" type="button">BACK</button>
+        </div>
+      </header>
+      <div class="map-stage">
+        <div class="map-board">
+          <svg id="map-svg" viewBox="0 0 1000 1500" role="img" aria-label="Manhattan, midtown to the park"></svg>
+          <div id="map-pins"></div>
+        </div>
+      </div>
+      <div class="map-sheet">
+        <div class="map-sheet-kicker" id="map-kicker">SECTOR 01</div>
+        <h2 id="map-name">TIMES SQUARE</h2>
+        <div class="map-place" id="map-place">7th Ave &amp; 42nd</div>
+        <p id="map-blurb"></p>
+        <div class="map-meta">
+          <span id="map-obj"></span>
+          <b id="map-stars"></b>
+          <em id="map-best"></em>
+        </div>
+        <button class="btn primary" id="btn-deploy" type="button">DEPLOY</button>
+      </div>
+    </div>
   </section>
 
   <section id="s-howto" class="screen modal">
@@ -238,13 +278,18 @@
       <div class="r-kicker" id="r-kicker">SHIFT REPORT · UNIT 77</div>
       <div class="r-title" id="r-title">GAME OVER</div>
       <div class="r-sub" id="r-sub"></div>
+      <div class="r-stars" id="r-stars"></div>
       <div class="r-score"><span>SCORE</span><b id="r-score">0</b><em id="r-best"></em></div>
       <div class="r-stats" id="r-stats"></div>
       <div class="r-build-label">BUILD</div>
       <div class="r-build" id="r-build"></div>
       <div class="r-actions">
         <button class="btn x" id="btn-share" type="button"><span class="ico-slot" data-icon="x-logo"></span>SHARE ON X</button>
+        <button class="btn" id="btn-clip" type="button">SAVE CLIP</button>
+        <button class="btn" id="btn-card" type="button">SHARE CARD</button>
+        <button class="btn primary" id="btn-next" type="button">NEXT SECTOR</button>
         <button class="btn primary" id="btn-again" type="button"><span class="ico-slot" data-icon="reroll"></span>PLAY AGAIN</button>
+        <button class="btn" id="btn-tomap" type="button">OUTBREAK MAP</button>
         <button class="btn" id="btn-endless" type="button"><span class="ico-slot" data-icon="speed"></span>KEEP DRIVING (ENDLESS)</button>
         <button class="btn ghost" id="btn-menu" type="button">MAIN MENU</button>
       </div>

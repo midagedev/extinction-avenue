@@ -123,8 +123,9 @@ On an upright iPhone the view felt *"too wide, the dinosaurs too small"*: portra
 to keep ~52° across, so an iPhone (aspect ≈ 0.46) got ≈ 92° vertical. Now the gunner's FOV is 56° (was 64°), and
 portrait screens widen it only up to 68° (`js/game/camera.js` `portraitFov`). The small species grew with their
 gameplay scale, so hit spheres and contact distances follow: Scuttler ×1.35, Sicklejaw ×1.3, Skyreaver ×1.35. Their
-chase slots moved ~1–3 m closer. A creature that would cover less than 5 % of the view height is drawn up to 1.45×
-larger (`enemies.js` `minScreenBoost`, scaled about its feet); the aim raycast scales its hit spheres the same way.
+chase slots moved ~1–3 m closer. A creature that would cover less than 5 % of the view height has hit spheres up to 1.45×
+larger. On screen it is drawn up to 2×, enough to cover about 28 % of the view height when it can
+(`enemies.js` `minScreenBoost`, scaled about its feet).
 The QA loop records the FOV and the enemy height in px (median and min) per shot, and fails when they regress.
 
 ### Screen clarity

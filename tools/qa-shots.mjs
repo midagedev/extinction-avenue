@@ -7,7 +7,8 @@
 // Two moments per profile (MOMENTS, game seconds). Each capture writes <profile>-t<sec>.png (what the player sees,
 // HUD included) and returns the metrics below, measured on screenshots of the 3D view alone (HUD hidden) at DEVICE
 // resolution: the browser upscales the canvas to the screen, so a low pixel ratio shows up as lost sharpness.
-// The gun has been quiet for 0.5 s at each capture (no muzzle flash).
+// The gun has been quiet for 0.5 s at each capture (no muzzle flash). After both moments, one more frame per
+// profile (<profile>-flame.png) forces the exhaust flamer and measures how much of the aim it covers.
 //   lumaP2 / lumaP50 / lumaP98 / spread   luma percentiles (0..255) of the frame; spread = p98 − p2
 //   veil        p5 luma of the lower 45 % of the frame (the street): a milky haze lifts this dark floor
 //   sharpness   mean |Laplacian| of luma (4-neighbour) ×10; edgePct = % of pixels with a luma gradient > 24
@@ -87,11 +88,29 @@ export function botStep(s) {
   return G.director.time;
 }
 
-// Hides / shows the creatures (and the DOM overlays, for the metric captures). Runs in the page.
-function setView({ creatures, hud }) {
+// Hides / shows the creatures, the DOM overlays, and the player's own weapon effects (flame, muzzle, smoke,
+// debris, tracers). Runs in the page. fx defaults to shown so the quiet-moment captures are unchanged.
+function setView({ creatures, hud, fx = true }) {
   const G = window.__game.game;
   if (window.__qaClock) window.__qaClock.frozen = hud ? null : 1e6;
   G.world.scene.traverse((o) => { if (/^Skin_/.test(o.name)) o.visible = creatures; });
+  const show = fx !== false;
+  const v = G.vfx;
+  if (v) {
+    for (const key of ['glow', 'streak', 'smoke', 'shards', 'rings']) {
+      const mesh = v[key]?.batch?.mesh;
+      if (mesh) mesh.visible = show;
+    }
+    if (v.beams?.mesh) v.beams.mesh.visible = show;
+    for (const L of v.lights) L.light.visible = show;
+  }
+  if (G.weapons?.tracers?.mesh) G.weapons.tracers.mesh.visible = show;
+  if (G.gunner) {
+    const flashOn = show && G.gunner.flashT > 0 && G.gunner.visible;
+    G.gunner.flash.visible = flashOn;
+    G.gunner.flashB.visible = flashOn;
+    if (G.gunner.light) G.gunner.light.visible = show;
+  }
   let st = document.getElementById('qa-hide-hud');
   if (!hud && !st) { st = document.createElement('style'); st.id = 'qa-hide-hud'; st.textContent = 'body > *:not(#canvas-container) { visibility: hidden !important; }'; document.head.appendChild(st); }
   if (hud && st) st.remove();
@@ -212,6 +231,88 @@ async function measure({ a: aB64, c: cB64 }) {
   };
 }
 
+// Aim-region coverage while the exhaust flamer is actually firing. Runs in the page.
+// on = creatures + weapon fx, off = creatures, fx hidden, creaturesOff = fx only, bothOff = neither.
+async function measureFlame({ on: onB64, off: offB64, creaturesOff: cB64, bothOff: dB64 }) {
+  const G = window.__game.game, r = G.world.renderer;
+  const decode = async (b64) => {
+    const bmp = await createImageBitmap(await (await fetch(`data:image/png;base64,${b64}`)).blob());
+    const c = document.createElement('canvas');
+    c.width = bmp.width; c.height = bmp.height;
+    const x = c.getContext('2d', { willReadFrequently: true });
+    x.drawImage(bmp, 0, 0);
+    return { w: c.width, h: c.height, d: x.getImageData(0, 0, c.width, c.height).data };
+  };
+  const [on, off, con, coff] = await Promise.all([decode(onB64), decode(offB64), decode(cB64), decode(dB64)]);
+  const W = on.w, H = on.h;
+  // Center half of the frame, from just under the sky to just above the gun. That is where the pack sits.
+  const x0 = Math.floor(W * 0.25), x1 = Math.ceil(W * 0.75);
+  const y0 = Math.floor(H * 0.22), y1 = Math.ceil(H * 0.58);
+  const ch = (A, B, p) => Math.max(Math.abs(A[p] - B[p]), Math.abs(A[p + 1] - B[p + 1]), Math.abs(A[p + 2] - B[p + 2]));
+  const luma = (A, p) => 0.2126 * A[p] + 0.7152 * A[p + 1] + 0.0722 * A[p + 2];
+  let withFx = 0, withoutFx = 0;
+  // Coarse cells: a tracer or a hit spark shifts a cell a little. A blob that fills the aim shifts the cell's average.
+  const COLS = 10, ROWS = 6;
+  const cw = (x1 - x0) / COLS, rh = (y1 - y0) / ROWS;
+  let blocked = 0;
+  for (let cy = 0; cy < ROWS; cy++) {
+    for (let cx = 0; cx < COLS; cx++) {
+      const xa = Math.floor(x0 + cx * cw), xb = Math.floor(x0 + (cx + 1) * cw);
+      const ya = Math.floor(y0 + cy * rh), yb = Math.floor(y0 + (cy + 1) * rh);
+      let sum = 0, n = 0;
+      for (let y = ya; y < yb; y += 2) {
+        for (let x = xa, p = (y * W + xa) * 4; x < xb; x += 2, p += 8) {
+          sum += Math.abs(luma(on.d, p) - luma(off.d, p));
+          n++;
+          if (ch(on.d, con.d, p) > 12) withFx++;
+          if (ch(off.d, coff.d, p) > 12) withoutFx++;
+        }
+      }
+      if (n && sum / n > 28) blocked++;
+    }
+  }
+  const r3 = (v) => +v.toFixed(3);
+  const aim = COLS * ROWS;
+  const covered = blocked;
+  return {
+    view: { pr: +r.getPixelRatio().toFixed(2), fov: +G.cam.camera.fov.toFixed(1), time: +G.director.time.toFixed(1), device: [W, H] },
+    weaponCover: {
+      cover: aim ? r3(covered / aim) : 0,
+      enemyVis: withoutFx >= 80 ? r3(withFx / withoutFx) : null,
+      enemyWith: withFx,
+      enemyWithout: withoutFx,
+      aimPixels: aim
+    }
+  };
+}
+
+async function captureFlame(page, outDir, profId, say) {
+  await page.evaluate(() => {
+    const G = window.__game.game, w = G.weapons;
+    w.weapons.set('flamer', 4);
+    w.recomputeStats();
+    w.ammo = w.magSize;
+    w.reloadT = 0;
+    w.spin = 1;
+    G.vfx.clear();
+  });
+  for (let i = 0; i < 16; i++) await page.evaluate(botStep, 1 / 30);
+  const shot = async (creatures, fx) => {
+    await page.evaluate(setView, { creatures, hud: false, fx });
+    return (await page.screenshot({ timeout: 900000 })).toString('base64');
+  };
+  const on = await shot(true, true);
+  const off = await shot(true, false);
+  const creaturesOff = await shot(false, true);
+  const bothOff = await shot(false, false);
+  await page.evaluate(setView, { creatures: true, hud: true, fx: true });
+  const name = `${profId}-flame`;
+  await page.screenshot({ path: path.join(outDir, `${name}.png`), timeout: 900000 });
+  const m = await page.evaluate(measureFlame, { on, off, creaturesOff, bothOff });
+  say(name, JSON.stringify(m.weaponCover));
+  return [name, m];
+}
+
 export async function measureView(page) {
   await page.evaluate(setView, { creatures: true, hud: false });
   const a = (await page.screenshot({ timeout: 900000 })).toString('base64');
@@ -265,6 +366,8 @@ export async function captureShots({ outDir, base, only, native = false, seed = 
         await page.evaluate((pr) => { const G = window.__game.game; G.world.renderer.setPixelRatio(pr); G.onResize(); }, m.view.pr);
       }
     }
+    const [flameName, flame] = await captureFlame(page, outDir, prof.id, say);
+    results[flameName] = flame;
     await ctx.close();
   }
   await browser.close();

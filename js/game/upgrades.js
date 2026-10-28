@@ -10,8 +10,8 @@ const MAX_PASSIVES = 6;
 const WEAPONS = {
   cannon: {
     name: 'Tail Gun', icon: 'cannon', color: '#2cf6ff', max: 5, evo: 'railgun', evoNeeds: 'hollow',
-    blurb: 'Your aimed heavy machine gun. Hold to fire.',
-    levels: ['Aimed heavy machine gun. Headshots deal 1.6x.', '+30% damage.', '45-round belt, rounds pierce +1 dinosaur.', '+30% fire rate.', 'Explosive rounds (small blast on every hit).']
+    blurb: 'Your aimed minigun. Hold it down.',
+    levels: ['Aimed minigun. Headshots deal 1.6x.', '+30% damage.', '100-round belt, rounds pierce +1 dinosaur.', '+22% fire rate.', 'Every 8th round bursts.']
   },
   gatling: {
     name: 'Sentry Guns', icon: 'gatling', color: '#ffd23a', max: 5, evo: 'storm_gatling', evoNeeds: 'loader',

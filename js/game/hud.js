@@ -230,6 +230,18 @@ class HUD {
     el.classList.add('on');
   }
 
+  /** Full-frame sector title. CSS only — not a canvas font. */
+  stageCard(kicker, name, sub) {
+    const el = document.getElementById('stagecard');
+    if (!el) return;
+    el.querySelector('.sc-kicker').textContent = kicker || '';
+    el.querySelector('.sc-name').textContent = name || '';
+    el.querySelector('.sc-sub').textContent = sub || '';
+    el.classList.remove('on');
+    void el.offsetWidth;
+    el.classList.add('on');
+  }
+
   nameCard(kicker, name, sub) {
     const el = this.el.namecard;
     el.querySelector('.nc-kicker').textContent = kicker;
@@ -381,9 +393,11 @@ class HUD {
   showResults(r) {
     const s = $('s-results');
     s.classList.toggle('win', r.win);
-    $('r-kicker').textContent = r.win ? 'SHIFT REPORT · UNIT 77 · APEX DOWN' : 'SHIFT REPORT · UNIT 77';
+    $('r-kicker').textContent = `EXTINCTION AVENUE · ${r.stageName || 'UNIT 77'}`;
     $('r-title').textContent = r.title;
     $('r-sub').textContent = r.sub;
+    const stars = $('r-stars');
+    if (stars) stars.textContent = r.stars ? '★'.repeat(r.stars) + '☆'.repeat(3 - r.stars) : '';
     $('r-best').textContent = r.newBest ? 'NEW HI-SCORE' : r.best ? `HI-SCORE ${r.best.toLocaleString('en-US')}` : '';
     const stats = [
       [fmtTime(r.time), 'Time'], [r.kills.toLocaleString('en-US'), 'Fossilized'], [String(r.headshots), 'Headshots'],
@@ -391,7 +405,14 @@ class HUD {
     ];
     $('r-stats').innerHTML = stats.map(([v, l]) => `<div><b>${v}</b><span>${l}</span></div>`).join('');
     $('r-build').innerHTML = r.build.map((b) => this.slotHTML(b)).join('');
-    $('btn-endless').style.display = r.win && !r.endless ? '' : 'none';
+    $('btn-endless').style.display = r.endlessOffer ? '' : 'none';
+    const next = $('btn-next');
+    if (next) {
+      next.style.display = r.nextId ? '' : 'none';
+      next.textContent = r.nextId ? 'NEXT SECTOR' : 'NEXT SECTOR';
+    }
+    const clip = $('btn-clip');
+    if (clip) clip.style.display = this.game.highlight?.can && !this.game.highlight.disabled ? '' : 'none';
     const target = r.score;
     const el = $('r-score');
     const t0 = performance.now();

@@ -104,6 +104,16 @@ if (IPHONE) {
   await page.tap('#btn-play', { force: true, timeout: 60000 });
 } else await page.click('#btn-play', { timeout: 60000 });
 log('START clicked');
+// Outbreak map sits between the title and the run. Deploy the first sector.
+const onMap = await page.waitForFunction(() => {
+  const s = window.__game?.game?.state;
+  return s === 'map' || s === 'playing' || s === 'intro' || window.__game?.game?.dead;
+}, null, { timeout: 30000 }).then(() => page.evaluate(() => window.__game.game.state === 'map'), () => false);
+if (onMap) {
+  log('map open — deploying first sector');
+  if (IPHONE) await page.tap('#btn-deploy', { force: true, timeout: 30000 });
+  else await page.click('#btn-deploy', { timeout: 30000 });
+}
 const reached = await page.waitForFunction(() => window.__game.game.state === 'playing' || window.__game.game.dead, null, { timeout: 300000, polling: 1000 })
   .then(() => true, () => false);
 const st = await page.evaluate(() => ({ state: window.__game.game.state, dead: !!window.__game.game.dead, frames: window.__game.game.frames, status: document.getElementById('load-status').textContent }));

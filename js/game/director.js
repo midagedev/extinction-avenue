@@ -101,7 +101,24 @@ const BOSS_TIME = Math.round(BEATS.reduce((a, b) => a + nominal(b), 0));
 class Director {
   constructor(game) {
     this.game = game;
+    this.script = BEATS;
+    this.finale = 'trex';
+    this._bossTime = BOSS_TIME;
     this.reset();
+  }
+
+  /** The shipped midtown run (QA, endless, ?boss). */
+  useClassic() {
+    this.script = BEATS;
+    this.finale = 'trex';
+    this._bossTime = BOSS_TIME;
+  }
+
+  /** One outbreak-map sector. `finale: 'trex'` hands off to GRIDLOCK; `'clear'` ends the sector. */
+  useStage(stage) {
+    this.script = stage.beats;
+    this.finale = stage.finale || 'clear';
+    this._bossTime = this.finale === 'trex' ? stage.par : 1e9;
   }
 
   reset(startTime = 0) {
@@ -119,28 +136,29 @@ class Director {
     this.lastRepair = -99;
     this.zoneClear = false;
     this.miniboss = null;
+    this.cleared = false;
     this.speedOverride = null;
     // Jump ahead (debug / clip params): skip whole beats
     if (startTime > 0) {
       let t = 0;
       let i = 0;
-      while (i < BEATS.length && t + nominal(BEATS[i]) <= startTime) { t += nominal(BEATS[i]); i++; }
+      while (i < this.script.length && t + nominal(this.script[i]) <= startTime) { t += nominal(this.script[i]); i++; }
       this.beatIdx = i;
       this.time = startTime;
       this.beatT = Math.max(0, startTime - t);
-      if (this.beatIdx < BEATS.length) this.progIdx = this._beat().prog.findIndex((p) => p[0] >= this.beatT);
+      if (this.beatIdx < this.script.length) this.progIdx = this._beat().prog.findIndex((p) => p[0] >= this.beatT);
       if (this.progIdx < 0) this.progIdx = this._beat()?.prog.length ?? 0;
     }
     this._entered = false;
   }
 
   get bossTime() {
-    return BOSS_TIME;
+    return this._bossTime ?? BOSS_TIME;
   }
 
   _beat() {
     if (this.endless) return BEATS.find((b) => b.id === ENDLESS_LOOP[this.endlessIdx % ENDLESS_LOOP.length]);
-    return BEATS[this.beatIdx] || null;
+    return this.script[this.beatIdx] || null;
   }
 
   get beat() {
@@ -186,10 +204,15 @@ class Director {
       this._mercy();
       return;
     }
-    if (!this.endless && this.beatIdx >= BEATS.length) {
-      // The boss
-      this.bossActive = true;
-      g.startBoss();
+    if (!this.endless && this.beatIdx >= this.script.length) {
+      if (this.finale === 'trex') {
+        this.bossActive = true;
+        g.startBoss();
+      } else if (!this.cleared) {
+        this.cleared = true;
+        this.bossDone = true;
+        g.onStageClear();
+      }
       return;
     }
     const b = this._beat();
@@ -321,6 +344,51 @@ class Director {
       case 'cameo':
         g.boss.cameo();
         break;
+      case 'title':
+        g.hud.stageCard(step[2], step[3], step[4] || '');
+        g.audio.play('bell');
+        break;
+      case 'clip':
+        g.highlight?.mark(step[2] || 'whoa');
+        break;
+      case 'punch':
+        g.whoaPunch(step[2] ?? 0.4, step[3] ?? 3, step[4] ?? 0.04);
+        break;
+      case 'burst':
+        g.destruct?.burst(step[2] || 'storeL');
+        this.spawnGroup('raptor', step[3] || 3, step[2] || 'storeL');
+        g.whoaPunch(0.36, 3.2, 0.04);
+        g.hud.callout('THROUGH THE GLASS!', 'danger');
+        break;
+      case 'grate':
+        g.destruct?.grate();
+        g.whoaPunch(0.5, 4, 0.06);
+        g.hud.callout('FROM THE SUBWAY!', 'danger');
+        break;
+      case 'snatch':
+        g.cam.swing(0, 0.32, 5, 2.4);
+        g.destruct?.snatch();
+        g.whoaPunch(0.32, 2.4, 0.03);
+        g.hud.callout('CAR SNATCHED!', 'danger');
+        break;
+      case 'herd':
+        this.spawnGroup('compy', step[2] || 8, 'behind');
+        this.spawnGroup('raptor', 2, 'behind');
+        g.audio.play('stomp', { volume: 1, pitch: 0.85 });
+        g.whoaPunch(0.48, 3.4, 0.05);
+        g.hud.callout('STAMPEDE!', 'danger');
+        break;
+      case 'chain':
+        g.destruct?.chain();
+        g.whoaPunch(0.4, 2.8, 0.04);
+        g.hud.callout('CHAIN REACTION!', 'special');
+        break;
+      case 'collapse':
+        g.destruct?.collapse();
+        g.whoaPunch(0.62, 5, 0.07);
+        g.slowmo(0.45, 0.85);
+        g.hud.callout('COMING DOWN!', 'danger');
+        break;
       case 'warning':
         g.hud.warning('APEX SPECIMEN APPROACHING');
         g.audio.play('warning', { volume: 1 });
@@ -347,6 +415,16 @@ class Director {
       const r = g.route.sample(p.s - 55 - Math.random() * 20, _s);
       const lat = (Math.random() - 0.5) * 20;
       return en.spawn('ptero', r.x + r.rx * lat, r.z + r.rz * lat, { y: 18 + Math.random() * 6, ...opts });
+    }
+    if (where === 'close') {
+      for (let tries = 0; tries < 6; tries++) {
+        const gap = -(8 + Math.random() * 6 + k);
+        const r = g.route.sample(p.s + gap, _s);
+        const lat = (Math.random() * 2 - 1) * (r.halfWidth - 1.6);
+        const x = r.x + r.rx * lat, z = r.z + r.rz * lat;
+        if (g.walk.isBlocked(x, z)) continue;
+        return en.spawn(type, x, z, { onRoad: true, heading: r.heading, ...opts });
+      }
     }
     if (where === 'behind') {
       for (let tries = 0; tries < 6; tries++) {
