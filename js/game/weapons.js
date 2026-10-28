@@ -170,7 +170,7 @@ class WeaponSystem {
   get magSize() {
     if (this.evolved.has('railgun')) return Math.round(10 * (1 + (this.passives.get('turbo') || 0) * 0.2));
     const lvl = this.level('cannon');
-    return Math.round((lvl >= 3 ? 220 : 160) * (1 + (this.passives.get('turbo') || 0) * 0.2));
+    return Math.round((lvl >= 3 ? 100 : 72) * (1 + (this.passives.get('turbo') || 0) * 0.2));
   }
 
   get reloadDur() {
@@ -223,16 +223,20 @@ class WeaponSystem {
         }
         this.heat = Math.min(1, this.heat + dt * 1.2);
       } else {
-        // Spin up (~0.3 s), then a minigun stream. Per-round damage is lower so DPS stays near the old 9 Hz gun.
+        // Spin up (~0.3 s), then a visual stream. Damage ticks at the old cannon rate so a perfect aim
+        // doesn't erase the pack before it can reach the bumper (and so level-ups don't snowball).
         this.spin = Math.min(1, this.spin + dt * 3.5);
+        this.dmgCd = (this.dmgCd || 0) - dt;
         if (this.spin > 0.22 && this.cd.main <= 0) {
           const lvl = L('cannon');
-          const rate = (8 + 14 * this.spin) * (lvl >= 4 ? 1.22 : 1) * (this.overdrive > 0 ? 1.3 : 1) / this.cdMult;
-          this.cd.main = Math.max(this.cd.main + 1 / rate, 0);
-          this._fireGun(lvl);
+          const visual = (8 + 14 * this.spin) * (lvl >= 4 ? 1.22 : 1) * (this.overdrive > 0 ? 1.25 : 1) / this.cdMult;
+          this.cd.main = Math.max(this.cd.main + 1 / visual, 0);
+          const harm = this.dmgCd <= 0;
+          if (harm) this.dmgCd += (1 / (9 * (lvl >= 4 ? 1.3 : 1) * (this.overdrive > 0 ? 1.5 : 1))) * this.cdMult;
+          this._fireGun(lvl, harm);
           this.firing = true;
         }
-        this.heat = Math.min(1, this.heat + dt * 0.55);
+        this.heat = Math.min(1, this.heat + dt * 1.15);
         if (this.spin > 0.35) {
           g.cam.trauma = Math.max(g.cam.trauma, 0.18 + this.spin * 0.22);
           g.cam.fovKick = Math.min(g.cam.fovKick, -0.7 - this.spin * 1.3);
@@ -463,11 +467,11 @@ class WeaponSystem {
     return ray.direction.y < -0.004 ? Math.min(max, (ray.origin.y - 0.05) / -ray.direction.y) : max;
   }
 
-  /** One round of the tail gun: hitscan along the crosshair, first thing hit takes it */
-  _fireGun(lvl) {
+  /** One round of the tail gun. `harm` is false for the in-between tracers of the stream. */
+  _fireGun(lvl, harm = true) {
     const g = this.game;
     const ray = this._shotRay(0.0035 + this.heat * 0.011);
-    const dmgBase = 5.2 * (lvl >= 2 ? 1.3 : 1) * this.dmgMult;
+    const dmgBase = 12 * (lvl >= 2 ? 1.3 : 1) * this.dmgMult;
     const pierce = lvl >= 3 ? 1 : 0;
     g.gunner.muzzleWorld(_pos);
     let endT = this._groundT(ray);
@@ -475,14 +479,16 @@ class WeaponSystem {
     // Shootable things that aren't dinosaurs: street props, floating supply drops, the T. rex's thrown wrecks
     const ph = g.pickups.raycast(ray, endT);
     const wh = g.boss.raycastWrecks(ray, endT);
-    const h0 = g.enemies.raycast(ray, endT, _hit);
-    const dh = g.destruct?.raycast(ray, endT);
+    const h0 = harm ? g.enemies.raycast(ray, endT, _hit) : null;
+    const dh = harm ? g.destruct?.raycast(ray, endT) : null;
     if (dh && (!h0 || dh.t < h0.t) && (!ph || dh.t < ph.t) && (!wh || dh.t < wh.t)) {
-      const stop = g.destruct.hit(dh.p, dmgBase);
+      const stop = g.destruct.hit(dh.p, dmgBase * 0.45);
       if (stop) { endT = dh.t; hitSomething = true; }
     }
     let skip = null;
-    for (let k = 0; k <= pierce; k++) {
+    if (!harm) {
+      // Tracer only. A real hit lands on the damage tick, a few dozen times a second.
+    } else for (let k = 0; k <= pierce; k++) {
       const h = g.enemies.raycast(ray, endT, _hit, skip);
       const tOther = Math.min(ph ? ph.t : Infinity, wh ? wh.t : Infinity);
       if (k === 0 && tOther <= endT && tOther < (h ? h.t : Infinity)) {
@@ -500,7 +506,7 @@ class WeaponSystem {
       const fall = Math.max(0.55, Math.min(1, 1.3 - h.t / 60));
       const killed = g.enemies.damage(e, dmgBase * crit * fall, { source: 'gun', crit: crit > 1, head: h.head, stagger: 1, kx: ray.direction.x * 6, kz: ray.direction.z * 6 });
       g.vfx.hitSpark(x, y, z, h.head ? 7 : 5, h.head ? 6 : 3.2, h.head ? 2 : 1);
-      if (lvl >= 5 && this.shotsFired % 8 === 0) this.blast(x, z, 2.4 * this.areaMult, dmgBase * 3.2, 1, 'blast', true, y);
+      if (lvl >= 5 && this.shotsFired % 8 === 0) this.blast(x, z, 2.2 * this.areaMult, dmgBase * 2.4, 0, 'blast', false);
       g.onGunHit(e, h, killed, x, y, z);
       endT = h.t;
       hitSomething = true;
@@ -510,7 +516,7 @@ class WeaponSystem {
     if (!hitSomething && endT < 159) { g.vfx.hitSpark(ex, Math.max(0.1, ey), ez, 3, 2.6, 1.6); g.vfx.dust(ex, ez, 0.25, 1); }
     // Chunky tracer. The beam list allocates per shot; at minigun rate that becomes garbage, so the
     // instanced tracer plus a pooled muzzle flash carry the round.
-    g.vfx.muzzle(_pos.x, _pos.y, _pos.z, ray.direction.x, ray.direction.y, ray.direction.z, 1.15, 11, 6.5, 1.5);
+    g.vfx.muzzle(_pos.x, _pos.y, _pos.z, ray.direction.x, ray.direction.y, ray.direction.z, 0.85, 8, 4.2, 1.1);
     this.bullet(_pos.x, _pos.y, _pos.z, ex - _pos.x, ey - _pos.y, ez - _pos.z, 1 / 0.08, 0, { visual: true, life: 0.08, color: [12, 7.2, 1.8], width: 0.13, len: 5.4 });
     g.gunner.fire(0.72);
     if ((this.shotsFired & 1) === 0) {

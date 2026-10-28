@@ -524,7 +524,7 @@ class Game {
     this.hud.open('s-howto', false);
     this.hud.open('s-settings', false);
     this.setState('map');
-    this.map.refresh();
+    try { this.map.refresh(); } catch (err) { console.error('[map]', err); }
     this.hud.open('s-map', true);
   }
 

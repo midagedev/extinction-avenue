@@ -835,6 +835,7 @@ class GameAudio {
     wn.start();
     this.loops.wind = { gain: wg, filter: whp };
     // Minigun body: one noise loop, one low saw, one square LFO. Created once — never per shot.
+    // WebKit has been fine with the engine loops; this one is the same pattern.
     const mg = ctx.createGain(); mg.gain.value = 0;
     const mn = ctx.createBufferSource(); mn.buffer = this.proc.noise; mn.loop = true;
     const mbp = ctx.createBiquadFilter(); mbp.type = 'bandpass'; mbp.frequency.value = 1800; mbp.Q.value = 0.7;

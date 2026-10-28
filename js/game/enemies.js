@@ -508,7 +508,21 @@ class EnemyManager {
         this.dangers.push({ x: e.hx, y: e.hy, z: e.hz, k, r: Math.max(0.6, sp.headR * e.scale * 2.2), e });
       }
     }
+    this._cullStragglers();
     this._separate();
+  }
+
+  /** The cab outruns anything left more than ~42 m back. Drop those specks so the fight stays the pack on the bumper. */
+  _cullStragglers() {
+    const p = this.game.player;
+    if (!p) return;
+    for (let i = this.list.length - 1; i >= 0; i--) {
+      const e = this.list[i];
+      if (!e.alive || e.boss || e.elite || e.miniboss || e.sp?.flyer) continue;
+      if (e.kind !== 'chase' && e.kind !== 'merge') continue;
+      if (e.state === 'windup' || e.state === 'leap' || e.state === 'attack' || e.state === 'charge') continue;
+      if (Math.hypot(e.x - p.x, e.z - p.z) > 42) this._remove(i);
+    }
   }
 
   /** May this enemy start an attack now? */
@@ -833,7 +847,7 @@ class EnemyManager {
         continue;
       }
       // far individuals are drawn larger (render: e.vis, scaled about the feet); the hit spheres follow
-      const v = e.vis || 1;
+      const v = e.hitVis || 1;
       const hr = e.sp.headR * e.scale * 1.25 * v;
       const th = raySphere(ray, e.x + (e.hx - e.x) * v, e.y + (e.hy - e.y) * v, e.z + (e.hz - e.z) * v, hr);
       const br = Math.max(e.radius * 0.95, e.sp.height * e.scale * 0.42) * v;
@@ -872,7 +886,9 @@ class EnemyManager {
   render(time) {
     const cam = this.game.cam?.camera;
     // Minimum on-screen size: an individual whose height would cover less than MIN_SCREEN of the view height is drawn
-    // up to MAX_BOOST larger (far stragglers and fresh spawns never shrink to specks; raycast() scales its spheres too)
+    // up to MAX_BOOST larger (far stragglers and fresh spawns never shrink to specks; raycast() scales its spheres too).
+    // Hits stay on the 5% / 1.45× rule. The picture uses a higher floor so a pack still down the avenue
+    // doesn't read as specks on a phone (e.vis).
     const fovK = cam ? 2 * Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2) : 0;
     for (const id of SPECIES_IDS) {
       const rig = this.rigs[id];
@@ -891,7 +907,8 @@ class EnemyManager {
         }
         animateCreature(e, rig, time, cam?.position);
         const tele = e.state === 'windup' ? 0.55 + 0.45 * Math.sin(time * 30) : 0;
-        e.vis = cam ? minScreenBoost(e, cam.position, fovK) : 1;
+        e.hitVis = cam ? minScreenBoost(e, cam.position, fovK, MIN_SCREEN, MAX_BOOST) : 1;
+        e.vis = cam ? minScreenBoost(e, cam.position, fovK, DRAW_MIN, DRAW_MAX) : 1;
         rig.add(e.x, e.y, e.z, e.heading, e.scale * e.vis, e.anim, e.flash, e.stone, e.elite ? 1 : 0, e.pitch, e.roll, e.tint, tele);
         continue;
       }
@@ -911,12 +928,13 @@ class EnemyManager {
 }
 
 const MIN_SCREEN = 0.05, MAX_BOOST = 1.45;
-/** Visual scale factor (>= 1) that keeps a creature at least MIN_SCREEN of the view height tall */
-function minScreenBoost(e, camPos, fovK) {
+const DRAW_MIN = 0.28, DRAW_MAX = 1.6;
+/** Scale factor (>= 1) that keeps a creature at least `minScreen` of the view height tall */
+function minScreenBoost(e, camPos, fovK, minScreen = MIN_SCREEN, maxBoost = MAX_BOOST) {
   const h = e.sp.flyer ? e.radius * 1.4 : e.sp.height * e.scale;
   const d = Math.max(1, Math.hypot(e.x - camPos.x, e.y - camPos.y, e.z - camPos.z));
   const frac = h / (d * fovK);
-  return frac >= MIN_SCREEN ? 1 : Math.min(MAX_BOOST, MIN_SCREEN / frac);
+  return frac >= minScreen ? 1 : Math.min(maxBoost, minScreen / frac);
 }
 
 export { EnemyManager, minScreenBoost, MIN_SCREEN, MAX_BOOST, SPECIES, SPECIES_IDS, SpatialHash, CAR_RADIUS, CAR_REAR, raySphere };

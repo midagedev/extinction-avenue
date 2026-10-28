@@ -33,13 +33,12 @@ class Destructibles {
       launch: 0, vy: 0, baseY: 0, s: 0
     }));
     const lit = (geo, name) => new PropBatch(geo, POOL, { name, roughness: 0.62, metalness: 0.18 });
+    // Four lit materials, not one per prop: kiosks reuse the hydrant, collapsing chunks reuse the post.
     this.batches = {
       car: lit(assets.get('wreck').geometry, 'd.car'),
       hydrant: lit(assets.get('hydrant').geometry, 'd.hydrant'),
       post: lit(assets.get('streetPost').geometry, 'd.post'),
-      kiosk: lit(assets.get('kiosk').geometry, 'd.kiosk'),
-      glass: lit(assets.get('glassPane').geometry, 'd.glass'),
-      chunk: lit(assets.get('streetChunk').geometry, 'd.chunk')
+      glass: lit(assets.get('glassPane').geometry, 'd.glass')
     };
     this.group = new THREE.Group();
     this.group.name = 'Destructibles';
@@ -137,7 +136,7 @@ class Destructibles {
     for (let i = 0; i < 8; i++) {
       const s = route.wrap(origin + i * STEP);
       const ahead = route.delta(p.s, s);
-      if (ahead > -4 || ahead < -96) continue;
+      if (ahead > -16 || ahead < -96) continue;
       const key = Math.floor(s / STEP);
       if (this.broken.has(key)) continue;
       let taken = false;
@@ -186,7 +185,7 @@ class Destructibles {
     for (const b of Object.values(this.batches)) b.begin();
     for (const p of this.props) {
       if (!p.alive) continue;
-      const b = this.batches[p.kind] || this.batches.chunk;
+      const b = this.batches[p.kind] || (p.kind === 'kiosk' ? this.batches.hydrant : this.batches.post);
       b.add(p.x, p.y, p.z, p.yaw, 0, 0, p.sx, p.sy, p.sz, p.cr, p.cg, p.cb, 1);
     }
     for (const b of Object.values(this.batches)) b.end();
@@ -269,9 +268,12 @@ class Destructibles {
     if (p.kind === 'car') {
       if (this.booms > 0) {
         this.booms--;
-        g.weapons.blast(p.x, p.z, 6.2, 24, 0, 'car', true);
+        // Damage and chain, but a small fireball: a full blast in front of the gunner milks the whole street.
+        g.weapons.blast(p.x, p.z, 4.2, 18, 0, 'car', false);
+        g.vfx.explosion(p.x, 0.45, p.z, 0.45, 0);
+        g.audio.play('explosion', { x: p.x, z: p.z, volume: 0.62, pitch: 1.15 });
         g.hitStop(0.03);
-        g.cam.fovKick -= 1.5;
+        g.cam.fovKick -= 1.2;
       } else {
         v.explosion(p.x, 0.5, p.z, 0.7, 0);
         g.audio.play('explosion', { x: p.x, z: p.z, volume: 0.4 });

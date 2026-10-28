@@ -11,7 +11,7 @@ const WEAPONS = {
   cannon: {
     name: 'Tail Gun', icon: 'cannon', color: '#2cf6ff', max: 5, evo: 'railgun', evoNeeds: 'hollow',
     blurb: 'Your aimed minigun. Hold it down.',
-    levels: ['Aimed minigun. Headshots deal 1.6x.', '+30% damage.', '220-round belt, rounds pierce +1 dinosaur.', '+22% fire rate.', 'Every 8th round bursts.']
+    levels: ['Aimed minigun. Headshots deal 1.6x.', '+30% damage.', '100-round belt, rounds pierce +1 dinosaur.', '+22% fire rate.', 'Every 8th round bursts.']
   },
   gatling: {
     name: 'Sentry Guns', icon: 'gatling', color: '#ffd23a', max: 5, evo: 'storm_gatling', evoNeeds: 'loader',
